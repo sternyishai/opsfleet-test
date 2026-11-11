@@ -1,0 +1,13 @@
+#!/bin/sh
+# Enforces Conventional Commits: type(scope)!: summary
+# Enable once per clone:  git config core.hooksPath .githooks
+first_line=$(head -n1 "$1")
+case "$first_line" in Merge*|Revert*|fixup!*|squash!*) exit 0 ;; esac
+pattern='^(feat|fix|docs|refactor|test|chore|ci|build|perf|style|revert)(\([a-z0-9-]+\))?!?: [^ ].{0,70}$'
+if ! printf '%s' "$first_line" | grep -Eq "$pattern"; then
+  echo "✖ Commit message must follow Conventional Commits:" >&2
+  echo "    type(scope): summary   (summary ≤ 72 chars)" >&2
+  echo "  types: feat fix docs refactor test chore ci build perf style revert" >&2
+  echo "  got:   $first_line" >&2
+  exit 1
+fi
