@@ -53,6 +53,12 @@ Detail in `docs/hld/03-safety-and-pii.md`; layers are named, not numbered (input
 - Model IDs and provider settings come from **environment files** (`.env`), not code.
 - **One model setting per step of the path:** `MODEL_ROUTER`, `MODEL_ANALYST`, `MODEL_REPORT`, `MODEL_EXTRACTOR`, `MODEL_JUDGE`, each in `provider:model` form (e.g. `google_genai:gemini-…`), resolved through one model factory. Swapping a step's model or provider is a one-line `.env` change. Gemini is the default, and other providers stay supported.
 - **HLD: model and provider experimentation.** A candidate model or provider is tested by running the offline eval suites per step and comparing scores, cost and latency against the current one in the observability tool's experiments view. It is then rolled out by shadow traffic → canary percentage → full, controlled by config, not redeploys.
+- **Detail** (in `docs/hld/10-stack-rationale.md`):
+  - `MODEL_JUDGE` defaults to Pro (stronger than the judged model); `MODEL_EXTRACTOR` also covers figure stripping; embeddings are their own step.
+  - **Why Gemini:** the client tests with it; Flash is strong at SQL and tool use for its price; on Vertex AI it runs in the same project and region as the data.
+  - Exact model versions live only in `.env`, never in the HLD.
+  - Prototype: Flash for analysis, Flash-Lite for the router, both on the AI Studio free tier.
+- **Stack rationale (10):** each GCP service is justified and mapped to a portable equivalent (AWS, Azure, self-hosted); supporting libraries (sqlglot, Pydantic, tenacity, OTel/OpenInference, Phoenix, pgvector, uv, pytest) each have a one-line reason. Where the author's experience was lacking, the simpler or better-documented option was preferred.
 
 ## SQL self-correction (Req 5)
 
