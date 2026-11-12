@@ -4,44 +4,30 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-12)
 
-**Phase:** 1 (HLD), sessions 1A, 1B and 1C done; 1D next (files 11–12)
+**Phase:** 1 (HLD), sessions 1A–1D done; PR #2 open. Two "Done when" items left: `/mock-interview audit` and one `/mock-interview interview` rehearsal.
 **Branch:** `docs/hld`
 
 | Step | Status |
 |---|---|
 | Phase 0: design foundation | ✅ merged (PR #1) |
-| `docs/work-plan.md` | ✅ committed |
-| `docs/hld/00-overview.md` | ✅ committed (3c40858); light iteration later |
-| `docs/hld/01-architecture.md` | ✅ committed (3c40858) |
-| `docs/hld/diagrams/architecture.excalidraw` + `.png` | ✅ committed (3c40858); light iteration later |
-| ADR 0007 (tools in-process, MCP as growth option) | ✅ committed (bb5fa72) |
-| `docs/hld/02`–`05` | ✅ committed (session 1B) |
-| `docs/hld/06-resilience.md` | ✅ committed (f7839e9) |
-| `docs/hld/07-quality-assurance.md` | ✅ committed (93ff615) |
-| `docs/hld/08-observability.md` | ✅ committed (eaa8083) |
-| `docs/hld/09-persona-management.md` | ✅ committed (f9c7084) |
-| `docs/hld/10-stack-rationale.md` | ✅ committed; **author's-experience rows still blank** (see open questions) |
-| `docs/hld/11-operations.md` | not started (1D) |
-| `docs/hld/12-assumptions-and-open-questions.md` | not started (1D) |
+| `docs/hld/00`–`10` | ✅ committed (sessions 1A–1C) |
+| `docs/hld/10` author's experience | ✅ committed (575cc9f), framed as delivery risk, not design influence |
+| `docs/hld/11-operations.md` | ✅ committed (e38b339) |
+| `docs/hld/12-assumptions-and-open-questions.md` | ✅ committed (49926f9); `open-items.md` now points to it |
+| `/mock-interview audit` | not run |
+| `/mock-interview interview` rehearsal | not run |
 
 ## Decisions made this session, not yet written elsewhere
 
-- None. Every approved addition from 06–10 is folded into `decision-log.md` (look for the "Detail (in `docs/hld/0N-…`)" bullets).
-- Session 1C was cut after file 10 to keep context small; `work-plan.md` now has a session 1D for 11–12.
+- None. Approved additions from 10–12 are folded into `decision-log.md`.
+- The availability budget was corrected: 99.5% of business hours is ~1–1.5 h a month, not ~4 h (decision log and 11).
+- `12` is now the single list of assumptions and client questions; add new items there, not to `open-items.md`.
 
 ## Open questions
 
-- **10: author's experience.** Six rows are `_to fill in_`: Gemini/Vertex, BigQuery, GCP (Cloud Run, Pub/Sub, Cloud SQL), Postgres + pgvector, sqlglot, Phoenix/Langfuse. Only LangGraph is recorded (ADR 0001: hands-on; none with ADK/PydanticAI). Also confirm the framing sentence "where experience was lacking, the simpler option was preferred".
-- 01 handoff: retention assumptions (checkpoints 90 days, deletion audit indefinite) go to `12`.
-
-## Inputs for 12 raised in 06–10 (so 1D need not hunt)
-
-- 06: per-User daily quota resets at midnight; Cloud SQL runs in HA mode (11 must describe it); fallback to a second Vertex region and a second provider assumes contracts/keys exist.
-- 07: an executive pilot of 5–8 executives and Managers before launch (client question: can we get them?); a held-out share of Golden Trios needs enough Trios to exist; human-labeled answers to calibrate the judge (who labels?).
-- 08: alert routing assumes an AI-ops team owns the agent, with business-hours paging except for PII and scope alerts (who is on call?).
-- 09: who holds the Persona-editor role (CEO's office? a named editor?); scheduled weekly publishing.
-- 10: Users have Google identities via SSO (already in open-items); Vertex AI as production model endpoint.
+- 14 client questions (Q1–Q14) are listed in `docs/hld/12`; each has a default, so none blocks Phase 2.
+- Cost estimate inputs in 11 are list prices whose public sources disagree; recompute from prototype traces in Phase 4.
 
 ## Next session prompt
 
-> Continue the OpsFleet take-home, Phase 1, session 1D. Read docs/work-plan.md, docs/progress.md, GLOSSARY.md, the decision log (Production concerns, Scale & SLOs, Packaging, Third-party resilience, Observability sections, and skim the rest for assumptions), docs/open-items.md, and docs/hld/00–10. First fill the author's-experience rows in 10 with the user. Then draft docs/hld/11-operations.md (deployment, scale, SLOs, back-of-envelope cost estimate, cost controls, security), then docs/hld/12-assumptions-and-open-questions.md, following the review loop: one file at a time, validate Mermaid with `npx @mermaid-js/mermaid-cli`, give the handoff note (sources + additions not in the sources), commit on approval and fold the approved additions into the decision log. File 12 must collect every assumption and client question raised in 00–11 (use "Inputs for 12" in progress.md plus open-items.md). Then wrap up Phase 1: check the work-plan "Done when" list and open PR #2.
+> Run `/mock-interview audit` on the HLD and fix any **design** items not met (one file at a time, review loop as in docs/work-plan.md), then one `/mock-interview interview` rehearsal. Update docs/progress.md and PR #2. When Phase 1 is merged, start Phase 2 with the prompt in docs/work-plan.md.
