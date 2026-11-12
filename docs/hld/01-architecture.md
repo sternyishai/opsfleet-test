@@ -146,7 +146,24 @@ flowchart TD
 - **Persona changes (CEO only).** "Make the reports warmer" or "undo the tone change" opens a fixed branch, never a tool of the analysis agent, because the change affects every User's answers. Code checks the `persona_editor` permission first; anyone else gets a refusal from the message catalog. A change is drafted into the Persona's structured fields, passes the automated quality gate and goes live at once, with no manual approval; a failure keeps the current version and says why. The direct edit (`/persona edit` in the CLI, the Admin UI form in production) enters the same branch at the permission check, skipping the router and the drafting step ([09](09-persona-management.md)).
 - **Resuming after a pause.** The User's reply to a confirmation prompt is a new message. Anything other than a clear `yes`, `no` or `yes except …` cancels the plan and re-enters the graph at the input guard, never past it.
 - **Errors.** A catch-all at the graph boundary maps any unclassified error to a plain-language message with a reference ID. The Conversation state is preserved, so the User can continue ([06](06-resilience.md)).
-- **Extending.** A new capability (chart, email, web search) is a new in-process tool with a typed contract, behind a port, added to the analysis sub-agent's tool list. The shell does not change. Tools are not served over MCP today; MCP is a named growth option for capabilities that already ship as MCP servers, or for sharing governed data access with other agents ([ADR 0007](../adr/0007-in-process-tools-mcp-as-growth-option.md)). A tool with external side effects, such as sending email, reuses the same `interrupt()` confirmation pattern as deletion. A new channel is a new adapter in the Gateway, and a new model is a `.env` change.
+- **Extending.** A new capability goes where the rule of [ADR 0004](../adr/0004-hybrid-agent-graph.md) puts it:
+  - **Read capabilities the model chooses mid-analysis** (charts, web search) are new in-process tools with a typed contract, behind a port, added to the analysis sub-agent's tool list. The shell does not change.
+  - **Outbound capabilities** (email, Slack posts, push notifications) are adapters of one `Delivery` port, reached only from the router-opened `deliver` branch, never tools of the analysis model ([ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)). `deliver` sends a Saved Report, never raw query rows. The recipient is injected by code (the Author, by default). It pauses with `interrupt()` like a delete, and it sends through the single outbound function. "Create the Q1 report and email it to me" runs analysis first and then `deliver` as a *follow-up action*, the reverse order of a deferred request, because delivery needs the result. The branch and its router action are added together with the first outbound adapter.
+  - **Channels and models**: a new channel is a new adapter in the Gateway, and a new model is a `.env` change.
+  - Tools are not served over MCP today. MCP is a named growth option for capabilities that already ship as MCP servers, or for sharing governed data access with other agents ([ADR 0007](../adr/0007-in-process-tools-mcp-as-growth-option.md)). If the read tools grow past about 10–20, the first step is filtering them per role or turn, and only then grouping them into specialist sub-agents.
+
+```mermaid
+flowchart LR
+    M["'Create the Q1 report<br/>and email it to me'"] --> R{router<br/>action: analysis<br/>follow-up: deliver}
+    R --> A[analysis sub-agent<br/>run_sql, save_report]
+    A --> D[deliver<br/>load Saved Report,<br/>recipient = Author]
+    L["'Email me that report'"] --> R2{router<br/>action: deliver} --> D
+    D --> C[/interrupt: send to you? yes · no/]
+    C -- yes --> O{{single outbound function<br/>output PII filter}}
+    O --> P[Delivery port<br/>email · Slack · push adapter]
+```
+
+<sub>The designed path for outbound capabilities, not in the prototype ([ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)).</sub>
 
 ## Conversation state
 
