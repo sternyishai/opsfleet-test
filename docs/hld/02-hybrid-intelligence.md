@@ -64,24 +64,30 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
-    participant A as Analysis sub-agent
-    participant T as search_golden_trios
+    participant R as Intent router
+    participant N as retrieve_trios (fixed node)
     participant PG as Postgres (pgvector + full-text)
+    participant A as Analysis sub-agent
 
-    A->>T: search_golden_trios("why are CA users underspending vs NY?")
-    Note over T: User's Brands come from graph state,<br/>never from the model
-    T->>PG: vector search on question embeddings<br/>+ keyword search, fused (RRF)<br/>WHERE status = active AND Brand filter
-    PG-->>T: candidates with scores
-    T->>T: drop matches below similarity threshold, keep top 3
-    T-->>A: question, method_summary, sql, tables_used<br/>(wrapped as reference data, not instructions)
+    R->>N: action = analysis, search question =<br/>"why are CA users underspending vs NY?"
+    Note over N: User's Brands come from graph state,<br/>never from the model
+    N->>PG: vector search on question embeddings<br/>+ keyword search, fused (RRF)<br/>WHERE status = active AND Brand filter
+    PG-->>N: candidates with scores
+    N->>N: drop matches below similarity threshold, keep top 3
+    N->>A: question, method_summary, sql, tables_used<br/>(wrapped as reference data, not instructions)
     A->>A: adapt the method and SQL pattern to the new question
+    opt a sub-question needs another method
+        A->>PG: search_golden_trios(new wording), same filters
+    end
     Note over A: SQL then goes through run_sql:<br/>query guard, Brand scope, dry run
 ```
 
-- **The agent calls the tool, guided by its prompt.** The analysis prompt says to search the Golden Bucket before writing SQL for any analytical question. Questions about the data itself ("what tables do we have?") need only `get_schema`.
+- **Retrieval is a fixed step, not the model's choice.** Req 1 says the agent *must* use the Golden Bucket, so the `retrieve_trios` node runs on every `analysis` turn, before the ReAct sub-agent starts ([ADR 0008](../adr/0008-trio-retrieval-is-a-fixed-step.md)). It also saves the sub-agent the round trip it would spend asking for the search.
+- **The router writes the search question.** The same Flash-Lite call that picks the action returns a standalone question, so a follow-up such as "and NY?" is searched with its earlier context.
+- **The tool stays for re-search.** A multi-step question or a report may need a different method per part. The sub-agent calls `search_golden_trios` with its own wording for those; the filters and threshold are the same.
 - **Hybrid search.** Vector similarity catches paraphrases; keyword search catches exact terms such as metric names or a category. The two are fused by reciprocal rank fusion. Both run in the same Postgres query, so this needs no extra service.
 - **Access filter, as defense in depth.** A Trio is visible to a User when every Brand it covers is one of their Brands. Executives see all Trios. The figures are already stripped, so this filter is the second layer, not the main guarantee.
-- **A threshold, not "always top-k".** Weak matches teach the wrong method, so matches below the similarity threshold are dropped. If nothing passes, the agent works from the schema alone and the turn is flagged as a **retrieval gap**, which feeds the learning loop below.
+- **A threshold, not "always top-k".** Weak matches teach the wrong method, so matches below the similarity threshold are dropped. If nothing passes, the agent works from the schema alone. If the turn then runs SQL, it is flagged as a **retrieval gap**, which feeds the learning loop below. Turns that only list or open reports, or ask about the schema, are not gaps.
 - **Injected as data.** Trio content is wrapped in a delimited reference block and never treated as instructions. Trios are analyst-approved, but the rule costs nothing and closes an injection path.
 - **The schema is not in the RAG.** With four tables, column descriptions go straight into the prompt through `get_schema`, so retrieval is reserved for method.
 
@@ -114,7 +120,7 @@ stateDiagram-v2
 
 ## Knowing whether it helps
 
-- **Retrieval health:** the share of analytical turns with at least one Trio above the threshold, broken down by question type. A falling rate means the Golden Bucket is not keeping up with what executives ask.
+- **Retrieval health:** the share of turns that run SQL with at least one Trio above the threshold, broken down by question type. A falling rate means the Golden Bucket is not keeping up with what executives ask.
 - **Trio usage:** how often each `trio_id@version` is retrieved, and the trusted-answer rate of the turns that used it. Unused and harmful Trios both become visible.
 - **Ablation in the offline eval:** the correctness suite runs with retrieval on and off. The difference is the measured value of the Golden Bucket, and it must stay positive ([07](07-quality-assurance.md)).
 
@@ -123,6 +129,6 @@ stateDiagram-v2
 Hybrid Intelligence is design-only in the assignment. The prototype includes a **stretch** slice, cut first if time runs short:
 - 5–10 hand-written seed Trios in `seed/trios/`, already in stored form (question, paraphrases, SQL, figure-free method summary, Brands);
 - embeddings from the Gemini embedding model, stored in SQLite and searched by cosine similarity in Python, with the same Brand filter and threshold;
-- `search_golden_trios` behind the `TrioRetriever` port, so the production pgvector adapter replaces it without touching the agent.
+- the `retrieve_trios` node and the `search_golden_trios` tool, both behind the `TrioRetriever` port, so the production pgvector adapter replaces it without touching the agent. If the slice is cut, the node calls an adapter that returns nothing, and the graph stays the same.
 
 There is no ingestion job, keyword search or Candidate pipeline in the prototype.
