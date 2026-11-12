@@ -17,6 +17,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | `/mock-interview audit` | ✅ run 2026-11-12; design gaps fixed (Persona via chat + `/persona edit` with the Persona Quality Gate, `/stats`, LangSmith option, canary deployment trimmed to 11, consistency fixes) |
 | Hero diagram | ✅ BigQuery box (queries run as the User), all 6 tools, Persona-change box, LangSmith in the observability bar |
 | ADR 0008: Golden Trio retrieval is a fixed step | ✅ committed (96801b8 … ae5f0a4): ADR 0004, HLD 00, 01, 02, 07, 08, 11, decision log and hero diagram aligned; cost estimate now ~$3,700/month |
+| Output PII filter at a single exit | ✅ committed (8d43224 … ffd4f25): ADR 0003 amended; HLD 00, 01, 03, 04, 06, 07 and decision log aligned. Progress events, the Deletion Plan prompt, refusals and `save_report` now all pass the filter |
+| Agent-flow and data-flow diagrams | ✅ committed (1c901e5, bf3f074, 43fffeb): `docs/hld/diagrams/agent-flow.*` and `data-flow.*`, embedded in 01, pointer in 00 |
 | `/mock-interview interview` rehearsal | not run |
 
 ## Decisions made this session, not yet written elsewhere
@@ -28,6 +30,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 ## Open questions
 
 - 14 client questions (Q1–Q14) are listed in `docs/hld/12`; each has a default, so none blocks Phase 2.
+- Not decided in the design: what triggers the Trio Candidate job, and whether an approved Candidate goes through ingestion (marked on the data-flow diagram). Decide before Phase 2 touches the learning loop.
 - Cost estimate inputs in 11 are list prices whose public sources disagree; recompute from prototype traces in Phase 4.
 
 ## Next session prompt
