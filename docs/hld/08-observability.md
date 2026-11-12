@@ -38,10 +38,10 @@ A trace is one turn. Traces of the same Conversation are grouped by `conversatio
 
 | Level | Attributes |
 |---|---|
-| **Turn** (root span) | trace ID (= the reference ID shown to the User), `conversation_id`, internal User ID (never a name or email), role, channel, action from the router, Persona version, User Profile snapshot, outcome, error class |
+| **Turn** (root span) | trace ID (= the reference ID shown to the User), `conversation_id`, internal User ID (never a name or email), role, channel, action from the router, Persona version, User Profile snapshot, retrieval gap flag (set when the turn ran SQL with no Trio above the threshold), outcome, error class |
 | **Model call** | step (`router`, `analyst`, …), model and provider, fallback used, prompt and completion tokens, cost, latency |
 | **`run_sql`** | the SQL the model wrote, the SQL after the guard's rewrite, guard decision and reason, dry-run bytes, bytes billed, row count, attempt number, error, empty-result probe findings |
-| **`search_golden_trios`** | query, returned `trio_id@version` and scores, retrieval gap flag |
+| **Trio retrieval** (`retrieve_trios` node, `search_golden_trios` tool) | which one ran, the search question or query, returned `trio_id@version` and scores, matches dropped by the threshold |
 | **Deletion** | filter produced, plan ID and size, outcome (confirmed, partial, cancelled, expired) |
 | **Persona change** | path (chat or direct edit), permission result, gate result per check, version before and after, or rollback target |
 | **Output filter** | detector hits and redactions (types only, never the redacted value) |
@@ -59,7 +59,7 @@ Every metric is broken down **by intent and by node**, so a regression points to
 | **Safety** | Input-guard blocks by category, query-guard rejections by reason, out-of-scope Brand requests, output PII-filter hits (target 0), delete confirm/cancel ratio |
 | **Cost** | Tokens and $ per question, BigQuery bytes per question, retries per question, **cost per successful answer** |
 | **Reliability** | p50/p95 latency per turn and per node, LLM and BigQuery error rates, fallback activations, circuit-breaker state, unclassified errors |
-| **Knowledge** | Retrieval health (share of analytical turns with a Trio above the threshold), usage and trusted-answer rate per `trio_id@version` ([02](02-hybrid-intelligence.md)) |
+| **Knowledge** | Retrieval health (share of turns that run SQL with a Trio above the threshold), usage and trusted-answer rate per `trio_id@version` ([02](02-hybrid-intelligence.md)) |
 | **Learning** | Preference override rate, share of review findings closed within two cycles ([05](05-learning-loop.md)) |
 | **Persona** | Changes by path, gate rejections by check, rollbacks; trusted-answer rate and online judge presentation score per Persona version ([09](09-persona-management.md)) |
 | **Deletion** | Partial-confirmation rate, zero-match rate, plan size ([04](04-destructive-ops.md)) |
