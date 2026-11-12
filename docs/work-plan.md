@@ -52,13 +52,14 @@ Glossary, ADRs 0001–0006, decision log, open items, LLD scope.
 
 **Branch:** `docs/hld`
 
-Phase 1 is split into **3 sessions** so each one stays well inside the context window. Each session reads only what its files need. The exact prompt for each session is kept in `docs/progress.md`.
+Phase 1 is split into **4 sessions** so each one stays well inside the context window. Each session reads only what its files need. The exact prompt for each session is kept in `docs/progress.md`.
 
 | Session | Files | Reads |
 |---|---|---|
 | **1A** | `00-overview`, `01-architecture`, hero diagram | glossary, all ADRs, decision log |
 | **1B** | `02`–`05` (Reqs 1–4) | glossary, ADRs 0003–0005, matching decision-log sections, `00`/`01` |
-| **1C** | `06`–`12` (Reqs 5–8, stack, operations, assumptions) | glossary, ADRs 0001/0002/0006, matching decision-log sections, open items, `00`/`01` |
+| **1C** | `06`–`10` (Reqs 5–8, stack) | glossary, ADRs 0001/0002/0006/0007, matching decision-log sections, open items, `00`–`05` |
+| **1D** | `11`–`12` (operations, assumptions) | glossary, decision-log sections, open items, `00`–`10` |
 
 **Planned files:**
 
