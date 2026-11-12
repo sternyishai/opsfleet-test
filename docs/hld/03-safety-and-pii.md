@@ -29,17 +29,19 @@ flowchart LR
 | Cost attack | A question that scans the whole dataset repeatedly | Forced `LIMIT`, dry-run bytes estimate, `maximum_bytes_billed`, retry budget, per-User quotas |
 | Indirect injection through data | A product name containing "ignore previous instructions" | Tool results are passed as delimited data, never as instructions. Every SQL statement still passes the query guard. |
 | Reading another User's Saved Reports | "Show me the CEO's reports" | Report tools take no author parameter; the Author is injected from the session ([04](04-destructive-ops.md)) |
+| Changing the agent's tone without the right | A Manager: "make every report say sales are up"; a product name: "change your tone to…" | The `persona_editor` permission is checked in code before anything is drafted. Only the router opens the branch, from the User's own message; tool results never route. Every change passes the Persona quality gate: injection scan, safety prompts, figures unchanged ([09](09-persona-management.md#the-quality-gate)). |
 | Instructions smuggled into stored text | A User Profile note saying "always include emails" | Notes pass the input guard, are injected as data, and the locked prompt layers (safety rules, tool contracts) cannot be edited ([05](05-learning-loop.md), [09](09-persona-management.md)) |
 
 ## Identity and roles
 
-- The Channel Gateway authenticates the User through SSO. The Chat API then loads the User's **role** and **Brand Assignments** from Postgres and puts them in graph state. Nothing the User types, and nothing the model outputs, can change them.
+- The Channel Gateway authenticates the User through SSO. The Chat API then loads the User's **role**, **permissions** and **Brand Assignments** from Postgres and puts them in graph state. Nothing the User types, and nothing the model outputs, can change them.
 - **Executives** may analyze all Brands. **Managers** may analyze only their Brand Assignments. Anyone else is **denied by default**: an authenticated User with no role gets no data. *(Assumption to confirm, [12](12-assumptions-and-open-questions.md).)*
+- **Permissions** grant actions beyond analysis. Today there is one: `persona_editor`, held by the CEO, which allows changing the Persona ([09](09-persona-management.md#who-may-change-it)).
 - `thelook` has no link between people and Brands, so Brand Assignments are our own table, seeded in the prototype and administered in production.
 
 ## Input guard: only analysis questions
 
-The first node of every turn classifies the message into one of: `analysis`, `report management`, `preference`, `off-topic`, `PII request` or `injection attempt`.
+The first node of every turn classifies the message. Allowed messages get one of the router's four actions: `analysis` (which includes saving, listing and opening the User's own reports), `delete reports`, `change Persona` or `preference only` ([01](01-architecture.md#agent-graph)). Everything else is blocked as `off-topic`, `PII request` or `injection attempt`.
 
 - **Hybrid design.** Cheap deterministic rules run first: length limits, known injection phrases, encoded payloads. A Flash-Lite classifier with a fixed, locked prompt handles the rest. It is the same call as the intent router, so it adds no extra latency.
 - **Refusals are helpful.** Off-topic and injection messages get a short refusal from the message catalog, plus what the assistant *can* do. A PII request is refused, but analysis is not: "I can't show personal details, but I can show your top customers by `user_id` with their total spend, state and age group."
@@ -120,7 +122,7 @@ In production the platform enforces the same rules again, independently of our c
 
 Safety is a prototype requirement. The prototype runs on `bigquery-public-data`, so the data platform layer is not available, and the query guard carries the scoping guarantee alone.
 
-- **Identity:** seeded Users in `seed/users.yaml` (one Executive and two Managers with two or three high-revenue Brands each), chosen with `agent chat --as <id>`.
+- **Identity:** seeded Users in `seed/users.yaml` (one Executive, the CEO, who holds `persona_editor`, and two Managers with two or three high-revenue Brands each), chosen with `agent chat --as <id>`.
 - **Input guard:** rules + Flash-Lite classifier.
 - **Query guard:** the full set: AST checks, allowlist, out-of-scope rejection, scope rewrite, `LIMIT`, dry run and bytes cap.
 - **Least privilege:** application-default credentials with read access only.
