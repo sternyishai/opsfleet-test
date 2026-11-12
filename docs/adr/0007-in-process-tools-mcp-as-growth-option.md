@@ -17,7 +17,7 @@ Three reasons:
 
 MCP is the named growth path, adopted only when one of these triggers occurs:
 
-1. **Extension capabilities with existing MCP servers** (web search, email, Slack posting). They would be loaded as LangGraph tools through an MCP client adapter, with a per-server tool allowlist, tracing, and the `interrupt()` confirmation for any tool with external side effects.
+1. **Extension capabilities with existing MCP servers** (web search, email, Slack posting). A read capability such as web search would be loaded as a LangGraph tool through an MCP client adapter, with a per-server tool allowlist and tracing. An outbound one such as email or Slack posting would not become a tool the model can call: the MCP server would sit behind an adapter of the `Delivery` port, reached only from the `deliver` branch ([ADR 0009](0009-outbound-actions-are-a-deliver-branch.md)).
 2. **A second consumer of governed data access** (another team's agent, or an enterprise assistant). `get_schema` and `run_sql` would move into a governed-data MCP server that enforces the query guard, Brand scope and PII rules itself, with User identity via OAuth. It would be the same code behind the same ports, hosted differently.
 
 Until then, new capabilities are added as in-process tools behind ports.
