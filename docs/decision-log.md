@@ -133,6 +133,14 @@ Detail in `docs/hld/06-resilience.md`:
   - The agent loads it with a ~60 s cache, so there is no redeploy.
 - Locked prompt layers (safety rules, tool contracts) cannot be edited through the Persona.
 - **Prototype:** `persona.yaml`, re-read on every turn.
+- **Detail** (in `docs/hld/09-persona-management.md`):
+  - Locked layers also include the **output contract** (interpretation line, data blocks). Only answer-writing steps read the Persona; input guard and router prompts are fully locked.
+  - **Structured Persona, not a free-form prompt:** `tone` (preset + short free text), `report_sections`, `emphasis`, `vocabulary`, `examples`, `messages` (catalog wording; each class keeps its next step).
+  - Admin UI access needs a **Persona-editor role**.
+  - **Preview** re-writes stored query results for a fixed sample set: a few model calls, no BigQuery scans.
+  - **Publish check:** field limits; input-guard injection rules on free text; required sections present; a few red-team prompts still refuse; the judge confirms figures are unchanged ("style, never content").
+  - **Versions:** each publish is immutable with an active pointer; **scheduled publishing** ("activate Monday 09:00"); an in-flight Conversation switches at its next turn; publish and rollback are audited; quality metrics are broken down per Persona version.
+  - **Store:** Postgres by default; a prompt registry is the drop-in alternative behind `PersonaStore` if production uses Langfuse.
 
 ## Observability (Req 7)
 
