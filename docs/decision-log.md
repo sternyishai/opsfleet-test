@@ -30,7 +30,7 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
 
 ## Intent routing
 
-- **Action and preferences are separate outputs of one router call.** The router (Flash-Lite) returns the turn's single *action* (`analysis`, `delete reports`, `preference only`) and a list of *preference statements*, each *standing* or *this turn*. Any message can carry both ("compare CA vs NY, and use tables from now on").
+- **Action, search question and preferences are separate outputs of one router call.** The router (Flash-Lite) returns the turn's single *action* (`analysis`, `delete reports`, `change Persona`, `preference only`), for `analysis` a standalone *search question* used by `retrieve_trios` (ADR 0008), and a list of *preference statements*, each *standing* or *this turn*. Any message can carry both ("compare CA vs NY, and use tables from now on").
 - **Preferences apply to the current turn immediately** (merged into the in-memory User Profile before any branch formats an answer). Standing preferences are persisted in a parallel branch, with no added latency; this-turn preferences are never persisted.
 - **One action per turn; delete goes first.** A message that mixes a delete with another request runs the Deletion Plan first. The other request is kept in graph state as a *deferred request*, announced to the User, and run after the confirmation is answered (yes or no). It is never dropped silently and never run before the confirmation.
 - **Any reply to a confirmation prompt that is not a clear answer** cancels the plan and re-enters the graph at the input guard, never past it.
@@ -83,7 +83,7 @@ Detail in `docs/hld/06-resilience.md`:
   1. Saved Reports with strong signals (thumbs-up, no follow-up corrections) become anonymized Trio Candidates.
   2. A human analyst approves each Candidate before it is published.
   3. A nightly dry run of every Trio's SQL catches schema drift and retires broken ones.
-- **Query time:** hybrid search (vector + keyword) over Trios the User may see, top-k injected into the analysis sub-agent through the `search_golden_trios` tool.
+- **Query time:** hybrid search (vector + keyword) over Trios the User may see, top-k injected into the analysis sub-agent by the fixed `retrieve_trios` node before the ReAct loop starts; the `search_golden_trios` tool stays for re-search (ADR 0008).
 - **Retrieval unit: one Trio, not token chunks.** A Trio is a small, self-contained question → method lesson; splitting it would separate the question from its SQL.
   - **Only the question is embedded**, plus optional analyst-written paraphrases that point to the same Trio.
   - The SQL and the method summary are **payload**, returned with a match but not embedded.
@@ -97,12 +97,12 @@ Detail in `docs/hld/06-resilience.md`:
   - Embeddings use the model factory, with its own setting `MODEL_EMBEDDING`.
 - **Retrieval rules:**
   - A User sees a Trio only when every Brand it covers is one of their Brands; Executives see all.
-  - Vector and keyword results are fused by reciprocal rank fusion; top 3 above a similarity threshold are returned. No match above the threshold → the turn is flagged as a *retrieval gap*, which feeds the learning loop and the domain-expert sessions.
+  - Vector and keyword results are fused by reciprocal rank fusion; top 3 above a similarity threshold are returned. No match above the threshold on a turn that runs SQL → the turn is flagged as a *retrieval gap*, which feeds the learning loop and the domain-expert sessions.
   - Trio content is injected as a delimited reference block, never as instructions.
-  - Retrieval stays a tool call; the analysis prompt says to search Trios before writing SQL for analytical questions.
+  - Retrieval is a fixed graph step, not a tool call the model may skip: Req 1 says the agent *must* use the Golden Bucket (ADR 0008). The router's standalone search question keeps follow-ups ("and NY?") in context.
 - **Versioning and gating:** each edit is a new `trio_id@version`; the old one is marked `superseded`; traces record the exact version used. Approved Trios are activated in batches, only after the offline correctness suite passes.
 - **Measuring value:** the offline eval runs with retrieval on and off (ablation); the difference must stay positive.
-- **Prototype (stretch):** seed Trios in `seed/trios/`, Gemini embeddings in SQLite, cosine search in Python behind the `TrioRetriever` port.
+- **Prototype (stretch):** seed Trios in `seed/trios/`, Gemini embeddings in SQLite, cosine search in Python behind the `TrioRetriever` port; if the slice is cut, `retrieve_trios` calls an adapter that returns nothing.
 
 ## Learning loop (Req 4)
 
@@ -168,7 +168,7 @@ Detail in `docs/hld/06-resilience.md`:
   - **SLOs with alerts:** see *Scale, async processing & SLOs*.
   - **Synthetic canaries:** 3–5 known questions run end to end every 15 min.
   - **Online evals:** an LLM judge scores ~5% of production turns.
-  - **Retrieval health:** the share of turns with a Golden Trio above the similarity threshold.
+  - **Retrieval health:** the share of turns that run SQL with a Golden Trio above the similarity threshold.
   - The prototype computes the per-turn data; north star, SLOs, canaries and online evals are HLD-only.
 - **Detail** (in `docs/hld/08-observability.md`):
   - **OpenTelemetry Collector** between services and backends: batching, a second PII-redaction pass, fan-out to the trace backend and Cloud Monitoring.
