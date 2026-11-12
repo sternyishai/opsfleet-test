@@ -6,6 +6,9 @@ Feeds the HLD's "Assumptions" section.
 
 - `thelook` has no User↔Brand link, so Brand Assignments are defined by us (seeded).
 - Executives may analyze all Brands; Managers only their Brand Assignments; anyone else is denied by default. (The assignment only says "each user may only analyze data on products related to them".)
+- An authenticated User with no role and no Brand Assignment gets no data (default deny).
+- The data team publishes the four tables into a dataset we can govern (row access policies, policy tags), since neither can be added to `bigquery-public-data`.
+- Users have Google identities through SSO, so queries can run with their own credentials and row access policies apply to them.
 
 ## Confirmed by client (Harry, 2026-11-11)
 
