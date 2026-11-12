@@ -9,7 +9,7 @@ This section names every building block, says how the blocks talk to each other,
 | **Channel Gateway** | Cloud Run service | One adapter per channel (Slack, Teams, web; the CLI in the prototype). Resolves the User through SSO, acknowledges the channel at once, forwards the turn to the Chat API and renders replies and confirmation prompts in each channel's own format. |
 | **Chat API** | Cloud Run service (CPU always allocated) | Hosts the LangGraph agent. Loads the User context, runs the turn, streams progress and checkpoints the Conversation. Stateless: all state is in Postgres. |
 | **Agent graph** | inside the Chat API | A fixed shell (input guard, intent router, output PII filter) around a ReAct analysis sub-agent and a deterministic report-deletion branch ([ADR 0004](../adr/0004-hybrid-agent-graph.md)). See [Agent graph](#agent-graph). |
-| **Admin UI** | Cloud Run service behind IAP | Lets non-developers edit the Persona with preview and rollback ([09](09-persona-management.md)). Shows the Trio Candidate review queue to analysts ([02](02-hybrid-intelligence.md)). |
+| **Admin UI** | Cloud Run service behind IAP | Lets the CEO edit the Persona with preview, scheduling and rollback (the CEO can also change it in chat) ([09](09-persona-management.md)). Shows the Trio Candidate review queue to analysts ([02](02-hybrid-intelligence.md)). |
 | **Background jobs** | Cloud Run jobs, triggered by Pub/Sub or Cloud Scheduler | Trio ingestion and nightly validation, entity extraction for Saved Reports, preference inference, Trio Candidate generation, weekly aggregation and synthetic canaries. Every job is idempotent, and each job type has a dead-letter topic. |
 | **Gemini** | Vertex AI / Google AI Studio | Every model call goes through one model factory. Each step has its own model setting: router and guard on Flash-Lite, analysis on Flash, long reports on Pro ([10](10-stack-rationale.md)). |
 | **BigQuery** | managed | The analytics data (`orders`, `order_items`, `products`, `users`). Read-only to us, owned by the data team. |
@@ -84,7 +84,7 @@ The outer shell has fixed edges, so the model cannot skip a safety step. Only th
 
 ```mermaid
 flowchart TD
-    START([turn starts]) --> ctx[load context<br/>role, Brands, Profile, Persona]
+    START([turn starts]) --> ctx[load context<br/>role, permissions, Brands,<br/>Profile, Persona]
     ctx --> guard{{input guard}}
     guard -- blocked --> refuse[refusal from<br/>message catalog]
     guard -- ok --> router{intent router<br/>action + preferences}
@@ -95,12 +95,22 @@ flowchart TD
     apply -- analysis --> analysis
     apply -- delete reports --> plan[plan_deletion<br/>build Deletion Plan]
     apply -- preference only --> ack[acknowledge]
+    apply -- change Persona --> perm{{persona_editor?<br/>checked in code}}
 
     subgraph analysis [analysis sub-agent: ReAct]
         direction LR
         think[reason] --> tools[get_schema<br/>search_golden_trios<br/>run_sql<br/>save_report<br/>list_my_reports<br/>get_my_report]
         tools --> think
     end
+
+    perm -- no --> refuse
+    perm -- change --> draft[draft_persona<br/>request → structured fields]
+    perm -- undo --> rb[rollback_persona<br/>re-activate previous version]
+    draft --> gate{{Persona quality gate}}
+    gate -- passes --> pub[publish_persona<br/>new active version]
+    gate -- fails --> after
+    pub --> after
+    rb --> after
 
     plan -- 0 matches --> after
     plan -- matches --> confirm[/interrupt: confirm<br/>yes · no · yes except 2,3/]
@@ -118,11 +128,12 @@ flowchart TD
 ```
 
 - **Hexagons** are safety layers enforced in code. The query guard is not a separate node; it sits inside `run_sql`, so no SQL reaches BigQuery without passing it.
-- **The router returns two things in one Flash-Lite call:** the turn's single *action* (`analysis`, `delete reports` or `preference only`) and a list of *preference statements*, each marked *standing* ("from now on, tables") or *this turn* ("this time, just bullets"). Preferences are not an alternative to an action; any message can carry both.
+- **The router returns two things in one Flash-Lite call:** the turn's single *action* (`analysis`, `delete reports`, `change Persona` or `preference only`) and a list of *preference statements*, each marked *standing* ("from now on, tables") or *this turn* ("this time, just bullets"). Preferences are not an alternative to an action; any message can carry both.
 - **Preferences apply at once.** They are merged into this turn's in-memory User Profile before any branch formats an answer, so "tables from now on" already shapes the answer it arrived with. Standing preferences are also saved, in a parallel branch that adds no latency. This-turn preferences are never saved. A message that is only a preference gets a short acknowledgement ([05](05-learning-loop.md)).
-- **One action per turn; delete goes first.** If a message mixes a delete with another request ("delete my Q1 reports and make a new one"), the Deletion Plan is handled first and the agent says it will do the rest next. The other request is kept in graph state as a *deferred request* and runs once the delete is confirmed or declined. It is never dropped silently, and never run before the User has answered the confirmation.
+- **One action per turn; delete and Persona changes go first.** If a message mixes a delete with another request ("delete my Q1 reports and make a new one"), the Deletion Plan is handled first and the agent says it will do the rest next. The other request is kept in graph state as a *deferred request* and runs once the delete is confirmed or declined. A Persona change mixed with a question works the same way, so the answer already uses the new tone. It is never dropped silently, and never run before the User has answered the confirmation.
 - **Analysis covers** questions, report requests ("create a Q1 report") and questions about the data itself. Saving happens only through `save_report`, when the User explicitly asks.
 - **Users' own Saved Reports.** `list_my_reports(filter?)` and `get_my_report(id)` let the agent find, open and compare a User's earlier reports ("compare with my report from last month"). Neither tool takes an author parameter: the Author is injected from the session by code, so a prompt cannot reach another User's reports. An opened report is labelled "data as of <saved date>" so old figures are not mistaken for current ones. Channels also offer a direct view with no model call: `/reports` in the CLI, and a "My reports" view or command in the web, Slack and Teams channels ([04](04-destructive-ops.md)).
+- **Persona changes (CEO only).** "Make the reports warmer" or "undo the tone change" opens a fixed branch, never a tool of the analysis agent, because the change affects every User's answers. Code checks the `persona_editor` permission first; anyone else gets a refusal from the message catalog. A change is drafted into the Persona's structured fields, passes the automated quality gate and goes live at once, with no manual approval; a failure keeps the current version and says why. The direct edit (`/persona edit` in the CLI, the Admin UI form in production) enters the same branch at the permission check, skipping the router and the drafting step ([09](09-persona-management.md)).
 - **Resuming after a pause.** The User's reply to a confirmation prompt is a new message. Anything other than a clear `yes`, `no` or `yes except …` cancels the plan and re-enters the graph at the input guard, never past it.
 - **Errors.** A catch-all at the graph boundary maps any unclassified error to a plain-language message with a reference ID. The Conversation state is preserved, so the User can continue ([06](06-resilience.md)).
 - **Extending.** A new capability (chart, email, web search) is a new in-process tool with a typed contract, behind a port, added to the analysis sub-agent's tool list. The shell does not change. Tools are not served over MCP today; MCP is a named growth option for capabilities that already ship as MCP servers, or for sharing governed data access with other agents ([ADR 0007](../adr/0007-in-process-tools-mcp-as-growth-option.md)). A tool with external side effects, such as sending email, reuses the same `interrupt()` confirmation pattern as deletion. A new channel is a new adapter in the Gateway, and a new model is a `.env` change.
@@ -142,7 +153,7 @@ flowchart TD
 | Saved Reports + extracted entities | Postgres | `save_report`; entity extraction job | Until the Author deletes them (hard delete) | Customers appear only as `user_id` |
 | Deletion audit | Postgres | `execute_deletion` | Audit policy (assumed indefinite) | Metadata only: who, when, count, IDs, titles; never content |
 | User Profiles | Postgres | Chat API (explicit), inference job (inferred) | Until the User deletes them | Notes pass the input guard and are visible to the User |
-| Persona versions | Postgres | Admin UI | All versions kept, for rollback | None |
+| Persona versions | Postgres | Chat API (CEO in chat) and Admin UI, after the quality gate | All versions kept, for rollback | None |
 | Golden Trios (embeddings + payload) | Postgres (pgvector) | Ingestion job | Versioned; retired when broken | Figures stripped at ingestion ([ADR 0005](../adr/0005-golden-trios-teach-method-not-figures.md)) |
 | Raw expert Trio files | GCS | Analysts | Versioned bucket | Restricted to the ingestion job and analysts |
 | Trio Candidates | Postgres | Candidate job | Until approved or rejected; deleted with their source Saved Report | Anonymized, figures stripped |
