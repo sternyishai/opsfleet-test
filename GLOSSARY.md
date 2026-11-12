@@ -73,5 +73,13 @@ What the assistant has learned about how a User likes answers presented, such as
 _Avoid_: Memory, settings
 
 **Persona**:
-The company-wide tone and report style the assistant writes in, set by leadership and changeable at any time.
+The company-wide tone and report style the assistant writes in, set by the Persona Editor and changeable at any time.
 _Avoid_: Prompt, system prompt, personality
+
+**Persona Editor**:
+A User who holds the `persona_editor` permission and may change the Persona. Today only the CEO.
+_Avoid_: Admin, prompt owner
+
+**Persona Quality Gate**:
+The automated checks every new Persona version must pass before it goes live. There is no manual approval.
+_Avoid_: Approval, review, release gate
