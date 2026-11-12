@@ -52,7 +52,7 @@ The Persona governs tone and required sections. The User Profile governs present
 
 The Persona shapes every User's answers, so changing it is a permission, not something anyone can ask for.
 
-- **Only the CEO.** The `persona_editor` permission is held by the CEO. It is stored in the roles table with the other roles ([03](03-safety-and-pii.md#identity-and-roles)), loaded with the User context and checked **in code** before any change starts. Nothing typed in a message can grant it.
+- **Only the CEO.** The `persona_editor` permission is held by the CEO. It is stored in the `user_permissions` table next to the User's role ([03](03-safety-and-pii.md#identity-and-roles)), loaded with the User context and checked **in code** before any change starts. Nothing typed in a message can grant it.
 - **Delegation is an admin change, not a code change.** If the CEO wants a chief of staff to make the weekly edit, an admin grants them the permission *(open with the client, [12](12-assumptions-and-open-questions.md))*.
 - **Anyone else is refused politely**, from the message catalog: "Only the CEO's office can change the tone of the reports." The attempt is traced.
 
@@ -100,13 +100,15 @@ Every new version passes an automated gate before it goes live, on both paths. *
 
 - **Cheap and fast.** A few seconds and a handful of model calls. The samples are re-written from stored results, so the gate runs no BigQuery queries.
 - **A failure explains itself**, in plain words, with a hint: "With the new tone, a sample report described a 5% revenue drop as 'stable'. The current tone stays. Try asking for warmth without softening the numbers."
+- **Fails closed.** If the gate cannot run (for example, the model is down), nothing is published and the current version stays; the CEO gets the "model busy" message ([06](06-resilience.md)).
 - **Lighter than the release gate.** Developers' changes (prompts, models, tools) go through the full release gate ([07](07-quality-assurance.md#the-release-gate)). The Persona has its own fast gate because the CEO changes it weekly and cannot wait for the full eval suite. Its red-team prompts and sample reports are drawn from that suite.
 
 ## Publishing and rollback
 
-1. **Publish.** A version that passes the gate becomes a new immutable version, and one pointer marks it active. In production the Admin UI can also **schedule** it ("activate Monday 09:00"), so the weekly change can be prepared in advance; the gate runs when it is scheduled.
-2. **The agent picks it up.** The Chat API loads the active version with a ~60 s cache. A Conversation in progress switches at its next turn. No restart, no deploy.
-3. **Rollback.** "Undo the tone change" in chat, `/persona rollback`, or a click in the Admin UI re-activates the previous version (or any earlier one in the Admin UI). It skips the gate, because that version already passed it. All versions are kept.
+1. **Preview (production).** The Admin UI shows sample answers in the current and the draft Persona side by side, re-written from stored query results. It is for the CEO's own judgment, not a sign-off. In chat, the reply states what changed.
+2. **Publish.** A version that passes the gate becomes a new immutable version, and one pointer marks it active. In production the Admin UI can also **schedule** it ("activate Monday 09:00"), so the weekly change can be prepared in advance; the gate runs when it is scheduled.
+3. **The agent picks it up.** The Chat API loads the active version with a ~60 s cache. A Conversation in progress switches at its next turn. No restart, no deploy.
+4. **Rollback.** "Undo the tone change" in chat, `/persona rollback`, or a click in the Admin UI re-activates the previous version (or any earlier one in the Admin UI). It skips the gate, because that version already passed it. All versions are kept.
 
 Every publish, rejection and rollback records who, when, which path and what changed. Every trace records the Persona version used ([08](08-observability.md)), so a quality change after a Persona change is visible and attributable: trusted-answer rate, CSAT and the online judge's presentation score per Persona version.
 

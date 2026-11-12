@@ -64,7 +64,7 @@ flowchart LR
     B -- pass --> F([gradual rollout, 11])
 ```
 
-- **What is gated:** prompt changes, model or provider changes, new tools, approved Trio batches ([02](02-hybrid-intelligence.md)) and fallback models ([06](06-resilience.md)). Persona edits by non-developers have their own lighter check in the Admin UI ([09](09-persona-management.md)).
+- **What is gated:** prompt changes, model or provider changes, new tools, approved Trio batches ([02](02-hybrid-intelligence.md)) and fallback models ([06](06-resilience.md)). Persona changes by the CEO have their own lighter, automated Persona Quality Gate ([09](09-persona-management.md#the-quality-gate)).
 - **Comparison, not absolute scores.** The candidate is compared with the current version in the observability tool's experiments view: correctness, safety, cost per question and latency side by side.
 - **Rollout.** A change that passes the gate is rolled out gradually and can be rolled back ([11](11-operations.md#deployment)).
 
