@@ -54,6 +54,10 @@ _Avoid_: Delete preview, candidates
 A historical expert artifact made of a Question, the SQL Query that answered it, and the Analyst Report written from the result.
 _Avoid_: Example, sample
 
+**Analyst Report**:
+The human expert's written interpretation inside a Trio. It is shared knowledge, unlike a Saved Report.
+_Avoid_: Report (unqualified)
+
 **Golden Bucket**:
 The store of curated Trios that the assistant uses to understand how analysts interpreted past questions.
 _Avoid_: Knowledge base, data lake

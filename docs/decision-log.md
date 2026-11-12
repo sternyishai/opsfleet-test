@@ -15,6 +15,9 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
   5. Any other message cancels and is answered normally.
   6. Zero matches means no confirmation is shown.
 - Hard delete and an audit row happen in one transaction. The audit row is metadata only: who, when, count, IDs and titles, never content.
+- **Storage format:** one `saved_reports` row holds the exact Markdown the User saw, plus structured JSONB (title, summary, insights, action items, period). Structured fields keep action items queryable and let each channel render the report its own way. Future charts are files in object storage, referenced from the report.
+- **Reuse:** the agent may search the requesting User's **own** Saved Reports ("compare with my report from last month"), using the same entity + full-text search as deletion. Saved Reports are never part of the shared Golden RAG.
+- **Deletion vs. the Golden pipeline:** deleting a Saved Report also deletes any Trio Candidate derived from it that is still pending review (hard delete). A Trio an analyst has already approved and rewritten is company knowledge and stays.
 
 ## Models (Req 5 cost, Req 8 agility)
 
@@ -41,6 +44,12 @@ The retry counter lives in graph state, so the cost per question is bounded and 
   2. A human analyst approves each Candidate before it is published.
   3. A nightly dry run of every Trio's SQL catches schema drift and retires broken ones.
 - **Query time:** hybrid search (vector + keyword) over Trios the User may see, top-k injected into the analysis sub-agent through the `search_golden_trios` tool.
+- **Retrieval unit: one Trio, not token chunks.** A Trio is a small, self-contained question → method lesson; splitting it would separate the question from its SQL.
+  - **Only the question is embedded**, plus optional analyst-written paraphrases that point to the same Trio.
+  - The SQL and the method summary are **payload**, returned with a match but not embedded.
+  - Long Analyst Reports are **summarized** at ingestion, not chunked.
+  - **Metadata for filtering:** Brands, tables used, question type (comparison, trend, churn, …), Trio version, status (active or retired).
+- **The database schema is not part of the RAG.** It is only 4 tables, so table and column descriptions go straight into the prompt through `get_schema`.
 
 ## Learning loop (Req 4)
 
@@ -84,7 +93,7 @@ The retry counter lives in graph state, so the cost per question is bounded and 
   - **North star:** trusted-answer rate (answered with no error, no rephrase, no negative feedback).
   - **Cost per *successful* answer**, not per question.
   - Every metric is broken down by intent and by node.
-  - **SLOs with alerts:** p95 latency < 20 s; trusted-answer rate above target; PII-filter hits = 0.
+  - **SLOs with alerts:** see *Scale, async processing & SLOs*.
   - **Synthetic canaries:** 3–5 known questions run end to end every 15 min.
   - **Online evals:** an LLM judge scores ~5% of production turns.
   - **Retrieval health:** the share of turns with a Golden Trio above the similarity threshold.
@@ -154,3 +163,35 @@ The retry counter lives in graph state, so the cost per question is bounded and 
   - Result caching for the same question and scope within N minutes, plus BigQuery's own cache.
   - The prototype enforces only the per-query bytes cap.
 - **Long Conversations:** the last N turns are kept verbatim plus a running summary of older turns. Large results never go into history; a compact result summary does, and the full result stays in the turn record.
+
+## Scale, async processing & SLOs
+
+**Sizing (from the client):** ~1,000 questions/day, ~100 Saved Reports/day, only a few concurrent Users. At ~5–10 LLM calls per question that is ~5–10k LLM calls/day, peaking at tens per minute. This is a **low-scale internal tool**, so the design is right-sized: no high-scale machinery, but every growth path is named.
+
+- **Background jobs** (Trio ingestion and validation, entity extraction, preference inference, Trio Candidates, aggregation, canaries):
+  - Pub/Sub with a **dead-letter topic** per job type. After N delivery attempts with backoff, the message moves to the DLQ, an alert fires, and it can be inspected and replayed once fixed.
+  - Delivery is at least once, so **every job is idempotent**, with a dedupe key such as `trio_id + version` or `report_id`.
+- **Chat turns: no queue at this scale.** The Gateway acknowledges the channel immediately and runs the turn asynchronously in-process; Cloud Run with CPU always allocated is enough.
+  - A turn that fails after retries **fails fast** to the User with a friendly message and a reference ID. It is never dead-lettered for later replay, because a late answer to an old question confuses the User.
+  - **Growth path:** if concurrency grows, put a task queue (Cloud Tasks or Pub/Sub) between the Gateway and the workers for backpressure.
+- **What limits us (and the growth path for each):**
+  - **Gemini quota:** the per-process rate limiter is enough at this scale. Growth: a shared limiter (Memorystore token bucket) and provisioned throughput.
+  - **Batch jobs competing for quota:** they run off-peak, with their own budget. Interactive traffic always has priority.
+  - **BigQuery cost:** the bytes cap, a result cache, per-User quotas. It relies on date partitioning from the data team. Growth: reserved slots.
+  - **Postgres connections:** Cloud SQL connector pooling and a max-instances cap. Growth: PgBouncer, a read replica for report search.
+- **Data freshness:** data loads daily, so the result cache is valid until the next load, and answers state "data as of <last load>".
+- **Cost estimate:** the HLD includes a back-of-envelope daily cost (LLM tokens × current pricing + BigQuery bytes) for ~1,000 questions/day, computed from the trace data.
+
+**SLOs (ours to define; derived from the client's response-time expectations):**
+
+| SLO | Target | Why |
+|---|---|---|
+| Simple-question latency | p95 ≤ 30 s | The client expects 10–30 s. Progress messages stream meanwhile. |
+| Report latency | p95 ≤ 120 s | The client expects 1–2 min. |
+| Availability | 99.5% during business hours | Internal tool: fewer than ~4 business hours of downtime a month is acceptable; no 24/7 on-call. |
+| Trusted-answer rate | ≥ 85% (re-baselined after the pilot) | Starting point from the offline eval; tightened as data accumulates. |
+| PII leaks in output | 0 (any hit pages immediately) | Hard requirement, not a budget. |
+| Unauthorized-scope answers | 0 | Hard requirement. |
+
+- **Error-budget policy:** while a latency or availability budget is exhausted, reliability work comes before new features.
+- **Prototype:** computes the per-turn data behind these SLOs (latency per turn and node, success, guard and PII-filter hits) in the traces. Dashboards and alerting are HLD-only.
