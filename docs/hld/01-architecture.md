@@ -87,6 +87,10 @@ Self-correction inside `run_sql` (retries on SQL errors, one diagnosis on empty 
 
 The outer shell has fixed edges, so the model cannot skip a safety step. Only the analysis node loops.
 
+![Agent flow: what each step reads and writes](diagrams/agent-flow.png)
+
+<sub>What each node reads, writes and which model it uses. Source: [diagrams/agent-flow.excalidraw](diagrams/agent-flow.excalidraw). The Mermaid graph below is the reference for edges.</sub>
+
 ```mermaid
 flowchart TD
     START([turn starts]) --> ctx[load context<br/>role, permissions, Brands,<br/>Profile, Persona]
@@ -151,6 +155,10 @@ flowchart TD
 - **Long Conversations.** The last N turns stay verbatim, and older turns are folded into a running summary. Query results never enter the message history; only a compact result summary does (columns, row count, key figures). This keeps prompts small and cost bounded.
 
 ## Where data lives and how it is handled
+
+![Data flow: what is stored, and when it is written](diagrams/data-flow.png)
+
+<sub>Each store, what it holds, and whether it is written during the turn, by an event, on a schedule or by people. Source: [diagrams/data-flow.excalidraw](diagrams/data-flow.excalidraw).</sub>
 
 | Data | Store | Written by | Retention | PII handling |
 |---|---|---|---|---|
