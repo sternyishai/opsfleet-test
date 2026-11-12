@@ -316,3 +316,13 @@ Detail in `docs/hld/06-resilience.md`:
   - **Recovery:** Cloud SQL point-in-time recovery (RPO minutes), HA failover in about a minute, quarterly restore drills; Persona and Trio versions are never overwritten.
   - **Running it:** AI-ops owns the agent (assumption); weekly review, DLQ replay, monthly domain-expert session, quarterly restore drills and quota reviews.
 - **Prototype:** computes the per-turn data behind these SLOs (latency per turn and node, success, guard and PII-filter hits) in the traces. Dashboards and alerting are HLD-only.
+
+## Assumptions and open questions (12)
+
+Detail in `docs/hld/12-assumptions-and-open-questions.md`, which supersedes `open-items.md` as the single list.
+- Every assumption records where it is used and **what changes if it is wrong**, so a "no" from the client is a known adjustment, not a redesign. Every client question carries **our default until answered**.
+- Added in 12: Vertex AI available in the dataset's region (A7); business hours = one time zone, ~10 h, Mon–Fri, quotas reset at midnight there (A11).
+- Added client questions: source of Brand Assignments (HR/CRM, spreadsheet) and who changes them; dataset region and partitioning; Users' time zones; how many Trios exist and in what format; which channel first; which fallback provider is acceptable.
+- Defaults: Persona editor is a named editor in the CEO's office; one or two analysts give a few hours a week for Candidate review and judge labels.
+- Fallbacks if wrong: Brand Assignments imported by a sync job from HR/CRM; an authorized view as the minimum if no governed dataset; cache invalidated per load event if loads are more frequent; without human labels the judge reports but does not gate.
+- **To measure, not to ask:** cost inputs, timeouts and breaker values, Trio similarity threshold, quotas and caps, trusted-answer baseline.

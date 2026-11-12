@@ -1,6 +1,6 @@
 # Open items: assumptions, client questions, POCs
 
-Feeds the HLD's "Assumptions" section.
+> **Folded into [`docs/hld/12-assumptions-and-open-questions.md`](hld/12-assumptions-and-open-questions.md)**, which is now the single source of truth. This file is kept as the Phase 0 record; add new items to 12.
 
 ## Assumptions (to confirm with OpsFleet)
 
