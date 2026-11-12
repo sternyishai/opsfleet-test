@@ -297,10 +297,22 @@ Detail in `docs/hld/06-resilience.md`:
 |---|---|---|
 | Simple-question latency | p95 ≤ 30 s | The client expects 10–30 s. Progress messages stream meanwhile. |
 | Report latency | p95 ≤ 120 s | The client expects 1–2 min. |
-| Availability | 99.5% during business hours | Internal tool: fewer than ~4 business hours of downtime a month is acceptable; no 24/7 on-call. |
+| Availability | 99.5% during business hours | Internal tool: about 1–1.5 hours of degraded service a month during business hours (~220–260 h) is acceptable; no 24/7 on-call. |
 | Trusted-answer rate | ≥ 85% (re-baselined after the pilot) | Starting point from the offline eval; tightened as data accumulates. |
 | PII leaks in output | 0 (any hit pages immediately) | Hard requirement, not a budget. |
 | Unauthorized-scope answers | 0 | Hard requirement. |
 
 - **Error-budget policy:** while a latency or availability budget is exhausted, reliability work comes before new features.
+- **Detail** (in `docs/hld/11-operations.md`):
+  - **Deployment:** one region, next to the governed BigQuery dataset (a second Vertex AI region for fallback only). Separate dev, staging and production projects from the same infrastructure-as-code; staging runs canaries and the release gate.
+  - **Delivery:** CI builds one image per commit, runs the deterministic tests, pushes to Artifact Registry. Canary and rollback are Cloud Run traffic splits between revisions; prompt, model and Persona changes need no deploy.
+  - **Chat API:** internal ingress only, min 1 instance (no cold start), max instances capped by the Postgres connection limit. Only the Gateway and the IAP-protected Admin UI are public.
+  - **Peak:** ~100 questions/hour, ~5/min in the busiest hour, ~2 turns at once; one I/O-bound instance is enough.
+  - **SLO measurement:** latency is Gateway receive → final reply; availability is the share of turns ending in an answer rather than an infrastructure-failure message, plus canary success. Correct refusals (scope, PII, quota) do not count against availability.
+  - **Cost estimate (assumed inputs, recomputed from traces later):** Flash-Lite $0.25/$1.50, Flash $1.50/$9.00, Pro $2.00/$12.00 per 1M tokens; BigQuery $6.25/TiB; ~6 Flash calls × ~8k in per question; ~2.5 executions × ~2 GB per question. Result: ~$139 per business day for Users, ~$11/day canaries, ~$650/month fixed infra → **~$4,000/month, ~$0.18 per question**. Analysis is two-thirds; doubling the Flash price or steps adds ~$2,200/month.
+  - **Cost-control starting values:** `maximum_bytes_billed` ~20 GB; per-User quota ~5× a typical User's day; global cap ~3× expected daily spend, alert at 80%, then interactive traffic only; background jobs off-peak with batch pricing where available.
+  - **Canaries:** 4 short questions every 15 min in business hours, hourly outside (~220 runs/day instead of ~380), because canaries would otherwise be a top-three cost.
+  - **Security:** roles are Executive, Manager, Persona editor, analyst (Trio review), AI-ops (raw data), default deny; one service account per service; VPC Service Controls perimeter around BigQuery, GCS, Vertex AI; Google-managed encryption, CMEK optional; Vertex AI terms exclude training on customer data; Cloud Audit Logs; `uv.lock`, image scanning, deploys only from CI.
+  - **Recovery:** Cloud SQL point-in-time recovery (RPO minutes), HA failover in about a minute, quarterly restore drills; Persona and Trio versions are never overwritten.
+  - **Running it:** AI-ops owns the agent (assumption); weekly review, DLQ replay, monthly domain-expert session, quarterly restore drills and quota reviews.
 - **Prototype:** computes the per-turn data behind these SLOs (latency per turn and node, success, guard and PII-filter hits) in the traces. Dashboards and alerting are HLD-only.
