@@ -8,9 +8,9 @@ The agent is a LangGraph graph with a deterministic outer shell and a ReAct sub-
 - **Report deletion**: its own deterministic branch, with an `interrupt()` for confirmation.
 - **Persona change**: its own deterministic branch, open only to the `persona_editor` permission, with an automated quality gate before the new version goes live (see `docs/hld/09`).
 
-The rule for what becomes a branch rather than a tool: an action that destroys data or changes behavior for every User is a fixed branch that only the router can open from the User's own message. The analysis model can never call it, so text inside query results or Trios cannot trigger it.
+The rule for what becomes a branch rather than a tool: an action that destroys data, changes behavior for every User, or sends data outside the system is a fixed branch that only the router can open from the User's own message. The analysis model can never call it, so text inside query results or Trios cannot trigger it.
 
-Safety steps, and steps a requirement makes mandatory, are structural, so the model cannot skip them. Analysis stays flexible for multi-step "why" questions. New capabilities (charts, email, web search) are added as new tools without touching the shell.
+Safety steps, and steps a requirement makes mandatory, are structural, so the model cannot skip them. Analysis stays flexible for multi-step "why" questions. New read capabilities that the model chooses mid-analysis (charts, web search) are added as new tools without touching the shell. Outbound capabilities (email, Slack, push) are adapters of the `deliver` branch ([ADR 0009](0009-outbound-actions-are-a-deliver-branch.md)).
 
 ## Considered Options
 
