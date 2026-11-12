@@ -72,14 +72,14 @@ LangGraph is chosen because the hardest requirements map directly onto its primi
 
 ## Author's experience
 
-The assignment asks for the author's level of experience with the chosen stack. It is stated plainly here, because it affected the choices: where experience was lacking, the simpler or better-documented option was preferred.
+The assignment asks for the author's level of experience with the chosen stack. Choices were made on the requirements, not on familiarity. Experience is stated because it affects delivery risk, and each gap is covered by tests or kept behind a port.
 
-| Technology | Experience | Effect on the design |
+| Technology | Experience | Delivery risk and how it is covered |
 |---|---|---|
-| LangGraph | Hands-on; none with ADK or PydanticAI | Lowered delivery risk for the hardest requirements (interrupts, checkpointing) |
-| Gemini / Vertex AI | _to fill in_ | |
-| BigQuery | _to fill in_ | |
-| GCP (Cloud Run, Pub/Sub, Cloud SQL) | _to fill in_ | |
-| Postgres + pgvector | _to fill in_ | |
-| sqlglot | _to fill in_ | |
-| Phoenix / Langfuse | _to fill in_ | |
+| LangGraph | Hands-on; none with ADK or PydanticAI | Low |
+| Gemini / Vertex AI | Hands-on | Low |
+| BigQuery | Hands-on | Low |
+| GCP (Cloud Run, Pub/Sub, Cloud SQL) | Hands-on | Low |
+| Postgres + pgvector | Light | Low for the prototype, which uses SQLite cosine search behind the `TrioRetriever` port; pgvector is production-only ([02](02-hybrid-intelligence.md)) |
+| sqlglot | Not used before | The guard's behavior is specified in [03](03-safety-and-pii.md) and pinned by the `pytest` safety suite, written before the guard (TDD), so any gap shows up as a failing test ([07](07-quality-assurance.md)) |
+| Phoenix / Langfuse | Phoenix hands-on; Langfuse new | Low: Phoenix in the prototype; Langfuse is a production option only, behind OpenTelemetry ([08](08-observability.md)) |
