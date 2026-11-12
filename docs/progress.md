@@ -16,11 +16,12 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | `docs/hld/12-assumptions-and-open-questions.md` | ✅ committed (49926f9); `open-items.md` now points to it |
 | `/mock-interview audit` | ✅ run 2026-11-12; design gaps fixed (Persona via chat + `/persona edit` with the Persona Quality Gate, `/stats`, LangSmith option, canary deployment trimmed to 11, consistency fixes) |
 | Hero diagram | ✅ BigQuery box (queries run as the User), all 6 tools, Persona-change box, LangSmith in the observability bar |
+| ADR 0008: Golden Trio retrieval is a fixed step | ✅ committed (96801b8 … ae5f0a4): ADR 0004, HLD 00, 01, 02, 07, 08, 11, decision log and hero diagram aligned; cost estimate now ~$3,700/month |
 | `/mock-interview interview` rehearsal | not run |
 
 ## Decisions made this session, not yet written elsewhere
 
-- None. The audit decisions are in `decision-log.md` § Mock-interview audit follow-ups.
+- None. The audit decisions are in `decision-log.md` § Mock-interview audit follow-ups; the fixed-retrieval decision is in ADR 0008.
 - The availability budget was corrected: 99.5% of business hours is ~1–1.5 h a month, not ~4 h (decision log and 11).
 - `12` is now the single list of assumptions and client questions; add new items there, not to `open-items.md`.
 
