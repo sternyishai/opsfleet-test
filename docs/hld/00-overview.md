@@ -14,7 +14,7 @@ This HLD describes the production system. The prototype in this repo implements 
 
 1. A User asks in a channel (the CLI in the prototype; Slack, Teams or web in production). The **Channel Gateway** resolves who they are through SSO and passes the message, with the User's role and Brand Assignments, to the **Chat API**.
 2. The Chat API runs a **LangGraph** agent. Its outer shell is fixed: the **input guard and intent router** rejects off-topic or malicious input and sends the message down one of two branches.
-3. **Analysis** questions go to a ReAct sub-agent. It reads the schema, retrieves similar **Golden Trios** to learn the analysts' method, and runs SQL through `run_sql`. `run_sql` parses every statement, scopes it to the User's Brands, caps its cost and self-corrects on errors or empty results.
+3. **Analysis** questions first get the most similar **Golden Trios**, retrieved by a fixed step so the analysts' method is always in view. A ReAct sub-agent then reads the schema, searches again when a part of the question needs it, and runs SQL through `run_sql`. `run_sql` parses every statement, scopes it to the User's Brands, caps its cost and self-corrects on errors or empty results.
 4. **Delete requests** go to a deterministic branch. It builds a **Deletion Plan** listing exactly which reports match and why, and pauses for the User's confirmation before deleting anything. **Persona changes** ("make the reports warmer") go to another deterministic branch, open only to the CEO, where an automated quality gate checks the new version before it goes live.
 5. Every reply passes the **output PII filter** before it goes back through the Gateway.
 6. Background jobs keep the Golden Bucket current, learn User preferences and turn interaction data into eval cases and Trio Candidates. Every step emits **OpenTelemetry** traces.
@@ -22,7 +22,7 @@ This HLD describes the production system. The prototype in this repo implements 
 ## Design principles
 
 - **The model is never a security boundary.** Brand scoping, PII protection and delete confirmation are enforced by code and by the data platform, in layers. A prompt injection can at most produce a bad *question*, never an unauthorized *answer* ([ADR 0003](../adr/0003-layered-data-access-enforcement.md)).
-- **Fixed where it must be safe, flexible where it must think.** Safety steps are fixed graph edges the model cannot skip. Only the analysis core is an open-ended ReAct loop ([ADR 0004](../adr/0004-hybrid-agent-graph.md)).
+- **Fixed where it must be safe or must happen, flexible where it must think.** Safety steps, and steps a requirement makes mandatory such as Golden Trio retrieval, are fixed graph edges the model cannot skip. Only the analysis core is an open-ended ReAct loop ([ADR 0004](../adr/0004-hybrid-agent-graph.md), [ADR 0008](../adr/0008-trio-retrieval-is-a-fixed-step.md)).
 - **Trios teach method, not figures.** Golden knowledge shapes *how* the agent analyses. The numbers always come from a fresh query scoped to the User ([ADR 0005](../adr/0005-golden-trios-teach-method-not-figures.md)).
 - **Every external dependency sits behind a port.** Models, BigQuery, storage, channels and tracing can each be swapped with one adapter and one wiring change. That is what makes "easy to extend" and "portable" true in code ([ADR 0006](../adr/0006-ports-and-adapters.md)).
 - **Humans approve every change to what the system knows.** Users' own preferences apply immediately. System-level learning (new Trios, prompt changes) goes through an analyst and the eval suite, never self-modification in production. The Persona is changed only by the CEO, through an automated quality gate ([09](09-persona-management.md)).
@@ -32,7 +32,7 @@ This HLD describes the production system. The prototype in this repo implements 
 
 | # | Requirement | How it is met (one line) | Detail | Prototype |
 |---|---|---|---|:---:|
-| 1 | Hybrid Intelligence | Figure-stripped Trios in pgvector, retrieved per question by `search_golden_trios`. Grown through analyst-approved Trio Candidates. | [02](02-hybrid-intelligence.md) | — (stretch) |
+| 1 | Hybrid Intelligence | Figure-stripped Trios in pgvector, retrieved for every analysis question by a fixed graph step, with `search_golden_trios` for re-search. Grown through analyst-approved Trio Candidates. | [02](02-hybrid-intelligence.md) | — (stretch) |
 | 2 | Safety & PII | Input guard, an AST query guard that forces Brand scope, a PII-free schema, an output PII filter and a least-privilege account. | [03](03-safety-and-pii.md) | ✅ |
 | 3 | Destructive ops | A deterministic delete branch: Deletion Plan, then `interrupt()`, then deletion of confirmed IDs only. Hard delete and audit row in one transaction. | [04](04-destructive-ops.md) | ✅ |
 | 4 | Continuous Improvement | A structured User Profile (explicit, then inferred). System learning through aggregation, analyst review and an eval gate. | [05](05-learning-loop.md) | — |
@@ -52,6 +52,7 @@ This HLD describes the production system. The prototype in this repo implements 
 | [0005](../adr/0005-golden-trios-teach-method-not-figures.md) | Trios are stored figure-stripped and Brand-tagged | Injecting full Trios (leaks across Brands) |
 | [0006](../adr/0006-ports-and-adapters.md) | Ports and adapters for every external dependency | Direct SDK calls |
 | [0007](../adr/0007-in-process-tools-mcp-as-growth-option.md) | Tools run in-process; MCP only as a growth option | MCP server per data source (ports already give swappability) |
+| [0008](../adr/0008-trio-retrieval-is-a-fixed-step.md) | Golden Trio retrieval is a fixed step before the analysis loop | Retrieval as a prompt-guided tool only (a skipped search is invisible) |
 
 Smaller decisions are explained in the section they affect.
 
