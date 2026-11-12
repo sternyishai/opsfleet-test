@@ -34,6 +34,12 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
 - **Preferences apply to the current turn immediately** (merged into the in-memory User Profile before any branch formats an answer). Standing preferences are persisted in a parallel branch, with no added latency; this-turn preferences are never persisted.
 - **One action per turn; delete goes first.** A message that mixes a delete with another request runs the Deletion Plan first. The other request is kept in graph state as a *deferred request*, announced to the User, and run after the confirmation is answered (yes or no). It is never dropped silently and never run before the confirmation.
 - **Any reply to a confirmation prompt that is not a clear answer** cancels the plan and re-enters the graph at the input guard, never past it.
+- **Outbound actions are a `deliver` branch** ([ADR 0009](adr/0009-outbound-actions-are-a-deliver-branch.md)). Email, Slack posts and push notifications are adapters of one `Delivery` port, reached only from a router-opened branch, never tools of the analysis model, so injected text cannot make the system send data out.
+  - `deliver` sends a Saved Report (an unsaved answer is saved first), never raw rows. The recipient is injected by code: the Author, until the client answers Q15. It confirms with `interrupt()` and sends through the single outbound function, so delivered content passes the output PII filter.
+  - "…and email it to me" returns `analysis` as the action and `deliver` as a *follow-up action*: analysis first, then delivery, the reverse of a deferred request.
+  - Read capabilities (charts, web search) stay analysis tools. If they grow past about 10–20, filter per role or turn first, then group into specialist sub-agents.
+  - Rejected: a `send_email` analysis tool (the model holds a send action); a delivery sub-agent (an extra model loop, and a model still decides to send); delivery in the Channel Gateway (after the single exit, no access to Saved Reports).
+  - Added with the first outbound adapter; not in the prototype.
 
 ## Safety & PII (Req 2)
 
