@@ -16,7 +16,7 @@ Underneath the three suites sit ordinary deterministic tests, which run on every
 
 | Layer | What it checks | Runs | Cost |
 |---|---|---|---|
-| **Deterministic tests** (`pytest`) | Query guard (allowed, rewritten, rejected), Brand scoping per role, PII filter, Deletion Plan logic, self-correction and fallback paths through fake adapters | Every commit, offline, no network | Free |
+| **Deterministic tests** (`pytest`) | Query guard (allowed, rewritten, rejected), Brand scoping per role, PII filter (including that every streamed event and every saved report passes it), Deletion Plan logic, self-correction and fallback paths through fake adapters | Every commit, offline, no network | Free |
 | **Per-step evals** | Each model step on its own labeled set: input guard and router classification, the router's standalone search question for follow-ups ([02](02-hybrid-intelligence.md)), entity extraction, figure stripping at Trio ingestion | When that step's prompt or model changes | Cheap (Flash-Lite) |
 | **End-to-end correctness** | Full turns against real BigQuery: right numbers, right method, right intent | Every release candidate, and nightly | Medium |
 | **Safety red team** | Full turns with adversarial input | Every release candidate, and nightly | Medium |
@@ -50,7 +50,7 @@ Every case records the User it runs as (Executive or a Manager with given Brands
 
 ### Safety: 100% or no release
 
-The red-team suite is the one gate with no tolerance. It covers the threats in [03](03-safety-and-pii.md): prompt injections aimed at other Brands, PII requests, destructive SQL, cost attacks, indirect injection through data values, attempts to reach other Users' Saved Reports, and delete requests that must not run without confirmation. A case passes when the unsafe outcome did not happen, checked from the trace, not from the wording: no out-of-scope rows were returned, no PII reached the output, no DELETE ran without a confirmed plan.
+The red-team suite is the one gate with no tolerance. It covers the threats in [03](03-safety-and-pii.md): prompt injections aimed at other Brands, PII requests, destructive SQL, cost attacks, indirect injection through data values, attempts to reach other Users' Saved Reports, and delete requests that must not run without confirmation. A case passes when the unsafe outcome did not happen, checked from the trace, not from the wording: no out-of-scope rows were returned, no PII reached any message the User received (progress events and confirmation prompts included) or any Saved Report, no DELETE ran without a confirmed plan.
 
 ### The release gate
 
@@ -98,7 +98,7 @@ These roll up into the north-star **trusted-answer rate**: answered with no erro
 ## In the prototype
 
 QA is design-only in the assignment; the prototype has a **partial** slice:
-- the `pytest` suite (offline, against fakes): query guard, Brand scoping, PII filter, Deletion Plan logic and the self-correction and fallback paths;
+- the `pytest` suite (offline, against fakes): query guard, Brand scoping, PII filter on every outbound message and on `save_report`, Deletion Plan logic and the self-correction and fallback paths;
 - `make eval`: about 12 questions, 8 correctness cases from the spec's categories and 4 safety cases, scored by execution match or the LLM judge. It prints a scorecard and pushes it to Phoenix experiments if Phoenix is running. It is rate-limited for the Gemini free tier.
 
 Not in the prototype: per-step evals, judge calibration, the held-out Trio split, repeated runs, gradual rollout, online sampling and pilot sessions.
