@@ -63,6 +63,12 @@ Detail in `docs/hld/03-safety-and-pii.md`; layers are named, not numbered (input
 
 The retry counter lives in graph state, so the cost per question is bounded and visible in traces.
 
+Detail in `docs/hld/06-resilience.md`:
+- **One shared SQL retry budget** covers guard rejections, dry-run errors, runtime errors and bytes-cap rejections. A bytes-cap rejection carries a "narrow the period or aggregate" hint.
+- **The empty-result probe is code, not a model call:** it reads filter literals from the guard's AST and runs small scoped probes (closest distinct values, table date range); the findings go to the model as a hint. If the filters are valid and the result is still empty, the agent says there is genuinely no data and what it checked.
+- **Budget exhausted:** the graceful answer also shares findings from queries that succeeded earlier in the turn.
+- **Cost ceilings:** a cap on analysis steps per turn and a turn deadline, besides the SQL budget.
+
 ## Golden Bucket (Req 1)
 
 - **Prototype:** a small seed set of 5–10 hand-written Trios with simple embedding search. This is a stretch goal, cut first if time runs short.
@@ -172,6 +178,24 @@ The retry counter lives in graph state, so the cost per question is bounded and 
   - The full error is traced and tagged `unclassified`, and any occurrence is alerted.
   - The weekly aggregation reviews unclassified errors, and recurring ones get their own class and message.
   - The Conversation state is preserved, so the User can simply continue.
+- **Four failure classes, one response each** (detail in `docs/hld/06-resilience.md`): self-correctable (SQL loop), transient (backoff, then fallback), permanent for this request (catalog message, no retry), unclassified (catch-all).
+- **Starting values (configuration, tuned from traces):** timeouts ~10 s Flash-Lite, 60 s Flash/Pro, 60 s BigQuery job, 5 s Postgres; up to 3 attempts honoring `Retry-After`; a breaker opens after ~5 failures in 30 s, then probes after a cool-down.
+- **Only idempotent calls are retried.** Writes are idempotent instead: `save_report` dedupes on Conversation + turn, `execute_deletion` on the plan ID.
+- **The rate limiter waits** briefly rather than failing; if the wait exceeds the turn budget, the User gets the "busy" message.
+- **Per-dependency fallbacks:**
+  - Gemini: Flash → Flash-Lite; production adds a second Vertex AI region, then a second provider, via settings such as `MODEL_ANALYST_FALLBACK`.
+  - Input guard and router **fail closed** if every model is down; safety steps are never skipped.
+  - BigQuery down: no stale data served as fresh; Saved Reports and preferences keep working.
+  - Postgres down: fail closed (no identity, no checkpoint); Cloud SQL HA.
+  - Trio search down: continue from schema only, turn flagged degraded.
+  - Persona store down: last cached version, else the bundled default.
+  - Sensitive Data Protection down: regex detectors as fallback; the PII filter is never skipped.
+  - Pub/Sub publish failure: retried; nightly sweeps redo missed work (e.g. entity extraction backfill).
+  - Observability backend down: async batched export, dropped on overflow; tracing never blocks a turn.
+- **A fallback model must pass that step's offline eval suites** before it joins a fallback chain.
+- **The Gateway has its own deadline** and sends the "taking too long" message itself.
+- **Catalog additions:** "query too large" and "daily quota reached". The reference ID is the trace ID.
+- **Prototype:** includes an in-process circuit breaker per dependency and failure-injection `pytest` cases through fake adapters. Not in the prototype: second region/provider, Gateway deadline, result cache, per-User quotas, spend cap.
 
 ## Quality assurance (Req 6)
 
