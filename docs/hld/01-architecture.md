@@ -24,7 +24,7 @@ This section names every building block, says how the blocks talk to each other,
 | From → To | Style | Protocol and notes |
 |---|---|---|
 | Channel → Gateway | sync (ack), then async reply | The channel's webhook or socket. The Gateway acknowledges within the channel's deadline (a few seconds) and replies when the turn completes. |
-| Gateway → Chat API | async per turn, streamed | Internal HTTPS with service-to-service IAM auth. The Chat API streams progress events ("Looking at Q1 orders…") and then the final `AgentReply` or `ConfirmationRequest`. |
+| Gateway → Chat API | async per turn, streamed | Internal HTTPS with service-to-service IAM auth. The Chat API streams progress events ("Looking at Q1 orders…") and then the final `AgentReply` or `ConfirmationRequest`. All of them leave through one outbound function that runs the output PII filter ([03](03-safety-and-pii.md#pii-never-in-never-out)). |
 | Chat API → Gemini | sync | HTTPS through the model factory, with timeouts, backoff on retryable errors, model fallback and a circuit breaker ([06](06-resilience.md)). |
 | Chat API → BigQuery | sync | BigQuery client library. Every statement is dry-run first, then executed with `maximum_bytes_billed`. In production it runs on behalf of the User so row access policies apply ([03](03-safety-and-pii.md)). |
 | Chat API → Postgres | sync | Cloud SQL connector with pooling: LangGraph checkpointer, reports, profiles, Persona (cached ~60 s). |
@@ -66,7 +66,11 @@ sequenceDiagram
             API->>BQ: dry run (free: syntax + bytes estimate)
             API->>BQ: execute with maximum_bytes_billed
             BQ-->>API: rows (no PII columns exist)
+        else save_report (only when the User asks)
+            API->>API: output PII filter
+            API->>PG: write Saved Report
         end
+        API->>API: output PII filter (templated progress, regex)
         API-->>GW: progress event
         GW-->>U: "Comparing spend by state…"
     end
@@ -125,11 +129,11 @@ flowchart TD
 
     analysis --> pii{{output PII filter}}
     ack --> pii
-    refuse --> respond
+    refuse --> pii
     pii --> respond([respond + checkpoint])
 ```
 
-- **Hexagons** are safety layers enforced in code. The query guard is not a separate node; it sits inside `run_sql`, so no SQL reaches BigQuery without passing it.
+- **Hexagons** are safety layers enforced in code. The query guard is not a separate node; it sits inside `run_sql`, so no SQL reaches BigQuery without passing it. The output PII filter is drawn as the node before `respond`, but it is also the Chat API's single outbound function: progress events and the confirmation prompt pass it as they leave mid-turn, and `save_report` runs it before writing ([ADR 0003](../adr/0003-layered-data-access-enforcement.md)).
 - **The router returns three things in one Flash-Lite call:** the turn's single *action* (`analysis`, `delete reports`, `change Persona` or `preference only`); for `analysis`, a standalone *search question* that `retrieve_trios` uses, so a follow-up such as "and NY?" keeps its context ([ADR 0008](../adr/0008-trio-retrieval-is-a-fixed-step.md)); and a list of *preference statements*, each marked *standing* ("from now on, tables") or *this turn* ("this time, just bullets"). Preferences are not an alternative to an action; any message can carry both.
 - **Preferences apply at once.** They are merged into this turn's in-memory User Profile before any branch formats an answer, so "tables from now on" already shapes the answer it arrived with. Standing preferences are also saved, in a parallel branch that adds no latency. This-turn preferences are never saved. A message that is only a preference gets a short acknowledgement ([05](05-learning-loop.md)).
 - **One action per turn; delete and Persona changes go first.** If a message mixes a delete with another request ("delete my Q1 reports and make a new one"), the Deletion Plan is handled first and the agent says it will do the rest next. The other request is kept in graph state as a *deferred request* and runs once the delete is confirmed or declined. A deferred analysis request also passes through `retrieve_trios`, which then searches on the deferred request's own text. A Persona change mixed with a question works the same way, so the answer already uses the new tone. It is never dropped silently, and never run before the User has answered the confirmation.
@@ -153,7 +157,7 @@ flowchart TD
 | Transaction data | BigQuery | Data team (daily load) | Data team's policy | PII columns are hidden by column-level security and absent from the agent's schema; rows are filtered by row access policies |
 | Users, roles, permissions, Brand Assignments | Postgres | Admins; a sync job in production ([03](03-safety-and-pii.md#identity-and-roles)) | While the User is active | Internal IDs only; names and emails stay in the SSO provider |
 | Conversation checkpoints | Postgres | Chat API | Assumed 90 days, like raw traces | Contains only what the User saw, which has already passed the PII filter |
-| Saved Reports + extracted entities | Postgres | `save_report`; entity extraction job | Until the Author deletes them (hard delete) | Customers appear only as `user_id` |
+| Saved Reports + extracted entities | Postgres | `save_report`; entity extraction job | Until the Author deletes them (hard delete) | Customers appear only as `user_id`; `save_report` runs the output PII filter before writing |
 | Deletion audit | Postgres | `execute_deletion` | Audit policy (assumed indefinite) | Metadata only: who, when, count, IDs, titles; never content |
 | User Profiles | Postgres | Chat API (explicit), inference job (inferred) | Until the User deletes them | Notes pass the input guard and are visible to the User |
 | Persona versions | Postgres | Chat API (CEO in chat) and Admin UI, after the quality gate | All versions kept, for rollback | None |
@@ -165,4 +169,4 @@ flowchart TD
 
 **Data the agent writes.** The agent never writes to BigQuery. Its only writes are its own state in Postgres: Saved Reports, audit rows, User Profiles, Trio Candidates and interaction and observability records. This matches the client's split: the data team owns ETL and modelling, and the agent only reads.
 
-**PII path, end to end.** PII never enters the system through queries, because the columns are hidden and not in the queryable schema. It cannot leak through retrieval, because Trios are figure-stripped and Brand-tagged. It is caught on the way out by the output filter. It is redacted again before anything is stored for learning. The full layering is in [03](03-safety-and-pii.md).
+**PII path, end to end.** PII never enters the system through queries, because the columns are hidden and not in the queryable schema. It cannot leak through retrieval, because Trios are figure-stripped and Brand-tagged. It is caught on the way out by the output filter, at the single exit that every message and every Saved Report passes. It is redacted again before anything is stored for learning. The full layering is in [03](03-safety-and-pii.md).
