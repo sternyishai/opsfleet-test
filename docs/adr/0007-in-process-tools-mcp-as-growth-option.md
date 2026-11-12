@@ -1,6 +1,6 @@
 # Agent tools run in-process; MCP is a growth option, not part of the design
 
-The agent's tools (`get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports`, `get_my_report`, `plan_deletion`, `execute_deletion`) are Python functions inside the Chat API. Each calls its dependencies through ports ([ADR 0006](0006-ports-and-adapters.md)). We do not run MCP servers.
+The agent's tools (`get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports`, `get_my_report`, `plan_deletion`, `execute_deletion`, `draft_persona`, `publish_persona`, `rollback_persona`) are Python functions inside the Chat API. Each calls its dependencies through ports ([ADR 0006](0006-ports-and-adapters.md)). We do not run MCP servers.
 
 Three reasons:
 - **Swapping a data source is already cheap.** Moving from BigQuery to another warehouse is a new `QueryRunner` adapter plus the guard's SQL dialect setting, with no graph change. An MCP server would add a network hop, a service to deploy and secure, and cross-process trace propagation for the same result.
