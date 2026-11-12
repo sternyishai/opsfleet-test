@@ -16,7 +16,7 @@ This HLD describes the production system. The prototype in this repo implements 
 2. The Chat API runs a **LangGraph** agent. Its outer shell is fixed: the **input guard and intent router** rejects off-topic or malicious input and sends the message down one of four branches: analysis, delete reports, change Persona or preference only.
 3. **Analysis** questions first get the most similar **Golden Trios**, retrieved by a fixed step so the analysts' method is always in view. A ReAct sub-agent then reads the schema, searches again when a part of the question needs it, and runs SQL through `run_sql`. `run_sql` parses every statement, scopes it to the User's Brands, caps its cost and self-corrects on errors or empty results.
 4. **Delete requests** go to a deterministic branch. It builds a **Deletion Plan** listing exactly which reports match and why, and pauses for the User's confirmation before deleting anything. **Persona changes** ("make the reports warmer") go to another deterministic branch, open only to the CEO, where an automated quality gate checks the new version before it goes live.
-5. Every reply passes the **output PII filter** before it goes back through the Gateway.
+5. Everything the agent sends (progress messages, the delete confirmation, refusals and the final answer) passes the **output PII filter** on its single way out to the Gateway. Saved Reports pass it before they are written.
 6. Background jobs keep the Golden Bucket current, learn User preferences and turn interaction data into eval cases and Trio Candidates. Every step emits **OpenTelemetry** traces.
 
 ## Design principles
