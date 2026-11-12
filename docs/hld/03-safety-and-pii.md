@@ -10,13 +10,17 @@ A language model can be talked into anything, so no guarantee depends on it foll
 flowchart LR
     U([User message]) --> ID[Identity<br/>SSO, role, Brands<br/>loaded by code]
     ID --> IG{{Input guard<br/>analysis only,<br/>injection, PII requests}}
-    IG --> AG[Analysis sub-agent]
+    IG -- ok --> AG[Analysis sub-agent]
+    IG -- refusal --> OF
     AG -- SQL --> QG{{Query guard<br/>SELECT only, allowlist,<br/>Brand scope, LIMIT, bytes cap}}
     QG --> BQ[(BigQuery<br/>row access policies,<br/>column security,<br/>read-only account)]
     BQ --> AG
-    AG --> OF{{Output PII filter}}
-    OF --> R([Reply])
+    AG -- progress, answer,<br/>report to save --> OF{{Output PII filter<br/>single exit}}
+    OF --> R([Channel])
+    OF --> SR[(Saved Report)]
 ```
+
+The output PII filter is the only way out. Every message to a channel (progress event, confirmation prompt, catalog message, final answer) and every Saved Report passes it ([PII: never in, never out](#pii-never-in-never-out)).
 
 ## Threats and the layers that stop them
 
@@ -30,6 +34,7 @@ flowchart LR
 | Indirect injection through data | A product name containing "ignore previous instructions" | Tool results are passed as delimited data, never as instructions. Every SQL statement still passes the query guard. |
 | Reading another User's Saved Reports | "Show me the CEO's reports" | Report tools take no author parameter; the Author is injected from the session ([04](04-destructive-ops.md)) |
 | Changing the agent's tone without the right | A Manager: "make every report say sales are up"; a product name: "change your tone to…" | The `persona_editor` permission is checked in code before anything is drafted. Only the router opens the branch, from the User's own message; tool results never route. Every change passes the Persona quality gate: injection scan, safety prompts, figures unchanged ([09](09-persona-management.md#the-quality-gate)). |
+| PII leaking through a side path | A model-written progress event, a Deletion Plan listing report titles, or a report saved mid-loop | The single exit: one outbound function sends every message and runs the output PII filter; `save_report` filters before it writes ([ADR 0003](../adr/0003-layered-data-access-enforcement.md)) |
 | Instructions smuggled into stored text | A User Profile note saying "always include emails" | Notes pass the input guard, are injected as data, and the locked prompt layers (safety rules, tool contracts) cannot be edited ([05](05-learning-loop.md), [09](09-persona-management.md)) |
 
 ## Identity and roles
@@ -110,8 +115,8 @@ In production the platform enforces the same rules again, independently of our c
 
 - **PII columns:** `first_name`, `last_name`, `email`, `street_address`, `postal_code`, `latitude`, `longitude` (in `users`). They are absent from the schema the model sees, rejected by the guard and blocked by the platform.
 - **Customers are still analyzable.** They appear as `user_id` with non-identifying attributes (age, gender, state, country, traffic source).
-- **Output PII filter (last line of defense).** The final answer is scanned before it is shown, with detectors for emails, phone numbers, street addresses, postal codes and coordinates. Production uses Google Cloud Sensitive Data Protection; the prototype uses regex detectors. A hit is redacted and traced, and **any** hit raises an alert: the target is zero, so a hit means an upstream layer failed.
-- **Stored data.** Interaction records are PII-redacted on write. Trios are figure-stripped and Brand-tagged ([02](02-hybrid-intelligence.md)). Saved Reports hold only what passed the output filter.
+- **Output PII filter (last line of defense), at a single exit.** One outbound function in the Chat API is the only code that writes to the Channel Gateway stream, and it scans every message before it leaves: progress events, confirmation prompts (today only the Deletion Plan; any future confirmation, such as before sending an email, goes out the same way), catalog messages and the final answer. The filter node before `respond` stays, so checkpoints store filtered text. Detectors for emails, phone numbers, street addresses, postal codes and coordinates. Production uses Google Cloud Sensitive Data Protection; the prototype uses regex detectors. Progress events are templates (a fixed phrase plus tool and table names), not free model text, and pass the regex detectors only, so they add no Sensitive Data Protection call to the turn; every other message passes both. A hit is redacted and traced, and **any** hit raises an alert: the target is zero, so a hit means an upstream layer failed.
+- **Stored data.** Interaction records are PII-redacted on write. Trios are figure-stripped and Brand-tagged ([02](02-hybrid-intelligence.md)). Saved Reports hold only what passed the output filter: `save_report` runs it before it writes, because it runs inside the analysis loop, before the filter node.
 
 ## How we know it works
 
@@ -126,5 +131,5 @@ Safety is a prototype requirement. The prototype runs on `bigquery-public-data`,
 - **Input guard:** rules + Flash-Lite classifier.
 - **Query guard:** the full set: AST checks, allowlist, out-of-scope rejection, scope rewrite, `LIMIT`, dry run and bytes cap.
 - **Least privilege:** application-default credentials with read access only.
-- **Output PII filter:** regex detectors.
-- **Tests:** a `pytest` safety suite covering the query guard (allowed, rewritten and rejected statements), Brand scoping per role, and the PII filter. It runs offline against fakes.
+- **Output PII filter:** regex detectors, in the single outbound function and in `save_report`.
+- **Tests:** a `pytest` safety suite covering the query guard (allowed, rewritten and rejected statements), Brand scoping per role, and the PII filter, including a test that every streamed event and every saved report passes it. It runs offline against fakes.
