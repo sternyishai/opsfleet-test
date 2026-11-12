@@ -3,13 +3,14 @@
 The agent is a LangGraph graph with a deterministic outer shell and a ReAct sub-agent for analysis.
 
 - **Outer shell** (fixed edges): input guard and intent router → branch → output PII filter → respond.
+- **Golden Trio retrieval** (`retrieve_trios`): a fixed node on the analysis branch, before the sub-agent, because Req 1 makes it a step that must happen ([ADR 0008](0008-trio-retrieval-is-a-fixed-step.md)).
 - **Analysis sub-agent** (ReAct loop) with the tools `get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports` and `get_my_report`. The report tools take no author parameter; the Author is injected from graph state. The query guard and SQL self-correction live inside `run_sql`.
 - **Report deletion**: its own deterministic branch, with an `interrupt()` for confirmation.
 - **Persona change**: its own deterministic branch, open only to the `persona_editor` permission, with an automated quality gate before the new version goes live (see `docs/hld/09`).
 
 The rule for what becomes a branch rather than a tool: an action that destroys data or changes behavior for every User is a fixed branch that only the router can open from the User's own message. The analysis model can never call it, so text inside query results or Trios cannot trigger it.
 
-Safety steps are structural, so the model cannot skip them. Analysis stays flexible for multi-step "why" questions. New capabilities (charts, email, web search) are added as new tools without touching the shell.
+Safety steps, and steps a requirement makes mandatory, are structural, so the model cannot skip them. Analysis stays flexible for multi-step "why" questions. New capabilities (charts, email, web search) are added as new tools without touching the shell.
 
 ## Considered Options
 
