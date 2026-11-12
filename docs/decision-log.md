@@ -18,6 +18,14 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
 - **Storage format:** one `saved_reports` row holds the exact Markdown the User saw, plus structured JSONB (title, summary, insights, action items, period). Structured fields keep action items queryable and let each channel render the report its own way. Future charts are files in object storage, referenced from the report.
 - **Reuse:** the agent may search the requesting User's **own** Saved Reports ("compare with my report from last month"), using the same entity + full-text search as deletion. Saved Reports are never part of the shared Golden RAG.
 - **Deletion vs. the Golden pipeline:** deleting a Saved Report also deletes any Trio Candidate derived from it that is still pending review (hard delete). A Trio an analyst has already approved and rewritten is company knowledge and stays.
+- **Viewing own reports:** the analysis agent has two read-only tools, `list_my_reports(filter?)` and `get_my_report(id)`. Neither takes an author parameter; the Author is injected from the session by code, so a prompt cannot reach another User's reports. An opened report is labelled "data as of <saved date>". Channels also offer a direct, model-free view: `/reports` in the CLI (prototype), and a "My reports" view or command in web, Slack and Teams.
+
+## Intent routing
+
+- **Action and preferences are separate outputs of one router call.** The router (Flash-Lite) returns the turn's single *action* (`analysis`, `delete reports`, `preference only`) and a list of *preference statements*, each *standing* or *this turn*. Any message can carry both ("compare CA vs NY, and use tables from now on").
+- **Preferences apply to the current turn immediately** (merged into the in-memory User Profile before any branch formats an answer). Standing preferences are persisted in a parallel branch, with no added latency; this-turn preferences are never persisted.
+- **One action per turn; delete goes first.** A message that mixes a delete with another request runs the Deletion Plan first. The other request is kept in graph state as a *deferred request*, announced to the User, and run after the confirmation is answered (yes or no). It is never dropped silently and never run before the confirmation.
+- **Any reply to a confirmation prompt that is not a clear answer** cancels the plan and re-enters the graph at the input guard, never past it.
 
 ## Models (Req 5 cost, Req 8 agility)
 
@@ -174,6 +182,7 @@ The retry counter lives in graph state, so the cost per question is bounded and 
 - **Chat turns: no queue at this scale.** The Gateway acknowledges the channel immediately and runs the turn asynchronously in-process; Cloud Run with CPU always allocated is enough.
   - A turn that fails after retries **fails fast** to the User with a friendly message and a reference ID. It is never dead-lettered for later replay, because a late answer to an old question confuses the User.
   - **Growth path:** if concurrency grows, put a task queue (Cloud Tasks or Pub/Sub) between the Gateway and the workers for backpressure.
+- **Growth path: MCP** ([ADR 0007](adr/0007-in-process-tools-mcp-as-growth-option.md)). Not in the design today. Adopted when extension capabilities ship as MCP servers, or when a second consumer needs governed data access (a governed-data MCP server enforcing guard, scope and PII itself).
 - **What limits us (and the growth path for each):**
   - **Gemini quota:** the per-process rate limiter is enough at this scale. Growth: a shared limiter (Memorystore token bucket) and provisioned throughput.
   - **Batch jobs competing for quota:** they run off-peak, with their own budget. Interactive traffic always has priority.

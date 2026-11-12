@@ -8,9 +8,10 @@ The schemas and interfaces are **code-first**: Pydantic models, Python `Protocol
 
 1. **Data schemas**: application tables and an ER diagram.
    `users`, `brand_assignments`, `conversations`, `saved_reports`, `report_entities`, `deletion_audit`, `user_profiles`, `golden_trios`, `persona_versions`, `interactions`.
-2. **Graph state**: the LangGraph `State`: messages, User context (role, Brands), intent, retry counters, pending Deletion Plan, trace/reference ID.
+2. **Graph state**: the LangGraph `State`: messages, User context (role, Brands), intent (action), this turn's preference statements, retry counters, pending Deletion Plan, deferred request, trace/reference ID.
 3. **Contracts**: a typed input and output schema for **every tool** and every channel message.
-   - Tools: `get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `plan_deletion`, `execute_deletion`.
+   - Tools: `get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports`, `get_my_report`, `plan_deletion`, `execute_deletion`.
+   - Router output: `RouterDecision` (action + preference statements, each standing or this-turn).
    - Channel messages: `InboundMessage`, `AgentReply`, `ConfirmationRequest`, `ConfirmationResponse`.
 4. **Interfaces (ports)**, see ADR 0006: `LLMFactory`, `QueryRunner`, `QueryGuard`, `PiiFilter`, `ReportRepository`, `TrioRetriever`, `ProfileStore`, `PersonaStore`, `ChannelAdapter`, `Tracer`.
 
