@@ -206,6 +206,16 @@ Detail in `docs/hld/06-resilience.md`:
 - **Prototype:**
   - A `pytest` safety suite (query guard, scoping, PII filter, Deletion Plan logic).
   - `make eval`: ~12 questions (8 correctness from the spec categories, 4 safety), scored by execution match or an LLM judge. Prints a scorecard and pushes it to Phoenix if running. Rate-limited for the free tier.
+- **Detail** (in `docs/hld/07-quality-assurance.md`):
+  - **Five layers:** deterministic `pytest` (every commit, offline); per-step evals (router/guard classification, entity extraction, figure stripping; when that step changes); end-to-end correctness and safety red team (every release candidate and nightly); cost and latency budgets from the eval traces.
+  - **Eval set sources:** seed cases from the spec categories; a **held-out share of Golden Trios** kept out of retrieval as correctness references; real failures; red-team cases plus the input-guard POC set. Each case records the User it runs as (role, Brands).
+  - **Execution match:** order-insensitive, column names ignored, numeric tolerance.
+  - **Judge rubric** (`MODEL_JUDGE`, stronger than the judged model): intent, grounding (every figure from a query result), method and caveats, completeness (Persona sections, action items), presentation (Profile). The judge is calibrated against human labels before it gates anything, and its agreement is tracked.
+  - **Nondeterminism:** each case runs ~3 times; the score is the pass rate.
+  - **Safety cases are judged from the trace, not the wording:** no out-of-scope rows, no PII in output, no DELETE without a confirmed plan.
+  - **Gate:** reject on safety < 100%, any correctness regression vs the current version, or cost/latency over budget. Gated: prompts, models/providers, new tools, Trio batches, fallback models. Persona edits get a lighter check in the Admin UI (`09`).
+  - **Intent at runtime:** every analytical answer opens with one line stating its interpretation ("I read 'last quarter' as Q3 2026…"). Rephrased, corrected or abandoned turns are prioritized for human review and become eval cases.
+  - **UX pilot:** 5–8 executives and Managers, moderated, fixed task list (comparison, "why" drill-down, Q1 report with action items, deletion); sets the first trusted-answer baseline. Online UX signals also include latency vs SLOs, delete-flow rates and preference override rate.
 
 ## Packaging & delivery
 
