@@ -17,7 +17,7 @@ Underneath the three suites sit ordinary deterministic tests, which run on every
 | Layer | What it checks | Runs | Cost |
 |---|---|---|---|
 | **Deterministic tests** (`pytest`) | Query guard (allowed, rewritten, rejected), Brand scoping per role, PII filter, Deletion Plan logic, self-correction and fallback paths through fake adapters | Every commit, offline, no network | Free |
-| **Per-step evals** | Each model step on its own labeled set: input guard and router classification, entity extraction, figure stripping at Trio ingestion | When that step's prompt or model changes | Cheap (Flash-Lite) |
+| **Per-step evals** | Each model step on its own labeled set: input guard and router classification, the router's standalone search question for follow-ups ([02](02-hybrid-intelligence.md)), entity extraction, figure stripping at Trio ingestion | When that step's prompt or model changes | Cheap (Flash-Lite) |
 | **End-to-end correctness** | Full turns against real BigQuery: right numbers, right method, right intent | Every release candidate, and nightly | Medium |
 | **Safety red team** | Full turns with adversarial input | Every release candidate, and nightly | Medium |
 | **Cost and latency** | Tokens, BigQuery bytes and latency per question in the eval runs, against budgets | Computed from every eval run's traces | Free |
@@ -45,6 +45,7 @@ Every case records the User it runs as (Executive or a Manager with given Brands
   4. **Completeness:** for report requests, the sections the Persona requires, including action items.
   5. **Presentation:** the User Profile's format and depth were followed.
 - **The judge is checked too.** Before its scores gate anything, the judge is calibrated against a set of human-labeled answers, and its agreement with the humans is tracked. A judge that drifts is recalibrated before it is trusted again.
+- **Golden Bucket ablation.** The correctness suite also runs with the `retrieve_trios` node and the `search_golden_trios` tool switched off. The difference is the measured value of the Golden Bucket, and it must stay positive ([02](02-hybrid-intelligence.md), [ADR 0008](../adr/0008-trio-retrieval-is-a-fixed-step.md)).
 - **Nondeterminism.** Each case runs several times (for example, 3), and the score is the pass rate, so one lucky or unlucky sample does not decide a release.
 
 ### Safety: 100% or no release
