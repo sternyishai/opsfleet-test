@@ -58,7 +58,7 @@ Detail in `docs/hld/03-safety-and-pii.md`; layers are named, not numbered (input
   - **Why Gemini:** the client tests with it; Flash is strong at SQL and tool use for its price; on Vertex AI it runs in the same project and region as the data.
   - Exact model versions live only in `.env`, never in the HLD.
   - Prototype: Flash for analysis, Flash-Lite for the router, both on the AI Studio free tier.
-- **Stack rationale (10):** each GCP service is justified and mapped to a portable equivalent (AWS, Azure, self-hosted); supporting libraries (sqlglot, Pydantic, tenacity, OTel/OpenInference, Phoenix, pgvector, uv, pytest) each have a one-line reason. Where the author's experience was lacking, the simpler or better-documented option was preferred.
+- **Stack rationale (10):** each GCP service is justified and mapped to a portable equivalent (AWS, Azure, self-hosted); supporting libraries (sqlglot, Pydantic, tenacity, OTel/OpenInference, Phoenix, pgvector, uv, pytest) each have a one-line reason. Choices were made on the requirements, not on familiarity; the author's experience is stated per technology with its delivery risk, and each gap is covered by tests (sqlglot: the safety suite is written before the guard) or kept behind a port (pgvector, Langfuse are production-only).
 
 ## SQL self-correction (Req 5)
 
