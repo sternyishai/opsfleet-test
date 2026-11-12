@@ -16,8 +16,9 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | `docs/hld/diagrams/architecture.excalidraw` + `.png` | ✅ committed (3c40858); light iteration later |
 | ADR 0007 (tools in-process, MCP as growth option) | ✅ committed (bb5fa72) |
 | `docs/hld/02-hybrid-intelligence.md` | ✅ committed |
-| `docs/hld/03-safety-and-pii.md` | in progress |
-| `docs/hld/04`–`12` | not started (1B: 04–05, 1C: 06–12) |
+| `docs/hld/03-safety-and-pii.md` | ✅ committed |
+| `docs/hld/04-destructive-ops.md` | in progress |
+| `docs/hld/05`–`12` | not started (1B: 05, 1C: 06–12) |
 
 ## Decisions made this session, not yet written elsewhere
 
@@ -26,7 +27,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Open questions
 
-- 01 handoff items still to confirm: retention assumptions (checkpoints 90 days, deletion audit indefinite) go to `12`; how BigQuery runs "on behalf of the User" is settled in `03`.
+- 01 handoff items still to confirm: retention assumptions (checkpoints 90 days, deletion audit indefinite) go to `12`; how BigQuery runs "on behalf of the User" is settled in `03` (User credentials + group-based row policies).
 
 ## Next session prompt
 

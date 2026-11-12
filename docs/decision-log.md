@@ -27,6 +27,18 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
 - **One action per turn; delete goes first.** A message that mixes a delete with another request runs the Deletion Plan first. The other request is kept in graph state as a *deferred request*, announced to the User, and run after the confirmation is answered (yes or no). It is never dropped silently and never run before the confirmation.
 - **Any reply to a confirmation prompt that is not a clear answer** cancels the plan and re-enters the graph at the input guard, never past it.
 
+## Safety & PII (Req 2)
+
+Detail in `docs/hld/03-safety-and-pii.md`; layers are named, not numbered (input guard, then ADR 0003's query guard, data platform, least privilege, output PII filter).
+
+- **Queries run as the User (production):** the Chat API uses the User's short-lived Google credentials from SSO. One row access policy per Brand, granted to a Google group; a sync job keeps group membership matching the Brand Assignments in Postgres (the source of truth). PII columns carry policy tags; no agent identity holds Fine-Grained Reader. If a channel cannot provide User credentials, queries fall back to the service account and the query guard carries scoping alone.
+- **Query guard details:** `sqlglot` (BigQuery dialect); fails closed; exactly one `SELECT` (CTEs allowed), no scripting or `EXECUTE IMMEDIATE`; Brands bound as query parameters; a rejection is a tool error that counts against the SQL retry budget.
+- **Out-of-scope Brands are rejected, not filtered:** SQL naming a Brand outside the User's scope returns an "out of scope" result, so the User is told rather than shown an empty or misleading answer.
+- **Per-table scope:** `products` by Brand; `order_items` by those products; `orders` containing at least one such item; `users` who bought at least one such item. Executives get column projection only.
+- **Input guard:** six categories (analysis, report management, preference, off-topic, PII request, injection attempt), returned by the same Flash-Lite call as the router; deterministic rules (length, known injection phrases, encoded payloads) run first.
+- **Indirect injection through data values** (e.g. a product name with instructions) is handled by passing tool results as delimited data.
+- **Output PII filter:** Google Cloud Sensitive Data Protection in production, regex detectors in the prototype; a hit is redacted, traced and alerted.
+
 ## Models (Req 5 cost, Req 8 agility)
 
 - Tiered Gemini models: Flash-Lite for the router, guard and entity extraction; Flash for the analysis agent; Pro allowed for long report generation. The prototype defaults to Flash to stay inside free-tier limits.
