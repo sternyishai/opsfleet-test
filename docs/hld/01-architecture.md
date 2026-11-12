@@ -148,7 +148,8 @@ flowchart TD
 - **Errors.** A catch-all at the graph boundary maps any unclassified error to a plain-language message with a reference ID. The Conversation state is preserved, so the User can continue ([06](06-resilience.md)).
 - **Extending.** A new capability goes where the rule of [ADR 0004](../adr/0004-hybrid-agent-graph.md) puts it:
   - **Read capabilities the model chooses mid-analysis** (charts, web search) are new in-process tools with a typed contract, behind a port, added to the analysis sub-agent's tool list. The shell does not change.
-  - **Outbound capabilities** (email, Slack posts, push notifications) are adapters of one `Delivery` port, reached only from the router-opened `deliver` branch, never tools of the analysis model ([ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)). `deliver` sends a Saved Report, never raw query rows. The recipient is injected by code (the Author, by default). It pauses with `interrupt()` like a delete, and it sends through the single outbound function. "Create the Q1 report and email it to me" runs analysis first and then `deliver` as a *follow-up action*, the reverse order of a deferred request, because delivery needs the result. The branch and its router action are added together with the first outbound adapter.
+  - **Outbound capabilities** (email, Slack posts, push notifications) are adapters of one `Delivery` port, reached only from the router-opened `deliver` branch, never tools of the analysis model ([ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)). `deliver` sends a Saved Report, never raw query rows. The recipient is injected by code (the Author, by default), and the router picks the destination from a fixed list. The branch has no model: it loads the report, renders it with the adapter's template (the short summary is written at save time), pauses with `interrupt()` to show a preview, and sends through the single outbound function. It then ends the turn like a delete. "Create the Q1 report and email it to me" runs analysis first and then `deliver` as a *follow-up action*, the reverse order of a deferred request, because delivery needs the result. The branch and its router action are added together with the first outbound adapter.
+  - **`deliver` is isolated, so it can grow into its own agent.** It is a subgraph with a narrow contract: a report ID and a destination go in, a delivery outcome comes out, and it shares no state with the analysis sub-agent. If delivery grows (scheduled or bulk sends, retries across vendors, a destination that needs model-written text), it can become its own agent or service without changing the shell. Only the router opens it, the recipient stays code-owned, and content still passes the output PII filter before it leaves.
   - **Channels and models**: a new channel is a new adapter in the Gateway, and a new model is a `.env` change.
   - Tools are not served over MCP today. MCP is a named growth option for capabilities that already ship as MCP servers, or for sharing governed data access with other agents ([ADR 0007](../adr/0007-in-process-tools-mcp-as-growth-option.md)). If the read tools grow past about 10–20, the first step is filtering them per role or turn, and only then grouping them into specialist sub-agents.
 
@@ -156,11 +157,17 @@ flowchart TD
 flowchart LR
     M["'Create the Q1 report<br/>and email it to me'"] --> R{router<br/>action: analysis<br/>follow-up: deliver}
     R --> A[analysis sub-agent<br/>run_sql, save_report]
-    A --> D[deliver<br/>load Saved Report,<br/>recipient = Author]
-    L["'Email me that report'"] --> R2{router<br/>action: deliver} --> D
-    D --> C[/interrupt: send to you? yes · no/]
-    C -- yes --> O{{single outbound function<br/>output PII filter}}
-    O --> P[Delivery port<br/>email · Slack · push adapter]
+    L["'Email me that report'"] --> R2{router<br/>action: deliver<br/>destination: email}
+    subgraph deliver ["deliver (isolated subgraph, no model)"]
+        D[load_report<br/>Author injected] --> F[render<br/>template per adapter]
+        F --> C[/interrupt: preview<br/>send to you? yes · no/]
+        C -- yes --> O{{single outbound function<br/>output PII filter}}
+        O --> P[Delivery port<br/>email · Slack · push adapter]
+    end
+    A --> D
+    R2 --> D
+    C -- no / anything else --> E([END])
+    P --> E
 ```
 
 <sub>The designed path for outbound capabilities, not in the prototype ([ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)).</sub>
