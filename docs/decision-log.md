@@ -58,6 +58,19 @@ The retry counter lives in graph state, so the cost per question is bounded and 
   - Long Analyst Reports are **summarized** at ingestion, not chunked.
   - **Metadata for filtering:** Brands, tables used, question type (comparison, trend, churn, …), Trio version, status (active or retired).
 - **The database schema is not part of the RAG.** It is only 4 tables, so table and column descriptions go straight into the prompt through `get_schema`.
+- **Ingestion safeguards** (detail in `docs/hld/02-hybrid-intelligence.md`):
+  - Trio SQL is dry-run at ingestion; a Trio that does not compile is never published.
+  - Figure stripping is verified: after the LLM writes the method summary, a deterministic check looks for numbers, percentages and currency. Any hit quarantines the Trio for an analyst.
+  - Brand tags come from Brand literals in the SQL plus entities named in the report. If tagging is uncertain, the Trio is tagged as covering all Brands (Executive-only) until an analyst corrects it.
+  - Embeddings use the model factory, with its own setting `MODEL_EMBEDDING`.
+- **Retrieval rules:**
+  - A User sees a Trio only when every Brand it covers is one of their Brands; Executives see all.
+  - Vector and keyword results are fused by reciprocal rank fusion; top 3 above a similarity threshold are returned. No match above the threshold → the turn is flagged as a *retrieval gap*, which feeds the learning loop and the domain-expert sessions.
+  - Trio content is injected as a delimited reference block, never as instructions.
+  - Retrieval stays a tool call; the analysis prompt says to search Trios before writing SQL for analytical questions.
+- **Versioning and gating:** each edit is a new `trio_id@version`; the old one is marked `superseded`; traces record the exact version used. Approved Trios are activated in batches, only after the offline correctness suite passes.
+- **Measuring value:** the offline eval runs with retrieval on and off (ablation); the difference must stay positive.
+- **Prototype (stretch):** seed Trios in `seed/trios/`, Gemini embeddings in SQLite, cosine search in Python behind the `TrioRetriever` port.
 
 ## Learning loop (Req 4)
 
