@@ -48,7 +48,7 @@ You merge the PR on GitHub ("Rebase and merge") when the phase is done.
 
 Glossary, ADRs 0001–0006, decision log, open items, LLD scope.
 
-## Phase 1: HLD → PR #2 (~2–3 h)
+## Phase 1: HLD → PR #2 (~2–3 h) — drafted, PR open
 
 **Branch:** `docs/hld`
 
@@ -73,8 +73,8 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 | `12-assumptions` | Assumptions and client questions |
 
 **Done when:**
-- [ ] every file has been reviewed and iterated
-- [ ] `decision-log.md` and `open-items.md` are folded into the HLD
+- [x] every file has been reviewed and iterated
+- [x] `decision-log.md` and `open-items.md` are folded into the HLD
 - [ ] `/mock-interview audit` shows all **design** items as met
 - [ ] one `/mock-interview interview` rehearsal is done
 
