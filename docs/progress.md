@@ -4,7 +4,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-12)
 
-**Phase:** 1 (HLD), session 1A done, 1B in progress
+**Phase:** 1 (HLD), sessions 1A and 1B done; 1C next
 **Branch:** `docs/hld`
 
 | Step | Status |
@@ -18,7 +18,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | `docs/hld/02-hybrid-intelligence.md` | ✅ committed |
 | `docs/hld/03-safety-and-pii.md` | ✅ committed |
 | `docs/hld/04-destructive-ops.md` | ✅ committed |
-| `docs/hld/05-learning-loop.md` | in progress |
+| `docs/hld/05-learning-loop.md` | ✅ committed |
 | `docs/hld/06`–`12` | not started (1C) |
 
 ## Decisions made this session, not yet written elsewhere
@@ -32,4 +32,4 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Continue the OpsFleet take-home, Phase 1, session 1B. Read docs/work-plan.md, docs/progress.md, GLOSSARY.md, ADRs 0003–0005 and 0007, the matching decision-log sections, and docs/hld/00–01. Continue with the first HLD file in 02–05 that is not yet committed, following the review loop (one file, handoff note, REVIEW comments, commit on approval).
+> Continue the OpsFleet take-home, Phase 1, session 1C. Read docs/work-plan.md, docs/progress.md, GLOSSARY.md, ADRs 0001, 0002, 0006 and 0007, the decision log (Resilience, QA, Observability, Persona, Models, Packaging, Production concerns, Scale & SLOs sections), docs/open-items.md, and docs/hld/00–05. Draft docs/hld/06-resilience.md first, then 07–12, following the review loop: one file at a time, validate Mermaid with `npx @mermaid-js/mermaid-cli`, give the handoff note (sources + additions not in the sources), commit on approval and fold the approved additions into the decision log. File 12 must collect every assumption and client question raised in 00–11.
