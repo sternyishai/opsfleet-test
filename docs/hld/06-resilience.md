@@ -80,7 +80,7 @@ flowchart LR
 | **Postgres** | None. Without it there is no identity, no Brand Assignments and no checkpoint, so the turn fails closed. Cloud SQL runs in high-availability mode ([11](11-operations.md)). | "I'm unavailable right now. Please try again shortly." |
 | **Golden Trio search** | The agent continues from the schema alone; the turn is flagged as degraded. | Nothing visible; the answer may be less informed. |
 | **Persona store** | The last cached version, or the bundled default Persona on a cold start ([09](09-persona-management.md)). | Nothing visible. |
-| **Output PII filter (Sensitive Data Protection)** | The regex detectors used in the prototype stay in production as the fallback. **The filter is never skipped.** | Nothing visible. |
+| **Output PII filter (Sensitive Data Protection)** | The regex detectors used in the prototype stay in production as the fallback. **The filter is never skipped**: it sits at the single outbound function, so no message leaves without it ([03](03-safety-and-pii.md#pii-never-in-never-out)). | Nothing visible. |
 | **Pub/Sub** (events after commit) | Publishing is retried. If it still fails, nightly sweeps redo the missed work, for example extracting entities for reports that have none; the full-text fallback covers matching meanwhile. | Nothing visible. |
 | **Observability backend** | Spans are exported asynchronously in batches and dropped on overflow. Tracing never blocks or fails a turn; errors still reach Cloud Logging. | Nothing visible. |
 
@@ -92,7 +92,7 @@ Background jobs have their own resilience: at-least-once delivery, idempotent ha
 
 - **Every turn ends in a reply.** A catch-all at the graph boundary turns any error into a message from the catalog. The CLI loop catches everything, so a failed turn never ends the session.
 - **The Gateway has its own deadline.** If the Chat API does not answer in time, the Gateway sends the "taking too long" message itself, so a channel never waits in silence.
-- **Progress keeps long turns from looking stuck.** Retries and fallbacks emit progress events ("Checking that filter again…"), streamed to the channel ([01](01-architecture.md#how-components-communicate)).
+- **Progress keeps long turns from looking stuck.** Retries and fallbacks emit progress events ("Checking that filter again…"), streamed to the channel ([01](01-architecture.md#how-components-communicate)). They are templates, not free model text, and pass the output PII filter on the way out ([03](03-safety-and-pii.md#pii-never-in-never-out)).
 - **The Conversation survives.** State is checkpointed after every node, so after a failure the User simply continues. A failed turn is never replayed later, because a late answer to an old question confuses the User.
 
 ### The message catalog
