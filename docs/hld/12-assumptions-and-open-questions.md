@@ -12,6 +12,7 @@ Every assumption the design rests on, every point the client has already confirm
 | 2026-11-12 | Scale is low: tens to a few hundred executives, few active at once; ~1,000 questions a day, ~100 Saved Reports a day, ~1M new rows a day from daily loads. | [11](11-operations.md) |
 | 2026-11-12 | Response time: simple questions ~10–30 s, long reports ~1–2 min. The SLO targets are ours to define. | [11](11-operations.md#slos) |
 | 2026-11-12 | Prototype observability: agent-level metrics plus local tracing for deep dives; production tooling is described in the HLD. | [08](08-observability.md) |
+| 2026-11-12 | Persona changes: a non-technical User such as the CEO updates the agent's instructions without editing code and without a redeploy. The mechanism is ours to choose. Every change passes an automated quality gate before it goes live, with no manual approval step. | [09](09-persona-management.md) |
 | 2026-11-12 | Data is out of scope for the agent: another team owns ETL, modeling and connectors. The agent only reads, and writes only its own state. | [01](01-architecture.md#where-data-lives-and-how-it-is-handled) |
 
 ## Assumptions
@@ -49,7 +50,7 @@ Every assumption the design rests on, every point the client has already confirm
 | A12 | Analysts have time to review Trio Candidates and write new Trios, and analysts and business owners join a monthly domain-expert session. | [02](02-hybrid-intelligence.md), [05](05-learning-loop.md) | The Golden Bucket grows only from expert files, and retrieval gaps stay open longer. The agent still works from the schema. |
 | A13 | Enough Trios exist to keep a held-out share out of retrieval as correctness references. | [07](07-quality-assurance.md) | The correctness suite relies on seed cases and real failures until the Golden Bucket grows. |
 | A14 | Someone labels a set of answers by hand to calibrate the LLM judge before it gates releases. | [07](07-quality-assurance.md) | The judge reports scores but does not gate; execution match and the safety suite gate alone. |
-| A15 | The CEO's weekly tone change is prepared in advance and published on a schedule by a named Persona editor. | [09](09-persona-management.md) | Publishing on demand works the same way; scheduling is a convenience. |
+| A15 | Only the CEO holds the `persona_editor` permission, and changes the tone in chat or by direct edit. | [09](09-persona-management.md#who-may-change-it) | If the CEO delegates, an admin grants the permission to another User; no code change. |
 
 ### Models and cost
 
@@ -73,7 +74,7 @@ Each question has our proposed default, so the design proceeds while it is open.
 | Q6 | Can the data team publish the four tables into a governed dataset, date-partitioned, and in which region? | Yes (A4, A5, A7) | [03](03-safety-and-pii.md), [11](11-operations.md) |
 | Q7 | Who owns and is on call for the agent in production? | An AI-ops team, business hours (A10) | [08](08-observability.md), [11](11-operations.md) |
 | Q8 | What are the business hours and time zones of the Users? | One zone, ~10 h, Monday to Friday (A11) | [11](11-operations.md#slos) |
-| Q9 | Who holds the Persona-editor role: the CEO's office, or a named editor? | A named editor in the CEO's office (A15) | [09](09-persona-management.md) |
+| Q9 | Should anyone besides the CEO be able to change the Persona, for example a chief of staff? | Only the CEO (A15); delegation is an admin grant | [09](09-persona-management.md#who-may-change-it) |
 | Q10 | Can we run an executive pilot with 5–8 executives and Managers before launch? | Yes; it sets the trusted-answer baseline | [07](07-quality-assurance.md#evaluating-ux) |
 | Q11 | Which analysts can review Trio Candidates and label answers for judge calibration, and how much time a week? | A few hours a week from one or two analysts (A12, A14) | [02](02-hybrid-intelligence.md), [07](07-quality-assurance.md) |
 | Q12 | How many Trios exist today, and in what format? | Enough for retrieval plus a held-out share (A13); ingestion parses one file per Trio | [02](02-hybrid-intelligence.md), [07](07-quality-assurance.md) |
