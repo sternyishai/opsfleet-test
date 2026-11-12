@@ -78,7 +78,7 @@ flowchart LR
     D --> E[proposed changes<br/>eval cases · Trio requests ·<br/>prompt changes · schema<br/>descriptions · message classes]
     E --> G{offline eval gate<br/>correctness · safety 100%<br/>· cost · latency}
     G -- fail --> D
-    G -- pass --> H[shadow, canary, full<br/>via config flags]
+    G -- pass --> H[gradual rollout<br/>11]
     H -. production traffic .-> A
 ```
 
@@ -88,7 +88,7 @@ The findings report covers new topics, recurring SQL errors, low-satisfaction ar
 - **Knowledge gaps go to analysts.** Clusters of questions with no good Trio, or with low satisfaction, become requests for new Trios, and Trio Candidates from well-received Saved Reports enter the analyst review queue ([02](02-hybrid-intelligence.md)).
 - **Recurring SQL errors usually mean the schema is unclear.** If the model keeps mixing up `orders.created_at` and `order_items.shipped_at`, the fix is a clearer column description in `get_schema`. Such fixes are cheap, safe and measurable.
 - **Domain-expert sessions** bring what logs cannot show: business context, new priorities and definitions such as how the company really defines churn.
-- **Shipping a change** follows the same promotion path as the architecture ([ADR 0004](../adr/0004-hybrid-agent-graph.md)): the offline eval against the current version, then shadow traffic, a canary percentage and full rollout, all controlled by configuration. Any change can be rolled back by configuration.
+- **Shipping a change** follows the same promotion path as the architecture ([ADR 0004](../adr/0004-hybrid-agent-graph.md)): the offline eval against the current version, then a gradual rollout ([11](11-operations.md#deployment)). Any change can be rolled back.
 
 **Why not let the agent improve itself automatically?** Automatic prompt or knowledge rewriting in production can drift, encode one User's mistakes for everyone, or open a path for poisoning through crafted conversations. Keeping humans and the eval gate in the loop makes every change explainable and reversible, at the cost of a weekly rather than continuous cadence. At ~1,000 questions a day, a weekly cycle has plenty of data.
 

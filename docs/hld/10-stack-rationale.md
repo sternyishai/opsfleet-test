@@ -36,7 +36,7 @@ Each step of the path uses the cheapest model that does it well. The router and 
 
 - **Why Gemini.** The client tests with Gemini, Gemini Flash is strong at SQL and tool use for its price, and on Vertex AI it runs in the same project and region as the data.
 - **No lock-in.** Every setting has the form `provider:model` (for example `google_genai:gemini-…`), resolved by one model factory, so swapping a step's model or provider is a one-line `.env` change. Exact model versions are in `.env`, not in this document, because they change faster than the design.
-- **Changing a model is an experiment, not an edit.** A candidate runs through that step's offline evals and is compared with the current model on score, cost and latency, then rolled out through shadow traffic, a canary and full rollout by configuration ([07](07-quality-assurance.md)).
+- **Changing a model is an experiment, not an edit.** A candidate runs through that step's offline evals and is compared with the current model on score, cost and latency, then rolled out gradually ([07](07-quality-assurance.md), [11](11-operations.md#deployment)).
 - **Fallbacks** are per step (`MODEL_ANALYST_FALLBACK`, …): Flash → Flash-Lite in the prototype; another region, then another provider in production ([06](06-resilience.md)).
 - **Prototype:** Flash for analysis and Flash-Lite for the router, both on the Google AI Studio free tier, with a client-side rate limiter sized to its limits.
 

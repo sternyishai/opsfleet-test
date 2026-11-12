@@ -23,4 +23,4 @@ Each stage is promoted only when it beats the previous one on the offline eval s
 1. **PoC: single ReAct agent.** Proves that the tools, schema context and Gemini can answer the spec's example questions, and establishes the baseline eval scores.
 2. **Pipeline experiment.** Fix the common path as deterministic steps and measure the cost and latency gain on simple questions, and the correctness loss on multi-step ones.
 3. **Hybrid (this decision).** Move safety into the fixed shell and keep ReAct for analysis. The eval must show safety tests at 100% with no correctness regression from stage 1.
-4. **Production hardening.** Add shadow traffic, canary rollout behind config flags, and online metrics (see Observability).
+4. **Production hardening.** Add gradual rollout (`docs/hld/11`) and online metrics (`docs/hld/08`).

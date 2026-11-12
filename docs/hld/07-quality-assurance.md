@@ -61,12 +61,12 @@ flowchart LR
     E --> R[safety red team]
     R --> B{gate}
     B -- safety < 100% or<br/>correctness regressed or<br/>cost/latency over budget --> X([rejected,<br/>back to review])
-    B -- pass --> SH[shadow traffic] --> CA[canary %] --> F([full rollout])
+    B -- pass --> F([gradual rollout, 11])
 ```
 
 - **What is gated:** prompt changes, model or provider changes, new tools, approved Trio batches ([02](02-hybrid-intelligence.md)) and fallback models ([06](06-resilience.md)). Persona edits by non-developers have their own lighter check in the Admin UI ([09](09-persona-management.md)).
 - **Comparison, not absolute scores.** The candidate is compared with the current version in the observability tool's experiments view: correctness, safety, cost per question and latency side by side.
-- **Rollout is configuration.** Shadow traffic, then a canary percentage, then full. Each step is a config flag, and so is rollback.
+- **Rollout.** A change that passes the gate is rolled out gradually and can be rolled back ([11](11-operations.md#deployment)).
 
 ## Verifying that answers match the User's intent
 
@@ -100,4 +100,4 @@ QA is design-only in the assignment; the prototype has a **partial** slice:
 - the `pytest` suite (offline, against fakes): query guard, Brand scoping, PII filter, Deletion Plan logic and the self-correction and fallback paths;
 - `make eval`: about 12 questions, 8 correctness cases from the spec's categories and 4 safety cases, scored by execution match or the LLM judge. It prints a scorecard and pushes it to Phoenix experiments if Phoenix is running. It is rate-limited for the Gemini free tier.
 
-Not in the prototype: per-step evals, judge calibration, the held-out Trio split, repeated runs, shadow and canary rollout, online sampling and pilot sessions.
+Not in the prototype: per-step evals, judge calibration, the held-out Trio split, repeated runs, gradual rollout, online sampling and pilot sessions.
