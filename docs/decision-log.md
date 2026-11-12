@@ -38,7 +38,9 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
   - `deliver` sends a Saved Report (an unsaved answer is saved first), never raw rows. The recipient is injected by code: the Author, until the client answers Q15. It confirms with `interrupt()` and sends through the single outbound function, so delivered content passes the output PII filter.
   - "…and email it to me" returns `analysis` as the action and `deliver` as a *follow-up action*: analysis first, then delivery, the reverse of a deferred request.
   - Read capabilities (charts, web search) stay analysis tools. If they grow past about 10–20, filter per role or turn first, then group into specialist sub-agents.
-  - Rejected: a `send_email` analysis tool (the model holds a send action); a delivery sub-agent (an extra model loop, and a model still decides to send); delivery in the Channel Gateway (after the single exit, no access to Saved Reports).
+  - No model in the branch: load_report → render (a template per adapter) → `interrupt()` preview → send → END. The router picks the destination from a fixed list. The short summary that Slack uses is written at save time, so PII is checked only by existing code: at save and at the single exit. The send uses an idempotency key, and the next message starts a normal turn.
+  - `deliver` is an isolated subgraph (a report ID and a destination in, an outcome out, no state shared with analysis), so it can grow into its own agent or service without changing the shell.
+  - Rejected: a `send_email` analysis tool, even behind human approval (the model holds a send action and picks the recipient: the "lethal trifecta"); a model drafting each message (new text after the save, needing its own checks; kept as a growth step); a delivery sub-agent (an extra model loop, and a model still decides to send); delivery in the Channel Gateway (after the single exit, no access to Saved Reports).
   - Added with the first outbound adapter; not in the prototype.
 
 ## Safety & PII (Req 2)
