@@ -48,6 +48,10 @@ _Avoid_: Owner, creator
 The exact list of a User's Saved Reports that a delete request matched, each with the reason it matched, shown to the User for confirmation before anything is deleted.
 _Avoid_: Delete preview, candidates
 
+**Delivery**:
+Sending a Saved Report out of the chat to a destination such as email, Slack or a push notification, only after the User asks and confirms. By default it goes only to the report's Author.
+_Avoid_: Sharing, export
+
 ### Knowledge
 
 **Trio**:
