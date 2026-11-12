@@ -29,7 +29,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Open questions
 
-- 14 client questions (Q1–Q14) are listed in `docs/hld/12`; each has a default, so none blocks Phase 2.
+- 16 client questions (Q1–Q16) are listed in `docs/hld/12`; each has a default, so none blocks Phase 2.
 - Not decided in the design: what triggers the Trio Candidate job, and whether an approved Candidate goes through ingestion (marked on the data-flow diagram). Decide before Phase 2 touches the learning loop.
 - Cost estimate inputs in 11 are list prices whose public sources disagree; recompute from prototype traces in Phase 4.
 
