@@ -4,7 +4,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-12)
 
-**Phase:** 1 (HLD), sessions 1A–1D done; PR #2 open. Two "Done when" items left: `/mock-interview audit` and one `/mock-interview interview` rehearsal.
+**Phase:** 1 (HLD), sessions 1A–1D done, audit done and its design gaps fixed; PR #2 open. Left: the hero diagram update and one `/mock-interview interview` rehearsal.
 **Branch:** `docs/hld`
 
 | Step | Status |
@@ -14,12 +14,13 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | `docs/hld/10` author's experience | ✅ committed (575cc9f), framed as delivery risk, not design influence |
 | `docs/hld/11-operations.md` | ✅ committed (e38b339) |
 | `docs/hld/12-assumptions-and-open-questions.md` | ✅ committed (49926f9); `open-items.md` now points to it |
-| `/mock-interview audit` | not run |
+| `/mock-interview audit` | ✅ run 2026-11-12; design gaps fixed (Persona via chat + `/persona edit` with the Persona Quality Gate, `/stats`, LangSmith option, canary deployment trimmed to 11, consistency fixes) |
+| Hero diagram | ⏳ needs: BigQuery box says queries run as the User, tools box lists all 6 tools, a Persona-change box under the router. Blocked on the Excalidraw CLI permission. |
 | `/mock-interview interview` rehearsal | not run |
 
 ## Decisions made this session, not yet written elsewhere
 
-- None. Approved additions from 10–12 are folded into `decision-log.md`.
+- None. The audit decisions are in `decision-log.md` § Mock-interview audit follow-ups.
 - The availability budget was corrected: 99.5% of business hours is ~1–1.5 h a month, not ~4 h (decision log and 11).
 - `12` is now the single list of assumptions and client questions; add new items there, not to `open-items.md`.
 
@@ -30,4 +31,4 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Run `/mock-interview audit` on the HLD and fix any **design** items not met (one file at a time, review loop as in docs/work-plan.md), then one `/mock-interview interview` rehearsal. Update docs/progress.md and PR #2. When Phase 1 is merged, start Phase 2 with the prompt in docs/work-plan.md.
+> Update the hero diagram (docs/hld/diagrams/architecture.excalidraw + .png) with the three changes listed in docs/progress.md, then run one `/mock-interview interview` rehearsal. Update docs/progress.md and PR #2. When Phase 1 is merged, start Phase 2 with the prompt in docs/work-plan.md.
