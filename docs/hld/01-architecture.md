@@ -8,7 +8,7 @@ This section names every building block, says how the blocks talk to each other,
 |---|---|---|
 | **Channel Gateway** | Cloud Run service | One adapter per channel (Slack, Teams, web; the CLI in the prototype). Resolves the User through SSO, acknowledges the channel at once, forwards the turn to the Chat API and renders replies and confirmation prompts in each channel's own format. |
 | **Chat API** | Cloud Run service (CPU always allocated) | Hosts the LangGraph agent. Loads the User context, runs the turn, streams progress and checkpoints the Conversation. Stateless: all state is in Postgres. |
-| **Agent graph** | inside the Chat API | A fixed shell (input guard, intent router, output PII filter) around a ReAct analysis sub-agent and a deterministic report-deletion branch ([ADR 0004](../adr/0004-hybrid-agent-graph.md)). See [Agent graph](#agent-graph). |
+| **Agent graph** | inside the Chat API | A fixed shell (input guard, intent router, output PII filter) around a ReAct analysis sub-agent with a fixed Golden Trio retrieval step in front of it, and a deterministic report-deletion branch ([ADR 0004](../adr/0004-hybrid-agent-graph.md), [ADR 0008](../adr/0008-trio-retrieval-is-a-fixed-step.md)). See [Agent graph](#agent-graph). |
 | **Admin UI** | Cloud Run service behind IAP | Lets the CEO edit the Persona with preview, scheduling and rollback (the CEO can also change it in chat) ([09](09-persona-management.md)). Shows the Trio Candidate review queue to analysts ([02](02-hybrid-intelligence.md)). |
 | **Background jobs** | Cloud Run jobs, triggered by Pub/Sub or Cloud Scheduler | Trio ingestion and nightly validation, entity extraction for Saved Reports, preference inference, Trio Candidate generation, weekly aggregation and synthetic canaries. Every job is idempotent, and each job type has a dead-letter topic. |
 | **Gemini** | Vertex AI / Google AI Studio | Every model call goes through one model factory. Each step has its own model setting: router and guard on Flash-Lite, analysis on Flash, long reports on Pro ([10](10-stack-rationale.md)). |
@@ -54,11 +54,12 @@ sequenceDiagram
     GW->>API: InboundMessage(user, conversation_id, text)
     API->>PG: load checkpoint, role + Brand Assignments, User Profile, Persona (cached)
     API->>LLM: input guard + intent router (Flash-Lite)
-    LLM-->>API: action = analysis, preferences = [ ]
+    LLM-->>API: action = analysis, search question, preferences = [ ]
+    API->>PG: retrieve_trios: hybrid search over Trios the User may see
     loop ReAct analysis (bounded steps)
         API->>LLM: next step (Flash)
         LLM-->>API: tool call
-        alt search_golden_trios
+        alt search_golden_trios (re-search for a sub-question)
             API->>PG: hybrid search over Trios the User may see
         else run_sql
             API->>API: query guard: parse AST, allowlist, inject Brand scope, force LIMIT
@@ -87,12 +88,13 @@ flowchart TD
     START([turn starts]) --> ctx[load context<br/>role, permissions, Brands,<br/>Profile, Persona]
     ctx --> guard{{input guard}}
     guard -- blocked --> refuse[refusal from<br/>message catalog]
-    guard -- ok --> router{intent router<br/>action + preferences}
+    guard -- ok --> router{intent router<br/>action, search question,<br/>preferences}
 
     router --> apply[apply preferences<br/>to this turn's Profile]
     router -. standing preferences,<br/>in parallel .-> persist[(save to<br/>User Profile)]
 
-    apply -- analysis --> analysis
+    apply -- analysis --> retrieve[retrieve_trios<br/>top Trios above threshold]
+    retrieve --> analysis
     apply -- delete reports --> plan[plan_deletion<br/>build Deletion Plan]
     apply -- preference only --> ack[acknowledge]
     apply -- change Persona --> perm{{persona_editor?<br/>checked in code}}
@@ -118,7 +120,7 @@ flowchart TD
     confirm -- no --> after
     confirm -- any other message --> guard
     exec --> after{deferred<br/>request?}
-    after -- yes --> analysis
+    after -- yes --> retrieve
     after -- no --> pii
 
     analysis --> pii{{output PII filter}}
@@ -128,9 +130,9 @@ flowchart TD
 ```
 
 - **Hexagons** are safety layers enforced in code. The query guard is not a separate node; it sits inside `run_sql`, so no SQL reaches BigQuery without passing it.
-- **The router returns two things in one Flash-Lite call:** the turn's single *action* (`analysis`, `delete reports`, `change Persona` or `preference only`) and a list of *preference statements*, each marked *standing* ("from now on, tables") or *this turn* ("this time, just bullets"). Preferences are not an alternative to an action; any message can carry both.
+- **The router returns three things in one Flash-Lite call:** the turn's single *action* (`analysis`, `delete reports`, `change Persona` or `preference only`); for `analysis`, a standalone *search question* that `retrieve_trios` uses, so a follow-up such as "and NY?" keeps its context ([ADR 0008](../adr/0008-trio-retrieval-is-a-fixed-step.md)); and a list of *preference statements*, each marked *standing* ("from now on, tables") or *this turn* ("this time, just bullets"). Preferences are not an alternative to an action; any message can carry both.
 - **Preferences apply at once.** They are merged into this turn's in-memory User Profile before any branch formats an answer, so "tables from now on" already shapes the answer it arrived with. Standing preferences are also saved, in a parallel branch that adds no latency. This-turn preferences are never saved. A message that is only a preference gets a short acknowledgement ([05](05-learning-loop.md)).
-- **One action per turn; delete and Persona changes go first.** If a message mixes a delete with another request ("delete my Q1 reports and make a new one"), the Deletion Plan is handled first and the agent says it will do the rest next. The other request is kept in graph state as a *deferred request* and runs once the delete is confirmed or declined. A Persona change mixed with a question works the same way, so the answer already uses the new tone. It is never dropped silently, and never run before the User has answered the confirmation.
+- **One action per turn; delete and Persona changes go first.** If a message mixes a delete with another request ("delete my Q1 reports and make a new one"), the Deletion Plan is handled first and the agent says it will do the rest next. The other request is kept in graph state as a *deferred request* and runs once the delete is confirmed or declined. A deferred analysis request also passes through `retrieve_trios`, which then searches on the deferred request's own text. A Persona change mixed with a question works the same way, so the answer already uses the new tone. It is never dropped silently, and never run before the User has answered the confirmation.
 - **Analysis covers** questions, report requests ("create a Q1 report") and questions about the data itself. Saving happens only through `save_report`, when the User explicitly asks.
 - **Users' own Saved Reports.** `list_my_reports(filter?)` and `get_my_report(id)` let the agent find, open and compare a User's earlier reports ("compare with my report from last month"). Neither tool takes an author parameter: the Author is injected from the session by code, so a prompt cannot reach another User's reports. An opened report is labelled "data as of <saved date>" so old figures are not mistaken for current ones. Channels also offer a direct view with no model call: `/reports` in the CLI, and a "My reports" view or command in the web, Slack and Teams channels ([04](04-destructive-ops.md)).
 - **Persona changes (CEO only).** "Make the reports warmer" or "undo the tone change" opens a fixed branch, never a tool of the analysis agent, because the change affects every User's answers. Code checks the `persona_editor` permission first; anyone else gets a refusal from the message catalog. A change is drafted into the Persona's structured fields, passes the automated quality gate and goes live at once, with no manual approval; a failure keeps the current version and says why. The direct edit (`/persona edit` in the CLI, the Admin UI form in production) enters the same branch at the permission check, skipping the router and the drafting step ([09](09-persona-management.md)).
