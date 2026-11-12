@@ -15,7 +15,7 @@ This HLD describes the production system. The prototype in this repo implements 
 1. A User asks in a channel (the CLI in the prototype; Slack, Teams or web in production). The **Channel Gateway** resolves who they are through SSO and passes the message, with the User's role and Brand Assignments, to the **Chat API**.
 2. The Chat API runs a **LangGraph** agent. Its outer shell is fixed: the **input guard and intent router** rejects off-topic or malicious input and sends the message down one of two branches.
 3. **Analysis** questions go to a ReAct sub-agent. It reads the schema, retrieves similar **Golden Trios** to learn the analysts' method, and runs SQL through `run_sql`. `run_sql` parses every statement, scopes it to the User's Brands, caps its cost and self-corrects on errors or empty results.
-4. **Delete requests** go to a deterministic branch. It builds a **Deletion Plan** listing exactly which reports match and why, and pauses for the User's confirmation before deleting anything.
+4. **Delete requests** go to a deterministic branch. It builds a **Deletion Plan** listing exactly which reports match and why, and pauses for the User's confirmation before deleting anything. **Persona changes** ("make the reports warmer") go to another deterministic branch, open only to the CEO, where an automated quality gate checks the new version before it goes live.
 5. Every reply passes the **output PII filter** before it goes back through the Gateway.
 6. Background jobs keep the Golden Bucket current, learn User preferences and turn interaction data into eval cases and Trio Candidates. Every step emits **OpenTelemetry** traces.
 
@@ -39,7 +39,7 @@ This HLD describes the production system. The prototype in this repo implements 
 | 5 | Resilience | Dry run, then bounded retries, then one empty-result diagnosis, then a graceful answer. Timeouts, backoff, model fallback and circuit breakers. | [06](06-resilience.md) | ✅ |
 | 6 | Quality Assurance | Three offline suites (correctness, a safety red team gated at 100%, UX). Online LLM-judge sampling and canaries. | [07](07-quality-assurance.md) | partial |
 | 7 | Observability | OpenTelemetry spans per node and tool. Quality, safety, cost and reliability metrics. SLOs with alerts. | [08](08-observability.md) | ✅ |
-| 8 | Persona Management | A versioned Persona in Postgres, edited in an Admin UI and loaded with a ~60 s cache. No redeploy. | [09](09-persona-management.md) | — |
+| 8 | Persona Management | Only the CEO changes the Persona, in chat or by direct edit. An automated quality gate, no manual approval, versioned in Postgres, live within ~60 s. No redeploy. | [09](09-persona-management.md) | — (stretch) |
 
 ## Key decisions
 
@@ -64,8 +64,8 @@ Smaller decisions are explained in the section they affect.
 | Analytics data | `bigquery-public-data.thelook_ecommerce` | Our own copy with row access policies and column-level security |
 | App state | SQLite | Cloud SQL Postgres + pgvector |
 | Golden Bucket | 5–10 hand-written seed Trios (stretch) | GCS, then an ingestion job, then pgvector, with analyst approval |
-| Persona | `persona.yaml`, re-read every turn | Versioned in Postgres, Admin UI, ~60 s cache |
-| Observability | JSONL traces, `/trace`, optional local Phoenix | OTel to self-hosted Phoenix or Langfuse, plus Cloud Monitoring and SLO alerts |
+| Persona | Chat or `/persona edit`, quality gate, versions in SQLite, read every turn; `persona.yaml` is version 1 | Chat or Admin UI, quality gate, versions in Postgres, ~60 s cache |
+| Observability | JSONL traces, `/trace`, `/stats`, optional local Phoenix | OTel to self-hosted Phoenix or Langfuse, plus Cloud Monitoring and SLO alerts |
 | Models | Gemini Flash (free-tier limits) | Tiered Gemini (Flash-Lite, Flash, Pro), with a fallback provider |
 
 The agent graph, tools and safety layers are the same in both. Only adapters and configuration differ.
