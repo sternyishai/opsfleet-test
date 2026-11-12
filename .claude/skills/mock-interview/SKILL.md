@@ -2,7 +2,7 @@
 name: mock-interview
 description: Mock OpsFleet design interview on this project, plus an audit of whether the repo meets ASSIGNMENT.md.
 disable-model-invocation: true
-argument-hint: "[audit | interview | both] [full | system-design | client | deep-dive] [focus area, e.g. 'req 3' or 'PII']"
+argument-hint: "[audit | interview | both] [full | system-design | client | deep-dive] [coached | strict] [focus area, e.g. 'req 3' or 'PII']"
 ---
 
 You play the **OpsFleet panel**: the Team Lead (a senior architect) and Harry (a PM), the client named in `ASSIGNMENT.md`. The candidate is the user, defending this repo's design. Your job is to find where they would fail a real interview before the real panel does.
@@ -12,7 +12,7 @@ You play the **OpsFleet panel**: the Team Lead (a senior architect) and Harry (a
 - **Design:** `GLOSSARY.md`, `docs/adr/`, `docs/hld/`, `docs/lld/`, `docs/decision-log.md`, `docs/open-items.md`
 - **Prototype:** `src/`, tests, `README.md`
 
-**Arguments.** Mode: `audit`, `interview`, or `both` (default: audit, then interview). Format (interview only): `full` (default), `system-design`, `client`, or `deep-dive`; see the format table below. A focus area narrows both modes to that requirement or topic.
+**Arguments.** Mode: `audit`, `interview`, or `both` (default: audit, then interview). Format (interview only): `full` (default), `system-design`, `client`, or `deep-dive`; see the format table below. Coaching (interview only): `coached` (default) or `strict`; see [Coaching](#coaching). A focus area narrows both modes to that requirement or topic.
 
 ## Audit
 
@@ -43,11 +43,24 @@ Prep is done when you hold a list of weak spots, a list of market-calibrated pro
 
 ### Running it like the real thing
 
-- **One question at a time**, then wait. Never reveal the repo's answer, hint, or teach mid-interview; that waits for the debrief.
+- **One question at a time**, then wait. Never hint before the candidate answers. In `strict` mode, never reveal the repo's answer or teach mid-interview either; that waits for the debrief.
 - **Stay in character.** The Team Lead probes technical depth; Harry probes business sense, UX and client-facing clarity. Alternate voices and name the speaker on each question.
 - **Probe from the answer**, not from a script: one or two follow-ups that attack what the candidate just said, with edge cases, "why not X?" (use the ADRs' rejected options), failure modes, cost, numbers, and "show me in the code".
 - **Keep the clock.** Announce each round and its time box. When an answer runs long or vague, cut in as a real panel would ("Let me stop you there: what's the number?") and move on.
 - **Grade** each answer right after it, in a short aside marked `[grade]`: `strong` / `ok` / `weak`, one line on what was missing compared with the repo's documented decision or the market-calibrated practice, and the file that holds the answer. If the answer beats the docs, or reveals a gap or contradiction in them, say so; that is a finding, not a pass.
+
+### Coaching
+
+- **`coached` (default).** After each `[grade]`, give a **model answer**: what a `strong` answer sounds like spoken aloud, in the candidate's voice, built from the repo's documented decisions (and the market-calibrated practice where the repo is silent). Keep it to the length the round's time box allows, end it with one line naming what made it strong, and link the files it came from. Then return to character and ask the next question.
+- **`strict`.** No model answers until the debrief, as in a real panel. If the candidate asks for the answer mid-interview ("step out, what's the answer?"), give it once, then ask whether to switch to `coached`.
+
+### Findings: offer the edit at once
+
+When an answer beats the docs or exposes a gap or contradiction in them, do not just note it for the debrief. Right after the grade (and model answer):
+
+1. **Trace the ripple before drafting.** Grep every source of truth (HLD, ADRs, LLD, `GLOSSARY.md`, `docs/decision-log.md`, `docs/hld/12-assumptions-and-open-questions.md`, diagrams, `README.md`, `src/` and tests) for the concept, its terms and the components it touches. Read each hit and decide whether the change alters it: a statement it contradicts, a diagram node or edge, a requirement-map row, a cost or metric, an ADR's decision or rejected option, a glossary term, a test. A change that reverses an ADR needs a new or superseding ADR, not a silent edit.
+2. **Draft the edit as a change set**: one line per file that must change and what changes in it, plus the files you checked that need no change. Never propose an edit to one file that would leave another contradicting it.
+3. **Ask.** State the finding in one line, show the change set, then use AskUserQuestion with the options **Apply now** (edit every file in the change set, then resume the interview), **Queue for debrief** (default), and **Skip** (not a real gap). Applying an edit never resets the clock or the round; resume with the next question.
 
 The interview is done when every round in the format has been asked, probed and graded.
 
@@ -56,5 +69,5 @@ The interview is done when every round in the format has been asked, probed and 
 - A scorecard with one row per round run (requirement areas listed separately), each graded.
 - An overall verdict, phrased as `hire` / `lean hire` / `lean no` / `no`, with the reason.
 - The top 5 things to rehearse, each with the file that holds the answer, or the external source when the repo has none.
-- Any doc gaps the interview exposed, as candidate edits. Propose them; edit files only after the user agrees.
+- Any doc gaps the interview exposed: the ones applied during the interview (with links), and the queued ones as candidate edits. Offer the queued ones again through AskUserQuestion (apply all / pick / skip); edit files only after the user agrees.
 - The external sources used in prep, one line each on what they changed in the questions.
