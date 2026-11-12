@@ -17,8 +17,9 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | ADR 0007 (tools in-process, MCP as growth option) | ✅ committed (bb5fa72) |
 | `docs/hld/02-hybrid-intelligence.md` | ✅ committed |
 | `docs/hld/03-safety-and-pii.md` | ✅ committed |
-| `docs/hld/04-destructive-ops.md` | in progress |
-| `docs/hld/05`–`12` | not started (1B: 05, 1C: 06–12) |
+| `docs/hld/04-destructive-ops.md` | ✅ committed |
+| `docs/hld/05-learning-loop.md` | in progress |
+| `docs/hld/06`–`12` | not started (1C) |
 
 ## Decisions made this session, not yet written elsewhere
 
