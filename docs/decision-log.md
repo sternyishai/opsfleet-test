@@ -156,6 +156,14 @@ Detail in `docs/hld/06-resilience.md`:
   - **Online evals:** an LLM judge scores ~5% of production turns.
   - **Retrieval health:** the share of turns with a Golden Trio above the similarity threshold.
   - The prototype computes the per-turn data; north star, SLOs, canaries and online evals are HLD-only.
+- **Detail** (in `docs/hld/08-observability.md`):
+  - **OpenTelemetry Collector** between services and backends: batching, a second PII-redaction pass, fan-out to the trace backend and Cloud Monitoring.
+  - **Trace contents:** one trace per turn, grouped by `conversation_id`. Root span carries the trace ID (= reference ID), internal User ID (never name or email), role, channel, router action, Persona version, User Profile snapshot, outcome, error class. `run_sql` spans hold SQL before and after the guard rewrite, guard decision, dry-run and billed bytes, row count, attempt, probe findings. Output-filter spans record hit types only. Never result rows or PII.
+  - **Metric families** also include *Knowledge* (retrieval health, per-Trio usage) and *Learning* (override rate, findings closed), gathering metrics from 02, 04, 05.
+  - **Alert severities:** page at any hour for a PII hit or an out-of-scope answer; page in business hours for fast error-budget burn (multi-window burn rate) or a canary failing twice in a row; ticket for quality drop, unclassified errors, breaker open, DLQ messages, spend at 80%.
+  - **Canaries** run as a test User with known answers.
+  - **Debug workflow:** find the turn (ref ID, alert, failure cluster) → read the step tree → replay from the LangGraph checkpoint in a sandbox with the candidate fix → save as an eval case → ship through the release gate.
+  - **Prototype:** `/trace` prints a step tree (example in 08). Not in the prototype: collector, dashboards, alerting, canaries, online evals, replay tooling.
 - **Interaction store (learning loop):**
   - Every turn is stored: question, plan, SQL, result *shape* (not rows), answer, feedback, trace.
   - PII is redacted on write.
