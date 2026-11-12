@@ -25,7 +25,7 @@ This HLD describes the production system. The prototype in this repo implements 
 - **Fixed where it must be safe, flexible where it must think.** Safety steps are fixed graph edges the model cannot skip. Only the analysis core is an open-ended ReAct loop ([ADR 0004](../adr/0004-hybrid-agent-graph.md)).
 - **Trios teach method, not figures.** Golden knowledge shapes *how* the agent analyses. The numbers always come from a fresh query scoped to the User ([ADR 0005](../adr/0005-golden-trios-teach-method-not-figures.md)).
 - **Every external dependency sits behind a port.** Models, BigQuery, storage, channels and tracing can each be swapped with one adapter and one wiring change. That is what makes "easy to extend" and "portable" true in code ([ADR 0006](../adr/0006-ports-and-adapters.md)).
-- **Humans approve every change to what the system knows.** Users' own preferences apply immediately. System-level learning (new Trios, prompt changes) goes through an analyst and the eval suite, never self-modification in production.
+- **Humans approve every change to what the system knows.** Users' own preferences apply immediately. System-level learning (new Trios, prompt changes) goes through an analyst and the eval suite, never self-modification in production. The Persona is changed only by the CEO, through an automated quality gate ([09](09-persona-management.md)).
 - **Right-sized for the client's scale.** About 1,000 questions a day and a few concurrent Users. The design uses no machinery that scale doesn't need, and names a growth path for each limit.
 
 ## Requirement map

@@ -149,6 +149,7 @@ flowchart TD
 | Data | Store | Written by | Retention | PII handling |
 |---|---|---|---|---|
 | Transaction data | BigQuery | Data team (daily load) | Data team's policy | PII columns are hidden by column-level security and absent from the agent's schema; rows are filtered by row access policies |
+| Users, roles, permissions, Brand Assignments | Postgres | Admins; a sync job in production ([03](03-safety-and-pii.md#identity-and-roles)) | While the User is active | Internal IDs only; names and emails stay in the SSO provider |
 | Conversation checkpoints | Postgres | Chat API | Assumed 90 days, like raw traces | Contains only what the User saw, which has already passed the PII filter |
 | Saved Reports + extracted entities | Postgres | `save_report`; entity extraction job | Until the Author deletes them (hard delete) | Customers appear only as `user_id` |
 | Deletion audit | Postgres | `execute_deletion` | Audit policy (assumed indefinite) | Metadata only: who, when, count, IDs, titles; never content |

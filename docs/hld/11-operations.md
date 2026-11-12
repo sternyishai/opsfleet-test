@@ -55,7 +55,7 @@ flowchart LR
 |---|---|---|
 | **Channel Gateway** | Cloud Run service, public ingress | Acknowledges each channel within its deadline; holds the per-turn deadline that sends "taking too long" ([06](06-resilience.md)) |
 | **Chat API** | Cloud Run service, internal ingress only | CPU always allocated (turns continue after the ack); min 1 instance so the first question of the day has no cold start; a max-instances cap sized to the Postgres connection limit |
-| **Admin UI** | Cloud Run service behind IAP | Scales to zero; used weekly by the Persona editor and daily by analysts ([09](09-persona-management.md), [02](02-hybrid-intelligence.md)) |
+| **Admin UI** | Cloud Run service behind IAP | Scales to zero; used weekly by the CEO for the Persona and daily by analysts ([09](09-persona-management.md), [02](02-hybrid-intelligence.md)) |
 | **Background jobs** | Cloud Run jobs, same image as the services | Triggered by Pub/Sub or Cloud Scheduler; run off-peak with their own model budget so they never compete with Users |
 | **Postgres** | Cloud SQL, HA (regional, standby in a second zone) | Automatic failover; point-in-time recovery; private IP only |
 | **Trace backend** | Self-hosted Phoenix or Langfuse ([08](08-observability.md)) | Internal ingress; access limited to the AI-ops team |
@@ -158,7 +158,7 @@ The data-access layers (input guard, query guard, row and column security, least
 | Area | Control |
 |---|---|
 | **User identity** | SSO through the Channel Gateway; IAP in front of the web channel and the Admin UI. Queries run with the User's short-lived credentials where the channel allows ([03](03-safety-and-pii.md#data-platform-production)). |
-| **Roles** | Executive, Manager (with Brand Assignments), Persona editor, analyst (Trio review queue), AI-ops (raw traces and interaction store). Default deny for anyone else. Roles live in Postgres and are administered, never set by a message. |
+| **Roles and permissions** | Roles: Executive, Manager (with Brand Assignments), analyst (Trio review queue), AI-ops (raw traces and interaction store). Permissions: `persona_editor`, held by the CEO ([09](09-persona-management.md#who-may-change-it)). Default deny for anyone else. Roles and permissions live in Postgres and are administered, never set by a message. |
 | **Service identity** | One service account per service, each with only the roles it needs. Only the Chat API's query identity can read BigQuery, and only the governed dataset. The Gateway can only invoke the Chat API. |
 | **Network** | Only the Gateway and the IAP-protected Admin UI accept traffic from outside; the Chat API, jobs and trace backend use internal ingress. Cloud SQL has a private IP only. A VPC Service Controls perimeter around BigQuery, GCS and Vertex AI blocks data exfiltration from inside the project. |
 | **Secrets** | Secret Manager only; no secrets in images, `.env` files or traces in production. |

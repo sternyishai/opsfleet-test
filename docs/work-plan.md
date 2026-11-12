@@ -75,7 +75,7 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 **Done when:**
 - [x] every file has been reviewed and iterated
 - [x] `decision-log.md` and `open-items.md` are folded into the HLD
-- [ ] `/mock-interview audit` shows all **design** items as met
+- [x] `/mock-interview audit` shows all **design** items as met
 - [ ] one `/mock-interview interview` rehearsal is done
 
 ## Phase 2: LLD → PR #3 (~1–1.5 h)
