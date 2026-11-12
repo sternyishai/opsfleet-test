@@ -100,12 +100,23 @@ The retry counter lives in graph state, so the cost per question is bounded and 
   3. **Notes**: a capped list (~20) of short free-text preferences. Length-limited, passed through the input guard, visible to and deletable by the User, injected as data, never as instructions.
   - Aggregation promotes recurring note types into attributes or core fields.
   - **Prototype:** notes only, in SQLite, if time allows (after Trios).
+  - **Detail** (in `docs/hld/05-learning-loop.md`): core fields are `format` (table, bullets, prose), `depth` (headline, standard, deep dive), `charts` (never, when helpful, always), `language`; every value records source (explicit or inferred), confidence and last confirmation.
+  - Inference runs daily. An inferred preference is announced to the User once ("say 'stop' to undo"); explicit always beats inferred.
+  - Precedence: locked safety rules > this-turn > explicit > inferred > Persona defaults. The Persona owns tone and required report sections; the Profile owns presentation (format, depth, charts).
+  - User control: "what do you know about my preferences?", `/profile`, "reset my preferences".
+  - Metric: preference override rate (how often a User corrects format or depth after the Profile was applied).
 - **System level: humans in the loop, never self-rewriting in production.**
   - Every flow (trace, SQL, retries, feedback, rephrasings) is stored.
   - Periodic aggregation jobs cluster questions and failures to find gaps, e.g. new topics, recurring SQL errors, low-satisfaction areas.
   - A weekly review turns findings into new eval cases, Trio Candidates and prompt-change proposals.
   - Scheduled **domain-expert sessions** (analysts and business owners) review the aggregates and add knowledge the logs can't reveal.
   - Every change ships only if the eval set passes.
+  - Quality signals also include corrections ("I meant last quarter") and guard blocks the User later reverses.
+  - Review outputs also include clearer `get_schema` column descriptions (recurring SQL errors usually mean an unclear schema) and new message-catalog classes.
+  - Every real failure becomes an eval case before it is fixed.
+  - Domain-expert sessions are monthly.
+  - No automatic self-improvement in production: it risks drift, spreading one User's mistakes to everyone, and poisoning through crafted conversations.
+  - Metric: share of review findings closed within two cycles.
 
 ## Configuration vs. Persona (Req 8)
 
