@@ -19,6 +19,14 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
 - **Reuse:** the agent may search the requesting User's **own** Saved Reports ("compare with my report from last month"), using the same entity + full-text search as deletion. Saved Reports are never part of the shared Golden RAG.
 - **Deletion vs. the Golden pipeline:** deleting a Saved Report also deletes any Trio Candidate derived from it that is still pending review (hard delete). A Trio an analyst has already approved and rewritten is company knowledge and stays.
 - **Viewing own reports:** the analysis agent has two read-only tools, `list_my_reports(filter?)` and `get_my_report(id)`. Neither takes an author parameter; the Author is injected from the session by code, so a prompt cannot reach another User's reports. An opened report is labelled "data as of <saved date>". Channels also offer a direct, model-free view: `/reports` in the CLI (prototype), and a "My reports" view or command in web, Slack and Teams.
+- **Deletion hardening** (detail in `docs/hld/04-destructive-ops.md`):
+  - The model only turns the request into a structured filter (conversation, entities, date range, all); code runs it with `author_id` injected. The model never picks report IDs.
+  - The Deletion Plan stores IDs, not the filter, so reports saved after the plan was shown are never deleted by it. Ownership is checked again in the DELETE itself.
+  - Plans over 20 reports show the first 20 plus the total; deleting all needs the count ("yes, delete all 37"); a bare "yes" gets one re-prompt.
+  - Plans have an ID and are marked executed: double clicks and replays are no-ops; buttons from old plans are rejected as expired. Reports already deleted elsewhere are reported, not treated as errors.
+  - A `report.deleted` event after commit cleans up related files (e.g. chart images).
+  - Entity extraction is asynchronous in production (full-text covers the gap) and synchronous at save time in the prototype; the prototype uses SQLite FTS5.
+  - Metrics: confirm/cancel ratio, partial-confirmation rate, zero-match rate, plan size; a rising cancel rate becomes eval cases.
 
 ## Intent routing
 
