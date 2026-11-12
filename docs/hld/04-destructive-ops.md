@@ -17,7 +17,7 @@ A **Saved Report** is the question, the SQL that answered it and the answer, sav
 
 Charts, when added, are files in object storage referenced from the report.
 
-**Creating a report.** "Create a report for Q1 including insights and action items for Q2" runs the analysis sub-agent as usual: Golden Trios, scoped SQL, self-correction. Long reports may use the report model (`MODEL_REPORT`, Pro allowed). The reply passes the output PII filter, and `save_report` then stores it. After commit, a `report.saved` event triggers entity extraction (Flash-Lite) in the background.
+**Creating a report.** "Create a report for Q1 including insights and action items for Q2" runs the analysis sub-agent as usual: Golden Trios, scoped SQL, self-correction. Long reports may use the report model (`MODEL_REPORT`, Pro allowed). `save_report` runs the output PII filter on the report and then stores it; the reply passes the filter again on its way out. After commit, a `report.saved` event triggers entity extraction (Flash-Lite) in the background.
 
 **Viewing reports.** `list_my_reports` and `get_my_report` let the agent find and open the User's own reports. Channels also offer a model-free view (`/reports` in the CLI). An opened report is labelled "data as of <saved date>" ([01](01-architecture.md#agent-graph)).
 
