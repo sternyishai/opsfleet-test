@@ -20,7 +20,7 @@ flowchart LR
     end
     J[background jobs] --> COL
     N -- OTLP --> COL[OpenTelemetry Collector<br/>batch, redact, fan out]
-    COL --> LT[(LLM-trace backend<br/>Phoenix or Langfuse,<br/>self-hosted)]
+    COL --> LT[(LLM-trace backend<br/>Phoenix, Langfuse or<br/>LangSmith, self-hosted)]
     COL --> CM[(Cloud Monitoring<br/>+ Logging)]
     N -- turn.completed --> IS[(interaction store<br/>Postgres)]
     LT --> D[trace explorer,<br/>datasets, experiments]
@@ -30,7 +30,7 @@ flowchart LR
 
 - **Vendor-neutral.** Every node and tool emits OpenTelemetry spans with OpenInference conventions for LLM calls. The backend is a deployment choice, not a code change, behind the `Tracer` port ([ADR 0006](../adr/0006-ports-and-adapters.md)).
 - **An OpenTelemetry Collector** batches spans, applies a second PII-redaction pass and sends LLM traces to the trace backend and infrastructure metrics to Cloud Monitoring. Exporting never blocks a turn ([06](06-resilience.md)).
-- **Self-hosted trace backend.** Spans carry business data (questions, SQL, answers), so they stay in our project. Phoenix and Langfuse are both acceptable: Phoenix is lighter to run, Langfuse is stronger on prompt management and user analytics.
+- **Self-hosted trace backend.** Spans carry business data (questions, SQL, answers), so they stay in our project. Three backends fit: **Phoenix** is the lightest to run; **Langfuse** is stronger on prompt management and user analytics; **LangSmith** fits LangGraph most closely (graph-aware trace views, datasets and experiments), but self-hosting it is an Enterprise-plan add-on, and its SaaS version would send business data outside our project, which needs the client's approval. The choice is a deployment setting behind the `Tracer` port.
 
 ### What one trace holds
 
@@ -43,6 +43,7 @@ A trace is one turn. Traces of the same Conversation are grouped by `conversatio
 | **`run_sql`** | the SQL the model wrote, the SQL after the guard's rewrite, guard decision and reason, dry-run bytes, bytes billed, row count, attempt number, error, empty-result probe findings |
 | **`search_golden_trios`** | query, returned `trio_id@version` and scores, retrieval gap flag |
 | **Deletion** | filter produced, plan ID and size, outcome (confirmed, partial, cancelled, expired) |
+| **Persona change** | path (chat or direct edit), permission result, gate result per check, version before and after, or rollback target |
 | **Output filter** | detector hits and redactions (types only, never the redacted value) |
 
 **Never in a trace:** result rows and PII. The model sees only a compact result summary, and the trace stores the same summary ([01](01-architecture.md#conversation-state)).
@@ -60,6 +61,7 @@ Every metric is broken down **by intent and by node**, so a regression points to
 | **Reliability** | p50/p95 latency per turn and per node, LLM and BigQuery error rates, fallback activations, circuit-breaker state, unclassified errors |
 | **Knowledge** | Retrieval health (share of analytical turns with a Trio above the threshold), usage and trusted-answer rate per `trio_id@version` ([02](02-hybrid-intelligence.md)) |
 | **Learning** | Preference override rate, share of review findings closed within two cycles ([05](05-learning-loop.md)) |
+| **Persona** | Changes by path, gate rejections by check, rollbacks; trusted-answer rate and online judge presentation score per Persona version ([09](09-persona-management.md)) |
 | **Deletion** | Partial-confirmation rate, zero-match rate, plan size ([04](04-destructive-ops.md)) |
 
 Cost is measured per *successful* answer, not per question, so a change that saves tokens by failing more often does not look like a saving.
@@ -79,7 +81,7 @@ The SLOs are defined in [11](11-operations.md): p95 latency of 30 s for question
 | Circuit breaker open, dead-letter messages | Any | Ticket |
 | Spend | Daily spend reaches 80% of the cap | Ticket |
 
-- **Synthetic canaries.** 3–5 known questions, with known answers, run end to end every 15 minutes as a test User. They catch outages and silent breakage (an expired credential, a schema change) before a User does.
+- **Synthetic canaries.** 4 known questions, with known answers, run end to end as a test User every 15 minutes in business hours and hourly outside them ([11](11-operations.md#cost-controls)). They catch outages and silent breakage (an expired credential, a schema change) before a User does.
 - **Online evals.** The LLM judge scores about 5% of production turns with the offline rubric, so a quality drift is visible within a day ([07](07-quality-assurance.md)).
 
 ## Knowing *why*: deep-dive debugging
@@ -123,6 +125,21 @@ turn 7f3a91  analysis  14.2 s  1,840 tokens  ok
 ```
 
 - **Optional Arize Phoenix.** The same OpenTelemetry/OpenInference spans go to Phoenix when it is running (`uvx arize-phoenix serve`, or one container in compose), and `make eval` pushes its scorecard to Phoenix experiments. Phoenix was picked for the reviewer experience: one process on SQLite, no sign-up, and it covers traces, datasets and experiments. Langfuse was the first candidate, but self-hosting it takes about six containers.
-- **Per-turn metric data** (latency per turn and node, success, retries, guard and PII-filter hits) is in every trace.
+- **Agent-level metrics: `/stats`.** A CLI command (also `uv run agent stats --since 7d` outside the chat) reads the JSONL traces and prints the metric families above, so the prototype answers "is the agent failing, and where?" without any dashboard:
+
+```text
+you> /stats
+last 7 days · 142 turns · 3 Users
+quality      task success 91%   first-try SQL 78%   self-correction saved 9 of 14
+             empty results 6%   retries/question 0.3
+safety       input guard blocked 11 (off-topic 7, PII 3, injection 1)
+             query guard rejected 5 (out-of-scope Brand 4, column 1)
+             PII-filter hits 0   Persona changes 2 (1 rejected: figures changed)
+cost         4,900 tokens/turn   38 MB BigQuery/turn   $0.004 per successful answer
+reliability  p50 9.8 s  p95 24.1 s   fallbacks 2   circuit opens 0   unclassified 1
+deletion     plans 6   confirmed 4   partial 1   cancelled 1
+```
+
+  Every number is computed from the trace fields in [What one trace holds](#what-one-trace-holds), so any line can be opened with `/trace <id>`. Cost uses the per-token prices in configuration. The north-star trusted-answer rate needs feedback signals the CLI does not collect, so `/stats` shows task success instead.
 
 Not in the prototype: the collector, dashboards, SLO alerting, canaries, online evals and replay tooling.
