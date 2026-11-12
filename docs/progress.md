@@ -4,7 +4,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-12)
 
-**Phase:** 1 (HLD), sessions 1A–1D done, audit done and its design gaps fixed; PR #2 open. Left: the hero diagram update and one `/mock-interview interview` rehearsal.
+**Phase:** 1 (HLD), sessions 1A–1D done, audit done and its design gaps fixed; PR #2 open. Left: one `/mock-interview interview` rehearsal.
 **Branch:** `docs/hld`
 
 | Step | Status |
@@ -15,7 +15,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | `docs/hld/11-operations.md` | ✅ committed (e38b339) |
 | `docs/hld/12-assumptions-and-open-questions.md` | ✅ committed (49926f9); `open-items.md` now points to it |
 | `/mock-interview audit` | ✅ run 2026-11-12; design gaps fixed (Persona via chat + `/persona edit` with the Persona Quality Gate, `/stats`, LangSmith option, canary deployment trimmed to 11, consistency fixes) |
-| Hero diagram | ⏳ needs: BigQuery box says queries run as the User, tools box lists all 6 tools, a Persona-change box under the router. Blocked on the Excalidraw CLI permission. |
+| Hero diagram | ✅ BigQuery box (queries run as the User), all 6 tools, Persona-change box, LangSmith in the observability bar |
 | `/mock-interview interview` rehearsal | not run |
 
 ## Decisions made this session, not yet written elsewhere
@@ -31,4 +31,4 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Update the hero diagram (docs/hld/diagrams/architecture.excalidraw + .png) with the three changes listed in docs/progress.md, then run one `/mock-interview interview` rehearsal. Update docs/progress.md and PR #2. When Phase 1 is merged, start Phase 2 with the prompt in docs/work-plan.md.
+> Run one `/mock-interview interview` rehearsal on the HLD. Update docs/progress.md and PR #2. When Phase 1 is merged, start Phase 2 with the prompt in docs/work-plan.md.
