@@ -46,6 +46,10 @@ Detail in `docs/hld/03-safety-and-pii.md`; layers are named, not numbered (input
 - **Input guard:** six categories (analysis, report management, preference, off-topic, PII request, injection attempt), returned by the same Flash-Lite call as the router; deterministic rules (length, known injection phrases, encoded payloads) run first.
 - **Indirect injection through data values** (e.g. a product name with instructions) is handled by passing tool results as delimited data.
 - **Output PII filter:** Google Cloud Sensitive Data Protection in production, regex detectors in the prototype; a hit is redacted, traced and alerted.
+- **Output PII filter at a single exit** (ADR 0003, amended): one outbound function in the Chat API is the only code that writes to the Gateway stream, and it filters every message (progress events, confirmation prompts, catalog messages, final answer). `save_report` filters before it writes.
+  - Why: as a graph node before `respond`, the filter missed progress events (streamed from inside nodes and tools), the Deletion Plan at `interrupt()`, and Saved Reports written mid-loop, which contradicted "Saved Reports hold only what passed the output filter".
+  - Progress events are templates (fixed phrase plus tool and table names) and pass regex detectors only, so they add no Sensitive Data Protection call; every other message passes both.
+  - Rejected: filtering in the Channel Gateway (misses Saved Reports, and checkpoints would hold unfiltered text).
 
 ## Models (Req 5 cost, Req 8 agility)
 
