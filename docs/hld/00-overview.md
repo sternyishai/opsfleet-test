@@ -10,6 +10,8 @@ This HLD describes the production system. The prototype in this repo implements 
 
 <sub>Source: [diagrams/architecture.excalidraw](diagrams/architecture.excalidraw). Open it at excalidraw.com to edit.</sub>
 
+Two companion views are in [01](01-architecture.md): the [agent flow](01-architecture.md#agent-graph), with what each step reads and writes, and the [data flow](01-architecture.md#where-data-lives-and-how-it-is-handled), with what each store holds and when it is written.
+
 **One question, end to end:**
 
 1. A User asks in a channel (the CLI in the prototype; Slack, Teams or web in production). The **Channel Gateway** resolves who they are through SSO and passes the message, with the User's role and Brand Assignments, to the **Chat API**.
@@ -53,6 +55,7 @@ This HLD describes the production system. The prototype in this repo implements 
 | [0006](../adr/0006-ports-and-adapters.md) | Ports and adapters for every external dependency | Direct SDK calls |
 | [0007](../adr/0007-in-process-tools-mcp-as-growth-option.md) | Tools run in-process; MCP only as a growth option | MCP server per data source (ports already give swappability) |
 | [0008](../adr/0008-trio-retrieval-is-a-fixed-step.md) | Golden Trio retrieval is a fixed step before the analysis loop | Retrieval as a prompt-guided tool only (a skipped search is invisible) |
+| [0009](../adr/0009-outbound-actions-are-a-deliver-branch.md) | Outbound actions (email, Slack, push) are a router-opened `deliver` branch behind a Delivery port | A `send_email` tool of the analysis model (injected text could trigger a send) |
 
 Smaller decisions are explained in the section they affect.
 
