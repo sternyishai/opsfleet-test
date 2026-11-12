@@ -135,10 +135,10 @@ Detail in `docs/hld/06-resilience.md`:
 - **`.env`** holds deployment and engineering config: model IDs and tiers, provider, limits. Developers change it, and a restart is acceptable.
 - **Persona** holds tone, report structure and emphasis. It is **not** environment config:
   - It is stored versioned (Postgres or a prompt registry such as Langfuse or LangSmith Prompt Hub).
-  - Non-developers edit it in an admin UI with preview and rollback.
+  - Non-developers edit it in an admin UI with preview and rollback. *(Revised 2026-11-12: only the CEO, in chat or by direct edit; see below.)*
   - The agent loads it with a ~60 s cache, so there is no redeploy.
 - Locked prompt layers (safety rules, tool contracts) cannot be edited through the Persona.
-- **Prototype:** `persona.yaml`, re-read on every turn.
+- **Prototype:** ~~`persona.yaml`, re-read on every turn~~. *Revised 2026-11-12:* chat or `/persona edit`, the Persona Quality Gate, versions in SQLite read every turn; `persona.yaml` is version 1.
 - **Detail** (in `docs/hld/09-persona-management.md`):
   - Locked layers also include the **output contract** (interpretation line, data blocks). Only answer-writing steps read the Persona; input guard and router prompts are fully locked.
   - **Structured Persona, not a free-form prompt:** `tone` (preset + short free text), `report_sections`, `emphasis`, `vocabulary`, `examples`, `messages` (catalog wording; each class keeps its next step).
@@ -323,6 +323,19 @@ Detail in `docs/hld/12-assumptions-and-open-questions.md`, which supersedes `ope
 - Every assumption records where it is used and **what changes if it is wrong**, so a "no" from the client is a known adjustment, not a redesign. Every client question carries **our default until answered**.
 - Added in 12: Vertex AI available in the dataset's region (A7); business hours = one time zone, ~10 h, Mon–Fri, quotas reset at midnight there (A11).
 - Added client questions: source of Brand Assignments (HR/CRM, spreadsheet) and who changes them; dataset region and partitioning; Users' time zones; how many Trios exist and in what format; which channel first; which fallback provider is acceptable.
-- Defaults: Persona editor is a named editor in the CEO's office; one or two analysts give a few hours a week for Candidate review and judge labels.
+- Defaults: ~~Persona editor is a named editor in the CEO's office~~ (revised 2026-11-12: only the CEO holds `persona_editor`); one or two analysts give a few hours a week for Candidate review and judge labels.
 - Fallbacks if wrong: Brand Assignments imported by a sync job from HR/CRM; an authorized view as the minimum if no governed dataset; cache invalidated per load event if loads are more frequent; without human labels the judge reports but does not gate.
 - **To measure, not to ask:** cost inputs, timeouts and breaker values, Trio similarity threshold, quotas and caps, trusted-answer baseline.
+
+## Mock-interview audit follow-ups (2026-11-12)
+
+- **Persona changes (Req 8), client-confirmed by Harry:** a non-technical User such as the CEO updates the instructions without code edits or redeploy; the mechanism is ours; every change passes an automated quality gate with **no manual approval**.
+  - **Only the CEO** holds the `persona_editor` permission, checked in code from a `user_permissions` table. Delegation is an admin grant, not a code change (Q9).
+  - **Two paths, one gate:** the CEO asks in chat ("make the reports warmer"), or edits fields directly (`/persona edit` in the CLI, the Admin UI in production). Both pass the same Persona Quality Gate: field limits, injection scan, red-team refusals, required sections, figures unchanged.
+  - A pass goes live at once; undo is one sentence or `/persona rollback`, and skips the gate. A fail keeps the current version and says why.
+  - The chat path is a **fixed branch** opened only by the router, never a tool of the analysis agent. Rule (ADR 0004): an action that destroys data or changes behavior for every User is a branch, not a tool.
+  - Prototype: the figure check is code comparing numbers against a stored result, instead of the production judge.
+- **Agent-level metrics in the prototype:** `/stats` (and `agent stats --since 7d`) aggregates the JSONL traces into the 08 metric families. It shows task success instead of the trusted-answer rate, because the CLI collects no feedback.
+- **LangSmith** is a production trace-backend option next to Phoenix and Langfuse; self-hosting it is an Enterprise-plan add-on, and its SaaS needs client approval. The prototype stays on Phoenix.
+- **Canary deployment** is out of the assignment's scope: described once, in 11 Delivery; other sections link there. Synthetic canaries (monitoring probes) stay.
+- **Consistency fixes:** the ADR 0004 tool list, the 03 guard classes matching the router's actions, and the 08 canary schedule matching 11.
