@@ -113,7 +113,7 @@ The estimate below is for **1,000 questions a day** before launch. Its inputs ar
 | Pro price | $2.00 / $12.00 |
 | BigQuery on-demand | $6.25 per TiB scanned |
 | Router + guard per question | 1 call, ~3k tokens in, ~0.2k out (Flash-Lite) |
-| Analysis per question | ~6 calls, ~8k tokens in and ~0.5k out each (Flash) |
+| Analysis per question | ~5 calls, ~8k tokens in and ~0.5k out each (Flash); Trio retrieval is a fixed step, not a model call ([ADR 0008](../adr/0008-trio-retrieval-is-a-fixed-step.md)) |
 | Reports | ~100 a day, 1 extra call of ~15k in, ~2k out (Pro) |
 | BigQuery per question | ~2.5 executions × ~2 GB billed (date-bounded, few columns); dry runs are free |
 
@@ -122,16 +122,16 @@ The estimate below is for **1,000 questions a day** before launch. Its inputs ar
 | Item | Calculation | ≈ $/day |
 |---|---|---:|
 | Router + guard | 1,000 × (3k × $0.25 + 0.2k × $1.50) / 1M | 1 |
-| Analysis | 1,000 × (48k × $1.50 + 3k × $9.00) / 1M | 99 |
+| Analysis | 1,000 × (40k × $1.50 + 2.5k × $9.00) / 1M | 83 |
 | Reports | 100 × (15k × $2.00 + 2k × $12.00) / 1M | 5 |
 | Online judge (5% of turns), entity extraction, embeddings | small calls | 3 |
 | Synthetic canaries | ~220 runs a day, every day (below) × ~$0.05 (short questions with known answers) | 11 |
 | BigQuery | 1,000 × 5 GB ≈ 4.9 TiB × $6.25 | 31 |
-| **Variable total, per business day** | | **≈ 150** |
+| **Variable total, per business day** | | **≈ 134** |
 
 **Fixed infrastructure, per month:** Chat API and Gateway with one warm instance each (~$150), Cloud SQL HA (~$300), the self-hosted trace backend (~$100), Monitoring and Logging (~$50), and Pub/Sub, Scheduler, GCS, Secret Manager and Sensitive Data Protection (under $50 together at this volume). About **$650 a month**.
 
-**Result:** 22 business days × $139 (Users) + 30 days × $11 (canaries) + $650 (fixed) ≈ **$4,000 a month**, or about **$0.18 per question** all in. The analysis model is two-thirds of it, so the two numbers that matter most are the Flash price and the number of analysis steps per question. Doubling either adds about $2,200 a month; no other input moves the total by more than a few hundred dollars.
+**Result:** 22 business days × $123 (Users) + 30 days × $11 (canaries) + $650 (fixed) ≈ **$3,700 a month**, or about **$0.17 per question** all in. The analysis model is about half of it, so the two numbers that matter most are the Flash price and the number of analysis steps per question. Doubling either adds about $1,800 a month; no other input moves the total by more than a few hundred dollars.
 
 ## Cost controls
 
