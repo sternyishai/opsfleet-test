@@ -60,6 +60,12 @@ Every assumption the design rests on, every point the client has already confirm
 | A17 | Contracts or keys exist for a second Vertex AI region and a second provider, so the fallback chain can reach them. | [06](06-resilience.md) | The chain ends at Flash-Lite in the primary region. A full Gemini outage then gives the "model busy" message. |
 | A18 | The cost inputs in [11](11-operations.md#cost-estimate-back-of-the-envelope): list prices from November 2026, ~6 analysis calls of ~8k tokens per question, ~5 GB billed per question. | [11](11-operations.md#cost-estimate-back-of-the-envelope) | They are replaced by measured values from the prototype and pilot traces. The cost ceilings bound spend either way. |
 
+### Extensions
+
+| # | Assumption | Used in | If it is wrong |
+|---|---|---|---|
+| A19 | A delivered Saved Report (email, Slack, push) goes only to its Author's own address or channel identity from SSO, which keeps the confirmed rule that reports are never shared. | [01](01-architecture.md#agent-graph), [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md) | Sending to others needs a recipient rule enforced in code (for example, only Users who may see every Brand in the report), and it changes the confirmed sharing rule for Saved Reports. |
+
 ## Questions for the client
 
 Each question has our proposed default, so the design proceeds while it is open.
@@ -80,6 +86,8 @@ Each question has our proposed default, so the design proceeds while it is open.
 | Q12 | How many Trios exist today, and in what format? | Enough for retrieval plus a held-out share (A13); ingestion parses one file per Trio | [02](02-hybrid-intelligence.md), [07](07-quality-assurance.md) |
 | Q13 | Which channel comes first: Slack, Teams or web? | Whichever leadership already uses; each is one Gateway adapter | [01](01-architecture.md) |
 | Q14 | Is a second model provider acceptable for fallback, and which one? | A second Vertex AI region first, then one provider the client approves (A17) | [06](06-resilience.md) |
+| Q15 | May a User send a report to someone other than themselves, by email or Slack? | No: only to the Author (A19) | [04](04-destructive-ops.md), [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md) |
+| Q16 | Which outbound capability, if any, should come first: email, Slack posting or push notifications? | None until asked; email first, as the assignment's example. Each is one `Delivery` adapter | [01](01-architecture.md#agent-graph), [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md) |
 
 ## POCs to run
 
