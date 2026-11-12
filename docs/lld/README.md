@@ -7,11 +7,12 @@ The schemas and interfaces are **code-first**: Pydantic models, Python `Protocol
 ## Scope
 
 1. **Data schemas**: application tables and an ER diagram.
-   `users`, `brand_assignments`, `conversations`, `saved_reports`, `report_entities`, `deletion_audit`, `user_profiles`, `golden_trios`, `persona_versions`, `interactions`.
-2. **Graph state**: the LangGraph `State`: messages, User context (role, Brands), intent (action), this turn's preference statements, retry counters, pending Deletion Plan, deferred request, trace/reference ID.
+   `users`, `user_permissions`, `brand_assignments`, `conversations`, `saved_reports`, `report_entities`, `deletion_audit`, `user_profiles`, `golden_trios`, `persona_versions`, `interactions`.
+2. **Graph state**: the LangGraph `State`: messages, User context (role, permissions, Brands), intent (action), this turn's preference statements, retry counters, pending Deletion Plan, Persona draft and gate result, deferred request, trace/reference ID.
 3. **Contracts**: a typed input and output schema for **every tool** and every channel message.
-   - Tools: `get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports`, `get_my_report`, `plan_deletion`, `execute_deletion`.
-   - Router output: `RouterDecision` (action + preference statements, each standing or this-turn).
+   - Tools: `get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports`, `get_my_report`, `plan_deletion`, `execute_deletion`, `draft_persona`, `publish_persona`, `rollback_persona`.
+   - Router output: `RouterDecision` (action: analysis, delete reports, change Persona or preference only; plus preference statements, each standing or this-turn).
+   - Persona Quality Gate: `PersonaGateResult` (pass or fail, the result and reason of each check).
    - Channel messages: `InboundMessage`, `AgentReply`, `ConfirmationRequest`, `ConfirmationResponse`.
 4. **Interfaces (ports)**, see ADR 0006: `LLMFactory`, `QueryRunner`, `QueryGuard`, `PiiFilter`, `ReportRepository`, `TrioRetriever`, `ProfileStore`, `PersonaStore`, `ChannelAdapter`, `Tracer`.
 
