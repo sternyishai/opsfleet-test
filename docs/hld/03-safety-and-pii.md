@@ -31,6 +31,7 @@ The output PII filter is the only way out. Every message to a channel (progress 
 | Requests for PII | "List the emails of our top 10 customers" | Input guard refuses. PII columns are not in the schema. The query guard's column allowlist. Column-level security. Output filter. |
 | Destructive or unsafe SQL | `DROP TABLE`, `DELETE`, multiple statements | Query guard (single `SELECT` only). Read-only service account. |
 | Cost attack | A question that scans the whole dataset repeatedly | Forced `LIMIT`, dry-run bytes estimate, `maximum_bytes_billed`, retry budget, per-User quotas |
+| Cross-Brand leak through an order-level field | A Manager asks for the average `num_of_item`, which counts every item in a mixed basket | The scoped `orders` subquery does not project order-level counts; basket size comes from scoped `order_items` |
 | Indirect injection through data | A product name containing "ignore previous instructions" | Tool results are passed as delimited data, never as instructions. Every SQL statement still passes the query guard. |
 | Reading another User's Saved Reports | "Show me the CEO's reports" | Report tools take no author parameter; the Author is injected from the session ([04](04-destructive-ops.md)) |
 | Changing the agent's tone without the right | A Manager: "make every report say sales are up"; a product name: "change your tone to…" | The `persona_editor` permission is checked in code before anything is drafted. Only the router opens the branch, from the User's own message; tool results never route. Every change passes the Persona quality gate: injection scan, safety prompts, figures unchanged ([09](09-persona-management.md#the-quality-gate)). |
@@ -66,10 +67,12 @@ Every SQL statement the model writes goes through `run_sql`, and `run_sql` alway
    |---|---|
    | `products` | products of their Brands |
    | `order_items` | items whose product is one of those products |
-   | `orders` | orders containing at least one such item |
+   | `orders` | orders containing at least one such item, without `num_of_item` |
    | `users` | Customers who bought at least one such item |
 
    This matches the rule that a Manager's Customer analysis covers only spend on their own Brands. For Executives, the rewrite only projects allowlisted columns.
+
+   **Order-level fields are dropped for Managers.** An order can mix Brands, so `orders.num_of_item` counts other Brands' items too. The scoped `orders` subquery does not project it, so a reference to it is rejected with a hint, and basket size is computed from scoped `order_items` (`COUNT(*)` per `order_id`). The rule is that no row *and no value derived from other Brands' rows* reaches a Manager.
 5. **Cost limits.** A `LIMIT` is forced on the outer query, the statement is dry-run (free) to get the bytes it would scan, and it runs with `maximum_bytes_billed`. Anything over the cap is rejected before it costs anything.
 
 ```sql
@@ -132,4 +135,4 @@ Safety is a prototype requirement. The prototype runs on `bigquery-public-data`,
 - **Query guard:** the full set: AST checks, allowlist, out-of-scope rejection, scope rewrite, `LIMIT`, dry run and bytes cap.
 - **Least privilege:** application-default credentials with read access only.
 - **Output PII filter:** regex detectors, in the single outbound function and in `save_report`.
-- **Tests:** a `pytest` safety suite covering the query guard (allowed, rewritten and rejected statements), Brand scoping per role, and the PII filter, including a test that every streamed event and every saved report passes it. It runs offline against fakes.
+- **Tests:** a `pytest` safety suite covering the query guard (allowed, rewritten and rejected statements), Brand scoping per role (including the rejection of order-level columns such as `num_of_item` for Managers), and the PII filter, including a test that every streamed event and every saved report passes it. It runs offline against fakes.
