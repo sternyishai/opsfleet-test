@@ -25,19 +25,28 @@ The data already lives in BigQuery, and the client tests with Gemini. Running th
 
 Each step of the path uses the cheapest model that does it well. The router and guard run on every turn, so they must be fast and cheap; analysis and long reports are where quality matters most.
 
-| Step | Setting | Default tier | Why |
-|---|---|---|---|
-| Input guard + intent router | `MODEL_ROUTER` | Flash-Lite | Runs on every turn; a short classification with a fixed prompt |
-| Analysis sub-agent | `MODEL_ANALYST` | Flash | Multi-step tool use and SQL writing; the best balance of quality, latency and cost |
-| Long report generation | `MODEL_REPORT` | Pro allowed | Rare (about 100 reports a day) and worth the extra quality |
-| Entity extraction, figure stripping | `MODEL_EXTRACTOR` | Flash-Lite | Background, structured output |
-| Eval and online judge | `MODEL_JUDGE` | Pro | Stronger than the Flash analysis model; the same tier as Pro reports, which rely on its calibration against human labels ([07](07-quality-assurance.md)) |
-| Trio and question embeddings | `MODEL_EMBEDDING` | Gemini embedding model | Same provider and factory as every other call ([02](02-hybrid-intelligence.md)) |
+**Every separate model call is its own step, with its own setting.** So each one can be given a different model, evaluated on its own set and given its own fallback, without touching the others. An unset step inherits from a parent step, so `.env` needs only `MODEL_ROUTER` and `MODEL_ANALYST` to run.
+
+| Step | Setting | Default tier | Inherits from | Why |
+|---|---|---|---|---|
+| Input guard + intent router (one call) | `MODEL_ROUTER` | Flash-Lite | required | Runs on every turn; a short classification with a fixed prompt |
+| Delete request → structured filter | `MODEL_DELETION_FILTER` | Flash-Lite | router | Short structured output from the User's own message ([04](04-destructive-ops.md)) |
+| Analysis sub-agent | `MODEL_ANALYST` | Flash | required | Multi-step tool use and SQL writing; the best balance of quality, latency and cost |
+| Long report generation | `MODEL_REPORT` | Pro allowed | analyst | Rare (about 100 reports a day) and worth the extra quality |
+| Running summary of older turns | `MODEL_SUMMARIZER` | Flash-Lite | router | Short compression; keeps long Conversations cheap ([01](01-architecture.md#conversation-state)) |
+| Saved Report entity extraction | `MODEL_ENTITY_EXTRACTION` | Flash-Lite | router | Structured output on every save |
+| Persona drafting | `MODEL_PERSONA_DRAFTER` | Flash | analyst | Turns the CEO's words into structured fields ([09](09-persona-management.md)) |
+| Persona gate, checks 3 and 4 | `MODEL_PERSONA_GATE` | same as the analysis model | analyst | Must test the model Users actually get, so it follows the answer-writing model unless set on purpose |
+| Trio ingestion: method summary, results removed | `MODEL_TRIO_INGEST` | Flash | analyst | Telling a method parameter from a measured result is subtle; runs only when an analyst adds a Trio ([02](02-hybrid-intelligence.md)) |
+| Preference inference (daily job) | `MODEL_PREFERENCE_INFERENCE` | Flash-Lite | router | Background pattern detection ([05](05-learning-loop.md)) |
+| Trio Candidate generation | `MODEL_TRIO_CANDIDATE` | Flash | analyst | Off until Q1 ([12](12-assumptions-and-open-questions.md)) |
+| Eval and online judge | `MODEL_JUDGE` | Pro | analyst | Stronger than the Flash analysis model; the same tier as Pro reports, which rely on its calibration against human labels ([07](07-quality-assurance.md)) |
+| Trio and question embeddings | `MODEL_EMBEDDING` | Gemini embedding model | none | Same provider and factory as every other call ([02](02-hybrid-intelligence.md)); no fallback, because vectors from different models do not compare |
 
 - **Why Gemini.** The client tests with Gemini, Gemini Flash is strong at SQL and tool use for its price, and on Vertex AI it runs in the same project and region as the data.
 - **No lock-in.** Every setting has the form `provider:model` (for example `google_genai:gemini-…`), resolved by one model factory, so swapping a step's model or provider is a one-line `.env` change. Exact model versions are in `.env`, not in this document, because they change faster than the design.
 - **Changing a model is an experiment, not an edit.** A candidate runs through that step's offline evals and is compared with the current model on score, cost and latency, then rolled out gradually ([07](07-quality-assurance.md), [11](11-operations.md#deployment)).
-- **Fallbacks** are per step (`MODEL_ANALYST_FALLBACK`, …): Flash → Flash-Lite in the prototype; another region, then another provider in production ([06](06-resilience.md)).
+- **Fallbacks** are per step (`MODEL_<STEP>_FALLBACK`, inherited the same way as the model): Flash → Flash-Lite in the prototype; another region, then another provider in production ([06](06-resilience.md)).
 - **Prototype:** Flash for analysis and Flash-Lite for the router, both on the Google AI Studio free tier, with a client-side rate limiter sized to its limits.
 
 ## Framework: LangGraph

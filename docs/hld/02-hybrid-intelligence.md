@@ -61,7 +61,7 @@ flowchart LR
 
 - **Triggered by** a GCS object-finalize event, plus a nightly sweep that catches anything missed. The handler runs on the background worker service, acknowledges only after it commits, and is idempotent on `trio_id + version`, so a redelivered message is a no-op.
 - **SQL is dry-run at ingestion.** A Trio whose SQL does not compile against the current schema is never published.
-- **Figure stripping is verified, not trusted.** An LLM step (Flash) writes the method summary without figures. A deterministic check then looks for numbers, percentages and currency amounts in the question, the SQL literals and the summary. A number is allowed only where it matches a declared parameter; any other hit sends the Trio to an analyst instead of publishing it.
+- **Figure stripping is verified, not trusted.** An LLM step (Flash, `MODEL_TRIO_INGEST`) writes the method summary without figures. A deterministic check then looks for numbers, percentages and currency amounts in the question, the SQL literals and the summary. A number is allowed only where it matches a declared parameter; any other hit sends the Trio to an analyst instead of publishing it.
 - **Brand tagging** combines the Brand literals found in the SQL with entities named in the report. If a Trio cannot be tagged with confidence, it is tagged as covering all Brands, so only Executives can retrieve it until an analyst corrects it. After tagging, Brand literals in the SQL become a query parameter and Brand names in the question a placeholder, so the Trio itself names no Brand.
 - **Embedding** uses a Gemini embedding model through the same model factory as every other model call (`MODEL_EMBEDDING`).
 
