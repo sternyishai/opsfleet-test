@@ -7,17 +7,18 @@ How `src/agent/` is cut, and why each cut sits where it does. Terms (module, int
 ```mermaid
 flowchart TB
     cli[cli] --> comp[composition<br/>the only place that names adapters]
-    comp --> graph
+    comp --> grp
     comp --> adapters
-    graph[graph<br/>state, node map] --> tools[tools<br/>6 analysis tools, 5 branch functions]
-    graph --> core[core<br/>Outbound, parse_reply, PersonaQualityGate]
+    grp[graph<br/>state, node map] --> tools[tools<br/>6 analysis tools, 5 branch functions]
+    grp --> core[core<br/>ChatService, Views, Outbound,<br/>parse_reply, PersonaQualityGate]
+    evals[evals<br/>runner, scorers] --> core
     tools --> ports
     core --> ports
-    graph --> ports
+    grp --> ports
     adapters[adapters<br/>provider SDKs live only here] -. satisfy .-> ports
     ports[ports<br/>Protocols] --> domain
     tools --> contracts
-    graph --> contracts
+    grp --> contracts
     contracts[contracts<br/>router, channel, tool I/O] --> domain
     domain[domain<br/>Pydantic records] --> errors[errors<br/>ErrorClass, MessageClass]
 ```
@@ -31,6 +32,7 @@ flowchart TB
 | [`core/`](../../src/agent/core/) | Deep modules with no dependency of their own: `ChatService` (the inbound entry point), `Views` (model-free commands), `Outbound` (single exit), `parse_reply` (confirmation), `PersonaQualityGate` | `ports` |
 | [`tools/`](../../src/agent/tools/) | The eleven tool functions and `TurnContext` | `ports`, `contracts` |
 | [`graph/`](../../src/agent/graph/) | `AgentState`, the `Node` map, `build_graph` | all of the above |
+| [`evals/`](../../src/agent/evals/) | Eval runner and scorers ([08](08-eval.md)) | `core`, `contracts`, `ports` |
 | [`adapters/`](../../src/agent/adapters/) | Concrete adapters, added slice by slice | `ports`, provider SDKs |
 | [`composition`](../../src/agent/composition.py) | `Ports` bundle and `build_ports(settings)` | everything |
 | [`config`](../../src/agent/config.py) | `Settings`, `ModelSettings`, `Limits` from `.env` | `pydantic-settings` |

@@ -13,7 +13,8 @@ The schemas and interfaces are **code-first**: Pydantic models, Python `Protocol
 | [03-graph-state](03-graph-state.md) | `AgentState` by lifetime, pause and resume | [`graph/state.py`](../../src/agent/graph/state.py), [`graph/build.py`](../../src/agent/graph/build.py) |
 | [04-contracts](04-contracts.md) | `RouterDecision`, channel messages, confirmation grammar, `PersonaGateResult`, error model | [`contracts/`](../../src/agent/contracts/), [`errors.py`](../../src/agent/errors.py) |
 | [05-tools](05-tools.md) | The eleven tools, checklist filled in per tool | [`contracts/tools.py`](../../src/agent/contracts/tools.py), [`tools/`](../../src/agent/tools/) |
-| [06-ports](06-ports.md) | The twelve ports, checklist filled in per port, trace attribute names | [`ports/`](../../src/agent/ports/) |
+| [06-ports](06-ports.md) | The thirteen ports, checklist filled in per port, trace attribute names | [`ports/`](../../src/agent/ports/) |
+| [08-eval](08-eval.md) | Which area gets which check, eval cases, scorers, the scorecard and bar, Phoenix, seed Trios | [`contracts/eval.py`](../../src/agent/contracts/eval.py), [`evals/`](../../src/agent/evals/), [`evals/cases/`](../../evals/cases/), [`seed/trios/`](../../seed/trios/) |
 | [07-web](07-web.md) | One core for the CLI and the optional web UI: `ChatService`, `Views`, the feature map, SSE, identity, generated types ([ADR 0010](../adr/0010-ui-is-a-plain-folder-with-generated-types.md)) | [`core/chat.py`](../../src/agent/core/chat.py), [`core/views.py`](../../src/agent/core/views.py), [`contracts/web.py`](../../src/agent/contracts/web.py) |
 
 Everything in `src/` is a stub: schemas, Protocols and signatures, with bodies that raise `NotImplementedError`. `uv run pytest` checks that every module imports, that both DDL files agree, and the validators that encode the rules (scope, router shape, deletion filter, gate result, no identity in tool inputs).
@@ -28,7 +29,7 @@ Everything in `src/` is a stub: schemas, Protocols and signatures, with bodies t
    - Router output: `RouterDecision` (action: analysis, delete reports, change Persona or preference only; plus preference statements, each standing or this-turn).
    - Persona Quality Gate: `PersonaGateResult` (pass or fail, the result and reason of each check).
    - Channel messages: `InboundMessage`, `AgentReply`, `ConfirmationRequest`, `ConfirmationResponse`; web bodies `WebText`, `WebConfirmation` ([07](07-web.md)).
-4. **Interfaces (ports)**, see ADR 0006: `LLMFactory`, `QueryRunner`, `QueryGuard`, `PiiFilter`, `ReportRepository`, `TrioRetriever`, `ProfileStore`, `PersonaStore`, `ChannelAdapter`, `Tracer`; added in the LLD: `UserDirectory`, and `Delivery` (declared, not wired, [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)).
+4. **Interfaces (ports)**, see ADR 0006: `LLMFactory`, `QueryRunner`, `QueryGuard`, `PiiFilter`, `ReportRepository`, `TrioRetriever`, `ProfileStore`, `PersonaStore`, `ChannelAdapter`, `Tracer`; added in the LLD: `UserDirectory`, `ScorecardSink` (eval results: JSON + Phoenix, [08](08-eval.md)), and `Delivery` (declared, not wired, [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)).
 5. **Tables beyond the list above**: `trio_embeddings` (one vector per question and paraphrase) and `persona_events` (publish, rejection and rollback records). See [02](02-data.md).
 
 ## Checklist for each tool or port
@@ -40,4 +41,4 @@ Everything in `src/` is a stub: schemas, Protocols and signatures, with bodies t
 - [ ] Trace attributes it emits
 - [ ] Test cases (link to tests)
 
-Status: every item is filled in for all eleven tools ([05](05-tools.md)) and all twelve ports ([06](06-ports.md)). Test cases are named with their target file and slice; the files themselves are written test-first in Phase 4.
+Status: every item is filled in for all eleven tools ([05](05-tools.md)) and all thirteen ports ([06](06-ports.md)). Test cases are named with their target file and slice; the files themselves are written test-first in Phase 4.

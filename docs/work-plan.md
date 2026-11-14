@@ -106,7 +106,7 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 3. **Resilience (Req 5):** dry run + self-correction, retries and model fallback, rate limiter, error catalog.
 4. **Saved Reports + Deletion Plan (Req 3):** create a report with action items; confirm-before-delete with `yes / no / yes except N`.
 5. **Observability (Req 7):** JSONL traces, `/trace`, Phoenix export.
-6. **Eval (Req 6, small):** `make eval` scorecard.
+6. **Eval (Req 6, small):** `make eval` scorecard: runner, deterministic scorers, the pre-registered bar, JSON + Phoenix sink, the 20 cases already in `evals/cases/` ([LLD 08](lld/08-eval.md)).
 7. **Stretch:** seed Golden Trios, the Persona mechanism (chat or `/persona edit`, quality gate, versions in SQLite; `persona.yaml` is version 1), User Profile notes.
 8. **Optional: web UI** ([ADR 0010](adr/0010-ui-is-a-plain-folder-with-generated-types.md)): FastAPI adapter (`agent web`, SSE), `make types`, a small React app in `web/` with chat, the Deletion Plan checkboxes and "My reports". Everything the CLI does goes through `ChatService` and `Views`, so the UI adds no backend logic.
 
