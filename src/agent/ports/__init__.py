@@ -12,6 +12,7 @@ from agent.ports.pii import PiiFilter, PiiScan, PiiType
 from agent.ports.profile import ProfileStore
 from agent.ports.query import QueryGuard, QueryRunner
 from agent.ports.reports import ReportRepository
+from agent.ports.scorecards import ScorecardSink
 from agent.ports.tracer import Span, Tracer
 from agent.ports.trios import TrioRetriever
 from agent.ports.users import UserDirectory
@@ -29,6 +30,7 @@ __all__ = [
     "QueryGuard",
     "QueryRunner",
     "ReportRepository",
+    "ScorecardSink",
     "Span",
     "Tracer",
     "TrioRetriever",
