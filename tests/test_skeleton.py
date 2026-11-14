@@ -134,7 +134,7 @@ def test_unset_steps_inherit_and_set_steps_win() -> None:
         analyst="g:flash",
         analyst_fallback="g:lite",
         trio_ingest="g:pro",
-        _env_file=None,
+        _env_file=None,  # pyright: ignore[reportCallIssue]  # pydantic-settings runtime kwarg
     )
     assert m.resolve(ModelStep.DELETION_FILTER) == ("g:lite", None)
     assert m.resolve(ModelStep.PERSONA_GATE) == ("g:flash", "g:lite")

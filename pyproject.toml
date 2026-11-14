@@ -28,6 +28,7 @@ agent = "agent.cli:main"
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.414",
     "pytest>=8.3",
     "pyyaml>=6.0.3",
     "ruff>=0.8",
@@ -59,3 +60,8 @@ select = ["E", "F", "I", "UP", "B", "TID"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
