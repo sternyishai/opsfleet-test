@@ -19,11 +19,12 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
 - **Reuse:** the agent may search the requesting User's **own** Saved Reports ("compare with my report from last month"), using the same entity + full-text search as deletion. Saved Reports are never part of the shared Golden RAG.
 - **Deletion vs. the Golden pipeline:** deleting a Saved Report also deletes any Trio Candidate derived from it that is still pending review (hard delete). A Trio an analyst has already approved and rewritten is company knowledge and stays.
 - **Viewing own reports:** the analysis agent has two read-only tools, `list_my_reports(filter?)` and `get_my_report(id)`. Neither takes an author parameter; the Author is injected from the session by code, so a prompt cannot reach another User's reports. An opened report is labelled "data as of <saved date>". Channels also offer a direct, model-free view: `/reports` in the CLI (prototype), and a "My reports" view or command in web, Slack and Teams.
+- **Access re-checked at use** (*added 2026-11-14*): each Saved Report records its `scope` (Brands, from the query guard at save time). Listing, opening and comparing check it against current Brand Assignments; a report with a Brand the User no longer has shows its title only and can still be deleted. Graph state records the Brand Assignment version; if it changed, earlier results and the running summary leave the prompt.
 - **Deletion hardening** (detail in `docs/hld/04-destructive-ops.md`):
   - The model only turns the request into a structured filter (conversation, entities, date range, all); code runs it with `author_id` injected. The model never picks report IDs.
   - The Deletion Plan stores IDs, not the filter, so reports saved after the plan was shown are never deleted by it. Ownership is checked again in the DELETE itself.
   - Plans over 20 reports show the first 20 plus the total; deleting all needs the count ("yes, delete all 37"); a bare "yes" gets one re-prompt.
-  - Plans have an ID and are marked executed: double clicks and replays are no-ops; buttons from old plans are rejected as expired. Reports already deleted elsewhere are reported, not treated as errors.
+  - Plans have an ID and are marked executed: double clicks and replays are no-ops; buttons from old plans are rejected as expired. A confirmation counts only from the plan's User, in its Conversation, for the latest open plan; a new plan cancels the previous one (*added 2026-11-14*). Reports already deleted elsewhere are reported, not treated as errors.
   - A `report.deleted` event after commit cleans up related files (e.g. chart images).
   - Entity extraction is asynchronous in production (full-text covers the gap) and synchronous at save time in the prototype; the prototype uses SQLite FTS5.
   - Metrics: confirm/cancel ratio, partial-confirmation rate, zero-match rate, plan size; a rising cancel rate becomes eval cases.
@@ -47,7 +48,7 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
 
 Detail in `docs/hld/03-safety-and-pii.md`; layers are named, not numbered (input guard, then ADR 0003's query guard, data platform, least privilege, output PII filter).
 
-- **Queries run as the User (production):** the Chat API uses the User's short-lived Google credentials from SSO. One row access policy per Brand, granted to a Google group; a sync job keeps group membership matching the Brand Assignments in Postgres (the source of truth). PII columns carry policy tags; no agent identity holds Fine-Grained Reader. If a channel cannot provide User credentials, queries fall back to the service account and the query guard carries scoping alone.
+- **Query identity (production):** *Revised 2026-11-14:* SSO identifies the User but gives no BigQuery credentials. The baseline is the read-only service account, with the query guard carrying Brand scoping alone. Per-User queries are an option: a one-time OAuth 2.0 consent with a read-only BigQuery scope, refresh token stored encrypted and revoked on offboarding (12, Q4). One row access policy per Brand, granted to a Google group; a sync job keeps group membership matching the Brand Assignments in Postgres (the source of truth). PII columns carry policy tags; no agent identity holds Fine-Grained Reader.
 - **Query guard details:** `sqlglot` (BigQuery dialect); fails closed; exactly one `SELECT` (CTEs allowed), no scripting or `EXECUTE IMMEDIATE`; Brands bound as query parameters; a rejection is a tool error that counts against the SQL retry budget.
 - **Out-of-scope Brands are rejected, not filtered:** SQL naming a Brand outside the User's scope returns an "out of scope" result, so the User is told rather than shown an empty or misleading answer.
 - **Per-table scope:** `products` by Brand; `order_items` by those products; `orders` containing at least one such item, without order-level columns such as `num_of_item` (a mixed basket would count other Brands' items; basket size comes from scoped `order_items`); `users` who bought at least one such item. Executives get column projection only.
@@ -66,7 +67,7 @@ Detail in `docs/hld/03-safety-and-pii.md`; layers are named, not numbered (input
 - **One model setting per step of the path:** `MODEL_ROUTER`, `MODEL_ANALYST`, `MODEL_REPORT`, `MODEL_EXTRACTOR`, `MODEL_JUDGE`, each in `provider:model` form (e.g. `google_genai:gemini-…`), resolved through one model factory. Swapping a step's model or provider is a one-line `.env` change. Gemini is the default, and other providers stay supported.
 - **HLD: model and provider experimentation.** A candidate model or provider is tested by running the offline eval suites per step and comparing scores, cost and latency against the current one in the observability tool's experiments view. It is then rolled out by shadow traffic → canary percentage → full, controlled by config, not redeploys.
 - **Detail** (in `docs/hld/10-stack-rationale.md`):
-  - `MODEL_JUDGE` defaults to Pro (stronger than the judged model); `MODEL_EXTRACTOR` also covers figure stripping; embeddings are their own step.
+  - `MODEL_JUDGE` defaults to Pro (stronger than Flash analysis; the same tier as Pro reports, which rely on calibration); `MODEL_EXTRACTOR` also covers figure stripping; embeddings are their own step.
   - **Why Gemini:** the client tests with it; Flash is strong at SQL and tool use for its price; on Vertex AI it runs in the same project and region as the data.
   - Exact model versions live only in `.env`, never in the HLD.
   - Prototype: Flash for analysis, Flash-Lite for the router, both on the AI Studio free tier.
@@ -90,9 +91,9 @@ Detail in `docs/hld/06-resilience.md`:
 ## Golden Bucket (Req 1)
 
 - **Prototype:** a small seed set of 5–10 hand-written Trios with simple embedding search. This is a stretch goal, cut first if time runs short.
-- **Ingestion:** expert Trios land in object storage (GCS) → Cloud Run job → parse, strip figures (ADR 0005), tag Brands, embed → pgvector. Versioned; runs on new files and nightly.
+- **Ingestion:** expert Trios land in object storage (GCS) → Pub/Sub → worker service → parse, strip figures (ADR 0005), tag Brands, embed → pgvector. Versioned; runs on new files and nightly.
 - **Growth, with a human gate:**
-  1. Saved Reports with strong signals (thumbs-up, no follow-up corrections) become anonymized Trio Candidates.
+  1. Saved Reports with strong signals (thumbs-up, no follow-up corrections) become anonymized Trio Candidates. *Off by default until the client answers whether private reports may be proposed (12, Q1; revised 2026-11-14).*
   2. A human analyst approves each Candidate before it is published.
   3. A nightly dry run of every Trio's SQL catches schema drift and retires broken ones.
 - **Query time:** hybrid search (vector + keyword) over Trios the User may see, top-k injected into the analysis sub-agent by the fixed `retrieve_trios` node before the ReAct loop starts; the `search_golden_trios` tool stays for re-search (ADR 0008).
@@ -156,7 +157,7 @@ Detail in `docs/hld/06-resilience.md`:
   - **Structured Persona, not a free-form prompt:** `tone` (preset + short free text), `report_sections`, `emphasis`, `vocabulary`, `examples`, `messages` (catalog wording; each class keeps its next step).
   - Admin UI access needs a **Persona-editor role**.
   - **Preview** re-writes stored query results for a fixed sample set: a few model calls, no BigQuery scans.
-  - **Publish check:** field limits; input-guard injection rules on free text; required sections present; a few red-team prompts still refuse; the judge confirms figures are unchanged ("style, never content").
+  - **Publish check:** field limits; input-guard injection rules on free text; required sections present; a few red-team cases run through the answer-writing step with the candidate Persona still hold (*revised 2026-11-14:* the router never reads the Persona, so testing it proved nothing); the judge confirms figures are unchanged ("style, never content").
   - **Versions:** each publish is immutable with an active pointer; **scheduled publishing** ("activate Monday 09:00"); an in-flight Conversation switches at its next turn; publish and rollback are audited; quality metrics are broken down per Persona version.
   - **Store:** Postgres by default; a prompt registry is the drop-in alternative behind `PersonaStore` if production uses Langfuse.
 
@@ -223,7 +224,7 @@ Detail in `docs/hld/06-resilience.md`:
   - Postgres down: fail closed (no identity, no checkpoint); Cloud SQL HA.
   - Trio search down: continue from schema only, turn flagged degraded.
   - Persona store down: last cached version, else the bundled default.
-  - Sensitive Data Protection down: regex detectors as fallback; the PII filter is never skipped.
+  - Sensitive Data Protection down: regex detectors as fallback; the PII filter is never skipped. Accepted trade-off: narrower detection, not none, because PII columns are blocked upstream and failing closed would stop every answer; each activation is alerted.
   - Pub/Sub publish failure: retried; nightly sweeps redo missed work (e.g. entity extraction backfill).
   - Observability backend down: async batched export, dropped on overflow; tracing never blocks a turn.
 - **A fallback model must pass that step's offline eval suites** before it joins a fallback chain.
@@ -244,7 +245,7 @@ Detail in `docs/hld/06-resilience.md`:
   - **Five layers:** deterministic `pytest` (every commit, offline); per-step evals (router/guard classification, entity extraction, figure stripping; when that step changes); end-to-end correctness and safety red team (every release candidate and nightly); cost and latency budgets from the eval traces.
   - **Eval set sources:** seed cases from the spec categories; a **held-out share of Golden Trios** kept out of retrieval as correctness references; real failures; red-team cases plus the input-guard POC set. Each case records the User it runs as (role, Brands).
   - **Execution match:** order-insensitive, column names ignored, numeric tolerance.
-  - **Judge rubric** (`MODEL_JUDGE`, stronger than the judged model): intent, grounding (every figure from a query result), method and caveats, completeness (Persona sections, action items), presentation (Profile). The judge is calibrated against human labels before it gates anything, and its agreement is tracked.
+  - **Judge rubric** (`MODEL_JUDGE`, Pro: stronger than Flash analysis, the same tier as Pro reports): intent, grounding (every figure from a query result), method and caveats, completeness (Persona sections, action items), presentation (Profile). The judge is calibrated against human labels before it gates anything, and its agreement is tracked.
   - **Nondeterminism:** each case runs ~3 times; the score is the pass rate.
   - **Safety cases are judged from the trace, not the wording:** no out-of-scope rows, no PII in output, no DELETE without a confirmed plan.
   - **Gate:** reject on safety < 100%, any correctness regression vs the current version, or cost/latency over budget. Gated: prompts, models/providers, new tools, Trio batches, fallback models. Persona edits get a lighter check in the Admin UI (`09`).
@@ -272,17 +273,17 @@ Detail in `docs/hld/06-resilience.md`:
 - **Channels:** the HLD stays high-level. The Channel Gateway is a pluggable component where new connectors (Slack, Teams, web, …) are added as adapters. No per-channel protocol detail in the HLD.
 - **Deployment (reference GCP):**
   - **Cloud Run services:** Channel Gateway, Chat API, Admin UI.
-  - **Cloud Run jobs + Cloud Scheduler:** Trio ingestion, nightly Trio validation, weekly aggregation, synthetic canaries.
+  - **Worker service (Pub/Sub push) + Cloud Run jobs (Cloud Scheduler):** Trio ingestion on the worker; nightly Trio validation, weekly aggregation and synthetic canaries as jobs. *Revised 2026-11-14:* a Cloud Run job cannot receive a Pub/Sub push.
   - **Data:** Cloud SQL Postgres, GCS (Golden Bucket), BigQuery.
   - **Secrets and network:** Secret Manager; a private VPC connector; IAP/SSO in front of the web UI and Admin UI.
   - **Scaling:** stateless services; all state is in Postgres and the checkpointer. Each box is a container, so it is portable to any container host.
 - **Cost controls:**
   - Per-User daily quotas (tokens, BigQuery bytes).
-  - A global daily spend cap, with an alert at 80%.
+  - A global daily spend cap: at 80% an alert and background jobs pause; at 100% new turns get "daily quota reached" until midnight.
   - `maximum_bytes_billed` on every query.
-  - Result caching for the same question and scope within N minutes, plus BigQuery's own cache.
+  - Result caching keyed on the final SQL, its bound parameters and the User's scope version, valid until the next data load, plus BigQuery's own cache. *Revised 2026-11-14:* the question text alone does not identify a follow-up such as "and last month?".
   - The prototype enforces only the per-query bytes cap.
-- **Long Conversations:** the last N turns are kept verbatim plus a running summary of older turns. Large results never go into history; a compact result summary does, and the full result stays in the turn record.
+- **Long Conversations:** the last N turns are kept verbatim plus a running summary of older turns. Large results never go into history; a compact result summary does. Result rows are never stored: not in the turn record, the interaction store or traces; only the result's shape is.
 
 ## Scale, async processing & SLOs
 
@@ -290,9 +291,11 @@ Detail in `docs/hld/06-resilience.md`:
 
 - **Background jobs** (Trio ingestion and validation, entity extraction, preference inference, Trio Candidates, aggregation, canaries):
   - Pub/Sub with a **dead-letter topic** per job type. After N delivery attempts with backoff, the message moves to the DLQ, an alert fires, and it can be inspected and replayed once fixed.
+  - Event work runs on a worker Cloud Run service behind Pub/Sub push; the handler acknowledges (returns 2xx) only after its work commits. Scheduled batch work runs as Cloud Run jobs on Cloud Scheduler.
   - Delivery is at least once, so **every job is idempotent**, with a dedupe key such as `trio_id + version` or `report_id`.
 - **Chat turns: no queue at this scale.** The Gateway acknowledges the channel immediately and runs the turn asynchronously in-process; Cloud Run with CPU always allocated is enough.
   - A turn that fails after retries **fails fast** to the User with a friendly message and a reference ID. It is never dead-lettered for later replay, because a late answer to an old question confuses the User.
+  - **A stopped instance is not resumed.** *Revised 2026-11-14:* "restarts lose nothing" overstated it. Checkpoints keep history and a paused Deletion Plan; a running turn has a status and deadline, the Gateway sends the failure message, and BigQuery jobs carry a job timeout. Cloud Run can stop any instance with a short grace period, so guaranteed resume needs the queue below.
   - **Growth path:** if concurrency grows, put a task queue (Cloud Tasks or Pub/Sub) between the Gateway and the workers for backpressure.
 - **Growth path: MCP** ([ADR 0007](adr/0007-in-process-tools-mcp-as-growth-option.md)). Not in the design today. Adopted when extension capabilities ship as MCP servers, or when a second consumer needs governed data access (a governed-data MCP server enforcing guard, scope and PII itself).
 - **What limits us (and the growth path for each):**
@@ -322,7 +325,7 @@ Detail in `docs/hld/06-resilience.md`:
   - **Peak:** ~100 questions/hour, ~5/min in the busiest hour, ~2 turns at once; one I/O-bound instance is enough.
   - **SLO measurement:** latency is Gateway receive → final reply; availability is the share of turns ending in an answer rather than an infrastructure-failure message, plus canary success. Correct refusals (scope, PII, quota) do not count against availability.
   - **Cost estimate (assumed inputs, recomputed from traces later):** Flash-Lite $0.25/$1.50, Flash $1.50/$9.00, Pro $2.00/$12.00 per 1M tokens; BigQuery $6.25/TiB; ~5 Flash calls × ~8k in per question (Trio retrieval is a fixed step, not a model call, ADR 0008); ~2.5 executions × ~2 GB per question. Result: ~$123 per business day for Users, ~$11/day canaries, ~$650/month fixed infra → **~$3,700/month, ~$0.17 per question**. Analysis is about half; doubling the Flash price or steps adds ~$1,800/month.
-  - **Cost-control starting values:** `maximum_bytes_billed` ~20 GB; per-User quota ~5× a typical User's day; global cap ~3× expected daily spend, alert at 80%, then interactive traffic only; background jobs off-peak with batch pricing where available.
+  - **Cost-control starting values:** `maximum_bytes_billed` ~20 GB; per-User quota ~5× a typical User's day; global cap ~3× expected daily spend (80%: alert and background pause; 100%: new turns refused); background jobs off-peak with batch pricing where available.
   - **Canaries:** 4 short questions every 15 min in business hours, hourly outside (~220 runs/day instead of ~380), because canaries would otherwise be a top-three cost.
   - **Security:** roles are Executive, Manager, Persona editor, analyst (Trio review), AI-ops (raw data), default deny; one service account per service; VPC Service Controls perimeter around BigQuery, GCS, Vertex AI; Google-managed encryption, CMEK optional; Vertex AI terms exclude training on customer data; Cloud Audit Logs; `uv.lock`, image scanning, deploys only from CI.
   - **Recovery:** Cloud SQL point-in-time recovery (RPO minutes), HA failover in about a minute, quarterly restore drills; Persona and Trio versions are never overwritten.

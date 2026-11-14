@@ -12,6 +12,7 @@ A **Saved Report** is the question, the SQL that answered it and the answer, sav
 | `title`, `question`, `sql` | What was asked and how it was answered. |
 | `markdown` | The exact text the User saw, so reopening a report shows what they saved. |
 | `structured` (JSONB) | Title, summary, insights, action items, period. Action items stay queryable, and each channel can render the report its own way. |
+| `scope` | The Brands the report's data covers, recorded from the query guard at save time. Checked against the User's current Brand Assignments whenever the report is used. |
 | `entities` (table `report_entities`) | Brands, categories, products and Customer IDs named in the report. Extracted after save, indexed for matching. |
 | full-text index | The fallback for matching, and for reports whose entities are not extracted yet. |
 
@@ -20,6 +21,8 @@ Charts, when added, are files in object storage referenced from the report.
 **Creating a report.** "Create a report for Q1 including insights and action items for Q2" runs the analysis sub-agent as usual: Golden Trios, scoped SQL, self-correction. Long reports may use the report model (`MODEL_REPORT`, Pro allowed). `save_report` runs the output PII filter on the report and then stores it; the reply passes the filter again on its way out. After commit, a `report.saved` event triggers entity extraction (Flash-Lite) in the background.
 
 **Viewing reports.** `list_my_reports` and `get_my_report` let the agent find and open the User's own reports. Channels also offer a model-free view (`/reports` in the CLI). An opened report is labelled "data as of <saved date>" ([01](01-architecture.md#agent-graph)).
+
+**Access is checked again whenever a report is used.** `list_my_reports`, `get_my_report` and comparisons check the report's `scope` against the User's *current* Brand Assignments. A report covering a Brand the User no longer has is listed by title only; its content is not shown or used, and the reply says why. The Author can still delete it ([03](03-safety-and-pii.md#identity-and-roles)).
 
 ## Deletion: the model proposes a filter, code chooses the reports
 
@@ -84,7 +87,9 @@ One Postgres transaction, so either everything happens or nothing does:
 After commit, a `report.deleted` event cleans up related files, such as chart images in object storage.
 
 - **Hard delete.** The client confirmed deletion is permanent, so there is no soft-delete flag or undo. The audit row is the record that it happened.
+- **What it removes.** The report leaves the library: `saved_reports`, its entity rows and any pending Trio Candidate, so it can no longer be listed, opened, matched or compared. Copies of the answer the User already saw stay in that Conversation's history, the interaction store and traces until they age out (90 days, [11](11-operations.md#running-it)). Whether deletion must also purge those copies is a client question ([12](12-assumptions-and-open-questions.md)).
 - **Idempotent.** The plan has an ID and is marked executed. A double click on *Delete selected*, or a replayed message, is a no-op. A button from an old, cancelled or executed plan is rejected with "this request has expired".
+- **Bound to one User and one plan.** A confirmation counts only if it comes from the plan's User, in the plan's Conversation, for the latest open plan. Opening a new plan cancels the previous one, so two plans in one Conversation can never be confirmed by mistake.
 - **Already gone.** If a confirmed report was deleted in the meantime (for example, from another channel), the reply says so instead of failing.
 
 ## Strict, but not in the way

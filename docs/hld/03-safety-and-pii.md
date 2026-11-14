@@ -44,6 +44,7 @@ The output PII filter is the only way out. Every message to a channel (progress 
 - **Executives** may analyze all Brands. **Managers** may analyze only their Brand Assignments. Anyone else is **denied by default**: an authenticated User with no role gets no data. *(Assumption to confirm, [12](12-assumptions-and-open-questions.md).)*
 - **Permissions** grant actions beyond analysis. Today there is one: `persona_editor`, held by the CEO, which allows changing the Persona ([09](09-persona-management.md#who-may-change-it)).
 - `thelook` has no link between people and Brands, so Brand Assignments are our own table, seeded in the prototype and administered in production.
+- **A change of access applies at once, to earlier work too.** Graph state records the version of the User's Brand Assignments. If it changed since the Conversation's last turn, earlier results and the running summary are dropped from the prompt, and the User is told the Conversation continues with their new access. Saved Reports are checked against current access whenever they are used ([04](04-destructive-ops.md#saved-reports)). The result cache key includes the scope version, so a cached answer never outlives a change ([06](06-resilience.md)).
 
 ## Input guard: only analysis questions
 
@@ -107,7 +108,8 @@ In production the platform enforces the same rules again, independently of our c
 - **Our own governed copy of the dataset.** Row access policies and column security cannot be added to `bigquery-public-data`. The data team publishes the four tables into a dataset we can govern *(assumption, [12](12-assumptions-and-open-questions.md))*.
 - **Row access policies per Brand**, each granted to a Google group (for example, `brand-<name>-analysts`). Brand Assignments in Postgres are the source of truth; a sync job keeps group membership in step with them.
 - **Column-level security.** PII columns carry a policy tag, and no identity the agent uses holds the Fine-Grained Reader role. A query that touches them fails at the platform.
-- **Queries run as the User.** The Chat API runs queries with the User's own short-lived Google credentials, obtained through SSO, so the row access policies apply to the real person asking. If a channel cannot provide User credentials, queries fall back to the service account and the query guard carries the scoping alone, as in the prototype.
+- **The baseline is the service account.** SSO proves who the User is; it does not give us credentials to query BigQuery as them. So by default queries run as the agent's read-only service account, which can read every Brand's rows, and the query guard carries Brand scoping alone, as in the prototype.
+- **Queries run as the User, once the User has granted access** (an option for the client, [12](12-assumptions-and-open-questions.md)). That takes a one-time OAuth 2.0 consent with a read-only BigQuery scope in the web channel ([Google OAuth 2.0](https://developers.google.com/identity/protocols/oauth2)). The refresh token is stored encrypted, mints a short-lived access token per turn, and is revoked when the User leaves or loses their role. Then the row access policies apply to the real person asking. A User who has not consented, or a channel that cannot carry their token, stays on the baseline.
 
 ## Least privilege
 

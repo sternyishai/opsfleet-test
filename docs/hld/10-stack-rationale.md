@@ -11,7 +11,7 @@ The data already lives in BigQuery, and the client tests with Gemini. Running th
 | Need | GCP service | Why this one | Portable equivalent |
 |---|---|---|---|
 | Run the Gateway, Chat API, Admin UI | **Cloud Run** services | Containers with no cluster to operate; scales to zero for the Admin UI; CPU always allocated for the Chat API, which finishes turns after acknowledging the channel | Any container host: AWS ECS/Fargate, Azure Container Apps, Kubernetes |
-| Background jobs | **Cloud Run jobs**, **Cloud Scheduler**, **Pub/Sub** | Same container images as the services; Pub/Sub gives at-least-once delivery and dead-letter topics with no broker to run | SQS + EventBridge, Azure Service Bus, RabbitMQ + cron |
+| Background jobs | **Pub/Sub** push to a worker **Cloud Run service**; **Cloud Run jobs** on **Cloud Scheduler** for batch | Same container images as the services. Pub/Sub gives at-least-once delivery and dead-letter topics with no broker to run; it pushes to a service because a Cloud Run job cannot receive a push | SQS + EventBridge, Azure Service Bus, RabbitMQ + cron |
 | Analytics data | **BigQuery** | Where the data is. Free dry runs, `maximum_bytes_billed`, row access policies and policy tags give the safety and cost layers native support ([03](03-safety-and-pii.md), [06](06-resilience.md)) | Snowflake, Redshift: a new `QueryRunner` adapter and the guard's SQL dialect setting |
 | App state + vectors | **Cloud SQL for PostgreSQL** + pgvector | One transactional store for checkpoints, reports, audit, profiles, Persona and Trios ([ADR 0002](../adr/0002-postgres-for-app-state.md)) | RDS, Azure Database for PostgreSQL, AlloyDB, self-hosted |
 | Golden Bucket landing zone | **Cloud Storage** | Versioned bucket; object-finalize events trigger ingestion | S3, Azure Blob |
@@ -31,7 +31,7 @@ Each step of the path uses the cheapest model that does it well. The router and 
 | Analysis sub-agent | `MODEL_ANALYST` | Flash | Multi-step tool use and SQL writing; the best balance of quality, latency and cost |
 | Long report generation | `MODEL_REPORT` | Pro allowed | Rare (about 100 reports a day) and worth the extra quality |
 | Entity extraction, figure stripping | `MODEL_EXTRACTOR` | Flash-Lite | Background, structured output |
-| Eval and online judge | `MODEL_JUDGE` | Pro | Must be stronger than the model it judges ([07](07-quality-assurance.md)) |
+| Eval and online judge | `MODEL_JUDGE` | Pro | Stronger than the Flash analysis model; the same tier as Pro reports, which rely on its calibration against human labels ([07](07-quality-assurance.md)) |
 | Trio and question embeddings | `MODEL_EMBEDDING` | Gemini embedding model | Same provider and factory as every other call ([02](02-hybrid-intelligence.md)) |
 
 - **Why Gemini.** The client tests with Gemini, Gemini Flash is strong at SQL and tool use for its price, and on Vertex AI it runs in the same project and region as the data.

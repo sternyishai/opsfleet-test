@@ -38,7 +38,7 @@ Every case records the User it runs as (Executive or a Manager with given Brands
 ### Correctness: two complementary checks
 
 - **Execution match.** The agent's final SQL and the reference SQL both run, and their results are compared: order-insensitive, column names ignored, numbers within a small tolerance. It is objective and cheap, but too strict on its own, because two different queries can both be right.
-- **LLM judge with a rubric** (`MODEL_JUDGE`, a stronger model than the one judged). The judge sees the question, the User's scope, the SQL, the result summary and the answer, and scores:
+- **LLM judge with a rubric** (`MODEL_JUDGE`, Pro: a stronger tier than the Flash analysis model; long reports may also run on Pro, so for them the judge is trusted because it is calibrated against human labels, not because of its tier). The judge sees the question, the User's scope, the SQL, the result summary and the answer, and scores:
   1. **Intent:** the right metric, period, segment and comparison.
   2. **Grounding:** every figure in the answer comes from a query result.
   3. **Method:** a sound approach, and caveats where they are needed (for example, an incomplete current month).

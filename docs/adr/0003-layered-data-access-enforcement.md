@@ -2,7 +2,7 @@
 
 The model is never the authorization layer. Brand scoping and PII protection are enforced by code and by the data platform, in four layers:
 
-1. **Data platform**: in production the dataset is copied into our own project, and BigQuery row access policies filter rows by the caller's identity (the agent queries on behalf of the User). Column-level security hides PII columns.
+1. **Data platform**: in production the dataset is copied into our own project, and BigQuery row access policies filter rows by the caller's identity. They apply per User only when the agent queries with the User's own OAuth token; SSO alone does not provide one, so the baseline is the read-only service account with layer 2 carrying scoping ([03](../hld/03-safety-and-pii.md#data-platform-production)). Column-level security hides PII columns.
 2. **Query guard**: every generated SQL statement is parsed into an AST. Only `SELECT` on allowlisted tables and columns is allowed, a `LIMIT` and a bytes-billed cap are forced, and every table reference is rewritten into a subquery filtered to the User's Brands.
 3. **Output filter, at a single exit**: one outbound function in the Chat API is the only code that sends anything to a channel or, through a `Delivery` adapter, to an outside destination such as email ([ADR 0009](0009-outbound-actions-are-a-deliver-branch.md)). It scans every message for PII: progress events, confirmation prompts, catalog messages, the final answer and delivered content. `save_report` runs the same filter before it writes, so stored Saved Reports are filtered too. The filter is a property of the way out, not a node the graph happens to pass through.
 4. **Least privilege**: a read-only service account with no DDL or DML.

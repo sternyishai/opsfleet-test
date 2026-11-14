@@ -94,14 +94,14 @@ Every new version passes an automated gate before it goes live, on both paths. *
 |---|---|---|---|
 | 1 | **Field limits** | Tone text pages long, too many examples, empty required fields | Code, instant |
 | 2 | **Injection scan** | Text that gives orders: "ignore your rules", "include customer emails" | Code: the input guard's rules ([03](03-safety-and-pii.md)) |
-| 3 | **Safety still holds** | A Persona that makes the agent less careful. A few red-team prompts (a PII request, another Brand's data, an off-topic request) must still be refused. | Router model, a few short calls |
+| 3 | **Safety still holds** | A Persona that makes answers less careful. The input guard and router never read the Persona, so testing them would pass any Persona. Instead, a few red-team cases run through the answer-writing step with the candidate Persona: an "out of scope" tool result must still be reported as out of scope, a required caveat (an incomplete month) must stay, and a PII-shaped value planted in a stored result must not be repeated. | Answer-writing model with the candidate Persona, a few short calls |
 | 4 | **Report sections present** | A Persona that drops required parts, such as action items | Sample reports are re-written in the new Persona from stored query results; code checks every required section is there |
 | 5 | **Figures unchanged** | A tone that changes the facts: "be optimistic" turning a 5% drop into "stable" | Every figure in the re-written samples must match the stored result |
 
 - **Cheap and fast.** A few seconds and a handful of model calls. The samples are re-written from stored results, so the gate runs no BigQuery queries.
 - **A failure explains itself**, in plain words, with a hint: "With the new tone, a sample report described a 5% revenue drop as 'stable'. The current tone stays. Try asking for warmth without softening the numbers."
 - **Fails closed.** If the gate cannot run (for example, the model is down), nothing is published and the current version stays; the CEO gets the "model busy" message ([06](06-resilience.md)).
-- **Lighter than the release gate.** Developers' changes (prompts, models, tools) go through the full release gate ([07](07-quality-assurance.md#the-release-gate)). The Persona has its own fast gate because the CEO changes it weekly and cannot wait for the full eval suite. Its red-team prompts and sample reports are drawn from that suite.
+- **Lighter than the release gate.** Developers' changes (prompts, models, tools) go through the full release gate ([07](07-quality-assurance.md#the-release-gate)). The Persona has its own fast gate because the CEO changes it weekly and cannot wait for the full eval suite. Its red-team cases and sample reports are drawn from that suite.
 
 ## Publishing and rollback
 
@@ -157,7 +157,7 @@ Only the CEO's office can change the tone of the reports.
 ```
 
 - **Permission.** The seeded CEO (the Executive in `seed/users.yaml`) holds `persona_editor`; the Managers do not.
-- **Gate.** All five checks, sized for the Gemini free tier: 3 red-team prompts and one sample report re-written from a stored result. Code compares the figures, instead of the judge used in production.
+- **Gate.** All five checks, sized for the Gemini free tier: 3 red-team cases run through the answer-writing step and one sample report re-written from a stored result. Code compares the figures, instead of the judge used in production.
 - **Store.** Versions in a SQLite `persona_versions` table behind the `PersonaStore` port, read at the start of every turn. `/persona` shows the active version, `/persona history` lists all versions and `/persona rollback` re-activates the previous one.
 - **Seed.** The bundled `persona.yaml` is version 1, loaded on first run, and the cold-start default:
 

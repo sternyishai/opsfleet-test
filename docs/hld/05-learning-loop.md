@@ -85,7 +85,7 @@ flowchart LR
 The findings report covers new topics, recurring SQL errors, low-satisfaction areas, retrieval gaps and unclassified errors.
 
 - **Every real failure becomes a test.** A failure found in review is added to the offline eval set before it is fixed, so it can never quietly come back ([07](07-quality-assurance.md)).
-- **Knowledge gaps go to analysts.** Clusters of questions with no good Trio, or with low satisfaction, become requests for new Trios, and Trio Candidates from well-received Saved Reports enter the analyst review queue ([02](02-hybrid-intelligence.md)).
+- **Knowledge gaps go to analysts.** Clusters of questions with no good Trio, or with low satisfaction, become requests for new Trios, and, once the client allows it (off by default, [12](12-assumptions-and-open-questions.md) Q1), Trio Candidates from well-received Saved Reports enter the analyst review queue ([02](02-hybrid-intelligence.md)).
 - **Recurring SQL errors usually mean the schema is unclear.** If the model keeps mixing up `orders.created_at` and `order_items.shipped_at`, the fix is a clearer column description in `get_schema`. Such fixes are cheap, safe and measurable.
 - **Domain-expert sessions** bring what logs cannot show: business context, new priorities and definitions such as how the company really defines churn.
 - **Shipping a change** follows the same promotion path as the architecture ([ADR 0004](../adr/0004-hybrid-agent-graph.md)): the offline eval against the current version, then a gradual rollout ([11](11-operations.md#deployment)). Any change can be rolled back.
