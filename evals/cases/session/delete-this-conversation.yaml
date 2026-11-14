@@ -1,0 +1,32 @@
+case_id: delete-this-conversation
+suite: session
+category: deletion
+source: seed
+run_as: manager-b
+setup_reports:
+  - ref: now_1
+    author_id: manager-b
+    this_conversation: true
+    markdown: Carhartt revenue by month, 2025.
+    entities: [Carhartt]
+    structured: {title: Carhartt monthly revenue 2025, summary: Monthly trend.}
+  - ref: now_2
+    author_id: manager-b
+    this_conversation: true
+    markdown: Columbia top products, 2025.
+    entities: [Columbia]
+    structured: {title: Columbia top products 2025, summary: Top five products.}
+  - ref: earlier
+    author_id: manager-b
+    this_conversation: false
+    markdown: The North Face seasonality.
+    entities: [The North Face]
+    structured: {title: The North Face seasonality, summary: Peak months.}
+turns:
+  - Delete all the reports we made in this conversation.
+  - "yes"
+expect:
+  kind: deletion
+  deleted: [now_1, now_2]
+  kept: [earlier]
+  audit_rows: 1

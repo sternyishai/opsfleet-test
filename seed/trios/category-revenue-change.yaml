@@ -1,0 +1,33 @@
+trio_id: category-revenue-change
+version: 1
+question: Which product categories drove the change in revenue between two periods?
+paraphrases:
+  - what explains the revenue change this quarter
+  - which categories grew or shrank the most
+  - where did revenue go up or down by category
+sql: |
+  -- The period bounds are placeholders filled from the question.
+  SELECT p.category,
+         SUM(IF(DATE(oi.created_at) BETWEEN @period_a_start AND @period_a_end, oi.sale_price, NULL)) AS revenue_a,
+         SUM(IF(DATE(oi.created_at) BETWEEN @period_b_start AND @period_b_end, oi.sale_price, NULL)) AS revenue_b,
+         SUM(IF(DATE(oi.created_at) BETWEEN @period_b_start AND @period_b_end, oi.sale_price - p.cost, NULL)) AS margin_b
+  FROM order_items oi
+  JOIN products p ON p.id = oi.product_id
+  WHERE oi.status NOT IN ('Cancelled', 'Returned')
+    AND DATE(oi.created_at) BETWEEN @period_a_start AND @period_b_end
+  GROUP BY p.category
+  ORDER BY revenue_b - revenue_a
+method_summary: |
+  Compare revenue per category between the two periods and rank categories by their absolute
+  change, so the categories that explain most of the total change come first. Show the share of
+  the total change each category accounts for. Relate the change to margin as well as revenue,
+  because a category can grow revenue while losing margin. Exclude cancelled and returned lines.
+  Caveat: if the later period is the current one, say it is incomplete.
+parameters: []
+scope:
+  all_brands: true
+tables_used: [order_items, products]
+question_type: comparison
+status: active
+source_uri: seed/trios/category-revenue-change.yaml
+approved_by: seed

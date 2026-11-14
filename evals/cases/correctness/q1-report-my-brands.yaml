@@ -1,0 +1,18 @@
+case_id: q1-report-my-brands
+suite: correctness
+category: report_request
+source: seed
+run_as: manager-b
+turns:
+  - Create a report for Q1 2025 for my brands, with insights and action items for Q2.
+expect:
+  kind: answer
+  reference_sql: |
+    SELECT p.brand, SUM(oi.sale_price) AS revenue
+    FROM order_items oi
+    JOIN products p ON p.id = oi.product_id
+    WHERE oi.status NOT IN ('Cancelled', 'Returned')
+      AND DATE(oi.created_at) BETWEEN '2025-01-01' AND '2025-03-31'
+    GROUP BY p.brand
+  required_sections: [Summary, Key insights, Risks, Action items]
+notes: Required sections are those of persona.yaml version 1.

@@ -1,0 +1,16 @@
+# Demo identity (HLD 03): one Executive and two Managers. Brands are the exact `products.brand`
+# values (case matters: thelook stores "adidas" and "PUMA"), chosen from the highest-revenue
+# Brands on 2026-11-15. Log in with `agent chat --as <user_id>`.
+users:
+  - user_id: ceo
+    role: executive
+    permissions: [persona_editor]
+    brands: []
+  - user_id: manager-a          # premium apparel; ~51% of their orders also hold another Brand
+    role: manager
+    permissions: []
+    brands: [Calvin Klein, Tommy Hilfiger]
+  - user_id: manager-b          # outdoor and workwear
+    role: manager
+    permissions: []
+    brands: [Carhartt, Columbia, The North Face]

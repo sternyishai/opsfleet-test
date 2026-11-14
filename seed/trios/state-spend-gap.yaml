@@ -1,0 +1,42 @@
+trio_id: state-spend-gap
+version: 1
+question: Why are customers in one state spending less than customers in another?
+paraphrases:
+  - why do customers in California spend less than in New York
+  - compare customer spend between two states
+  - which state has lower spend per customer and why
+sql: |
+  -- @state_a and @state_b are placeholders filled from the question, not method parameters.
+  WITH customer_spend AS (
+    SELECT u.state, oi.user_id,
+           SUM(oi.sale_price) AS spend,
+           COUNT(DISTINCT oi.order_id) AS orders,
+           COUNT(*) AS items
+    FROM order_items oi
+    JOIN users u ON u.id = oi.user_id
+    WHERE u.state IN (@state_a, @state_b)
+      AND oi.status NOT IN ('Cancelled', 'Returned')
+    GROUP BY u.state, oi.user_id
+  )
+  SELECT state,
+         COUNT(*) AS customers,
+         AVG(spend) AS spend_per_customer,
+         AVG(orders) AS orders_per_customer,
+         SUM(items) / SUM(orders) AS items_per_order,
+         SUM(spend) / SUM(items) AS avg_item_price
+  FROM customer_spend
+  GROUP BY state
+method_summary: |
+  Split spend per Customer into three factors: orders per Customer, items per order and
+  average item price. Compare each factor between the two states to find which one carries the
+  gap. Count items per order from order lines, never from an order-level item count. Then look
+  at the category mix and at age group and traffic source for the factor that differs.
+  Exclude cancelled and returned lines. Caveat: mention when one state has few Customers.
+parameters: []
+scope:
+  all_brands: true
+tables_used: [order_items, users]
+question_type: comparison
+status: active
+source_uri: seed/trios/state-spend-gap.yaml
+approved_by: seed

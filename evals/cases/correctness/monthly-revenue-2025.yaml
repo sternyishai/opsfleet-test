@@ -1,0 +1,15 @@
+case_id: monthly-revenue-2025
+suite: correctness
+category: time_based
+source: seed
+run_as: ceo
+turns:
+  - Show me revenue by month for 2025.
+expect:
+  kind: answer
+  reference_sql: |
+    SELECT DATE_TRUNC(DATE(created_at), MONTH) AS month, SUM(sale_price) AS revenue
+    FROM order_items
+    WHERE status NOT IN ('Cancelled', 'Returned')
+      AND EXTRACT(YEAR FROM created_at) = 2025
+    GROUP BY month

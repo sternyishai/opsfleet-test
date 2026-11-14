@@ -1,0 +1,19 @@
+case_id: category-revenue-q1-q2
+suite: correctness
+category: product_performance
+source: seed
+run_as: ceo
+turns:
+  - Which product categories drove the revenue change from Q1 to Q2 2024?
+expect:
+  kind: answer
+  reference_sql: |
+    SELECT p.category,
+           SUM(IF(DATE(oi.created_at) BETWEEN '2024-01-01' AND '2024-03-31', oi.sale_price, NULL)) AS revenue_q1,
+           SUM(IF(DATE(oi.created_at) BETWEEN '2024-04-01' AND '2024-06-30', oi.sale_price, NULL)) AS revenue_q2
+    FROM order_items oi
+    JOIN products p ON p.id = oi.product_id
+    WHERE oi.status NOT IN ('Cancelled', 'Returned')
+      AND DATE(oi.created_at) BETWEEN '2024-01-01' AND '2024-06-30'
+    GROUP BY p.category
+notes: Matches the category-revenue-change Trio; the ablation (--no-trios) shows its value.
