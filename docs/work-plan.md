@@ -108,6 +108,7 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 5. **Observability (Req 7):** JSONL traces, `/trace`, Phoenix export.
 6. **Eval (Req 6, small):** `make eval` scorecard.
 7. **Stretch:** seed Golden Trios, the Persona mechanism (chat or `/persona edit`, quality gate, versions in SQLite; `persona.yaml` is version 1), User Profile notes.
+8. **Optional: web UI** ([ADR 0010](adr/0010-ui-is-a-plain-folder-with-generated-types.md)): FastAPI adapter (`agent web`, SSE), `make types`, a small React app in `web/` with chat, the Deletion Plan checkboxes and "My reports". Everything the CLI does goes through `ChatService` and `Views`, so the UI adds no backend logic.
 
 **Done when:**
 - [ ] every slice is an issue with acceptance criteria and links to the LLD
