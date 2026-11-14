@@ -1,0 +1,10 @@
+#!/bin/sh
+# Blocks a commit unless lint, types and tests pass. Same checks for every session.
+# Enable once per clone:  git config core.hooksPath .githooks
+set -e
+echo "pre-commit: ruff" >&2
+uv run ruff check -q
+echo "pre-commit: pyright" >&2
+uv run pyright
+echo "pre-commit: pytest" >&2
+uv run pytest -q
