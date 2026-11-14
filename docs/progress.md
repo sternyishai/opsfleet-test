@@ -4,7 +4,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-14)
 
-**Phase:** 2 (LLD) done; PR #3 open. Next: Phase 3 (GitHub issues) once PR #3 is merged.
+**Phase:** 2 (LLD) merged (PR #3); eval LLD in PR #4. Next: Phase 3 (GitHub issues) once PR #4 is merged.
 **Branch:** `docs/lld`
 
 | Step | Status |
@@ -16,6 +16,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Phase 2: LLD | ✅ committed (165e81d … b0bbc30): `uv` skeleton, Pydantic contracts, 12 `Protocol` ports, graph state, stubbed tools and core modules, Postgres + SQLite DDL (Postgres verified in `pgvector/pg17`), ER diagram, `docs/lld/01`–`07`, 12 passing tests |
 | One model setting per call | ✅ 12 `ModelStep`s with inheritance; HLD 10 table and 02 updated; settles the figure-stripping model (`MODEL_TRIO_INGEST`, Flash) |
 | ADR 0010: UI in a plain `web/` folder | ✅ optional slice 8 in the work plan; CLI and UI share `ChatService` and `Views` (LLD 07) |
+| Eval LLD + real seed data (PR #4) | ✅ LLD 08, `evals/` (20 cases, pre-registered bar), `seed/users.yaml`, 5 seed Trios; all queries verified on BigQuery via project `opsfleet-prototype` (ADC set up) |
 
 ## Decisions made this session, not yet written elsewhere
 
