@@ -2,37 +2,29 @@
 
 The session-to-session handoff. Updated at the end of every session (see [work-plan.md](work-plan.md#how-context-moves-between-sessions)). Newest state at the top; history kept short.
 
-## Current state (2026-11-12)
+## Current state (2026-11-14)
 
-**Phase:** 1 (HLD), sessions 1A–1D done, audit done and its design gaps fixed; PR #2 open. Left: one `/mock-interview interview` rehearsal.
-**Branch:** `docs/hld`
+**Phase:** 2 (LLD), starting. Phase 1 is merged (PR #2).
+**Branch:** `docs/lld`
 
 | Step | Status |
 |---|---|
 | Phase 0: design foundation | ✅ merged (PR #1) |
-| `docs/hld/00`–`10` | ✅ committed (sessions 1A–1C) |
-| `docs/hld/10` author's experience | ✅ committed (575cc9f), framed as delivery risk, not design influence |
-| `docs/hld/11-operations.md` | ✅ committed (e38b339) |
-| `docs/hld/12-assumptions-and-open-questions.md` | ✅ committed (49926f9); `open-items.md` now points to it |
-| `/mock-interview audit` | ✅ run 2026-11-12; design gaps fixed (Persona via chat + `/persona edit` with the Persona Quality Gate, `/stats`, LangSmith option, canary deployment trimmed to 11, consistency fixes) |
-| Hero diagram | ✅ BigQuery box (queries run as the User), all 6 tools, Persona-change box, LangSmith in the observability bar |
-| ADR 0008: Golden Trio retrieval is a fixed step | ✅ committed (96801b8 … ae5f0a4): ADR 0004, HLD 00, 01, 02, 07, 08, 11, decision log and hero diagram aligned; cost estimate now ~$3,700/month |
-| Output PII filter at a single exit | ✅ committed (8d43224 … ffd4f25): ADR 0003 amended; HLD 00, 01, 03, 04, 06, 07 and decision log aligned. Progress events, the Deletion Plan prompt, refusals and `save_report` now all pass the filter |
-| Agent-flow and data-flow diagrams | ✅ committed (1c901e5, bf3f074, 43fffeb): `docs/hld/diagrams/agent-flow.*` and `data-flow.*`, embedded in 01, pointer in 00 |
-| `/mock-interview interview` rehearsal | not run |
+| Phase 1: HLD `00`–`12`, ADRs 0001–0009, diagrams | ✅ merged (PR #2) |
+| External design review | ✅ fixed in 2ae9e0f: Persona gate check 3 tests the answer-writing step; running turns are not resumed after a restart; service account + query guard is the BigQuery baseline (per-User OAuth is an option); Saved Report `scope` re-checked on use; Trios keep method parameters; hard delete defined (Q17); Pub/Sub pushes to a worker service; Deletion Plan bound to User and latest plan; Trio Candidates off until Q1 |
+| `/mock-interview interview` rehearsal | deferred until the prototype runs, so answers can point to working code |
+| Phase 2: LLD | not started |
 
 ## Decisions made this session, not yet written elsewhere
 
-- None. The audit decisions are in `decision-log.md` § Mock-interview audit follow-ups; the fixed-retrieval decision is in ADR 0008.
-- The availability budget was corrected: 99.5% of business hours is ~1–1.5 h a month, not ~4 h (decision log and 11).
-- `12` is now the single list of assumptions and client questions; add new items there, not to `open-items.md`.
+- None. The review's changes are in the HLD, ADRs 0003 and 0005, and the decision log.
 
 ## Open questions
 
-- 16 client questions (Q1–Q16) are listed in `docs/hld/12`; each has a default, so none blocks Phase 2.
-- Not decided in the design: what triggers the Trio Candidate job, and whether an approved Candidate goes through ingestion (marked on the data-flow diagram). Decide before Phase 2 touches the learning loop.
-- Cost estimate inputs in 11 are list prices whose public sources disagree; recompute from prototype traces in Phase 4.
+- 17 client questions (Q1–Q17) in `docs/hld/12`; each has a default, so none blocks Phase 2.
+- Not decided in the design: what triggers the Trio Candidate job, and whether an approved Candidate goes through ingestion. Candidate generation is off by default until Q1 is answered, so this does not block the prototype.
+- Cost estimate inputs in `11` are list prices; recompute from prototype traces in Phase 4.
 
 ## Next session prompt
 
-> Run one `/mock-interview interview` rehearsal on the HLD. Update docs/progress.md and PR #2. When Phase 1 is merged, start Phase 2 with the prompt in docs/work-plan.md.
+> Read docs/hld/, docs/adr/, docs/lld/README.md and docs/work-plan.md. Build the code-first LLD: a `uv` project skeleton, Pydantic schemas, `Protocol` ports, SQL DDL and an ER diagram in `src/`, with explanations in `docs/lld/`. Use the codebase-design skill. Stubs only, no implementation.
