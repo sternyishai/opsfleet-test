@@ -2,7 +2,7 @@
 
 Each port is a `Protocol` in [`src/agent/ports/`](../../src/agent/ports/), and its docstring is the full interface: invariants, error modes and the adapters planned for it. This page fills in the [README checklist](README.md#checklist-for-each-tool-or-port) per port, and holds the trace-attribute names.
 
-ADR 0006 lists ten ports. The LLD adds two: **`UserDirectory`**, the seam between the `load_context` node and the identity tables, and **`Delivery`**, declared but not wired ([ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)).
+ADR 0006 lists ten ports. The LLD adds three: **`UserDirectory`**, the seam between the `load_context` node and the identity tables; **`ScorecardSink`**, where eval runs go ([08](08-eval.md#phoenix)); and **`Delivery`**, declared but not wired ([ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)).
 
 | Port | Methods | Prototype adapter | Production adapter |
 |---|---|---|---|
@@ -17,6 +17,7 @@ ADR 0006 lists ten ports. The LLD adds two: **`UserDirectory`**, the seam betwee
 | [`PersonaStore`](../../src/agent/ports/persona.py) | `active`, `history`, `publish`, `record_rejection`, `rollback` | bundled `persona.yaml`; SQLite (stretch) | Postgres, ~60 s cache; or a prompt registry |
 | [`ChannelAdapter`](../../src/agent/ports/channel.py) | `deliver(message)`, per turn | CLI stdout; web SSE stream (optional) | Slack, Teams, web in the Gateway |
 | [`Tracer`](../../src/agent/ports/tracer.py) | `turn(...)`, `span(name, ...)`, `current_trace_id()` | JSONL; OTel → Phoenix if running | OTel Collector → Phoenix, Langfuse or LangSmith |
+| [`ScorecardSink`](../../src/agent/ports/scorecards.py) | `publish(cases, scorecard)`, `baseline(...)` | JSON in `evals/runs/`; Phoenix experiments if running | same, or Langfuse / LangSmith datasets |
 | [`Delivery`](../../src/agent/ports/delivery.py) | `render(report)`, `send(author_id, rendered, key)` | not wired | email, Slack, push |
 
 ## Checklist per port
@@ -119,6 +120,15 @@ ADR 0006 lists ten ports. The LLD adds two: **`UserDirectory`**, the seam betwee
 - **Failures:** never blocks or fails a turn.
 - **Trace:** it is the trace.
 - **Tests** · slice 5 · `tests/test_tracing.py`: one root span per turn with the attributes below; `/trace` renders the step tree from JSONL; an export failure does not fail the turn.
+
+### `ScorecardSink`
+
+- **Schema:** `EvalCase`, `Scorecard` ([contracts/eval.py](../../src/agent/contracts/eval.py)).
+- **Depends on:** nothing.
+- **Safety:** cases and scorecards hold no rows or PII; traces are linked by ID.
+- **Failures:** a Phoenix outage is reported; the JSON file is always written. No baseline → the regression gate is CANNOT_MEASURE.
+- **Trace:** none of its own.
+- **Tests** · slice 6 · `tests/test_eval_harness.py`: the negative control fails; a crash is CANNOT_MEASURE, not FAIL; a manifest mismatch refuses the comparison.
 
 ## Trace attributes
 

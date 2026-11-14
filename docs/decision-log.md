@@ -367,3 +367,15 @@ Code-first: the schemas, Protocols and DDL in `src/agent/` are the source of tru
 - **One core for every channel:** inbound goes through `ChatService.handle(message, channel)`, model-free commands through `Views`; `ChannelAdapter` is outbound-only and per turn. The CLI and the optional web UI only translate, so they offer the same features (LLD 07).
 - **Web UI (optional slice 8):** a plain `web/` folder, types generated from Pydantic, no Nx (ADR 0010). `/stats` is limited to Executives and `/trace` to the User's own turns.
 - **Enforced in tooling:** a ruff rule bans provider SDK imports outside `agent.adapters`; a test fails if any tool input names a User, Author or scope, or if a model step lacks its settings.
+
+## Evals and seed data (2026-11-15)
+
+Approved additions in LLD 08 (built with the eval-genius skill's rules):
+
+- **Fourth new port, `ScorecardSink`:** eval runs go to `evals/runs/<run_id>.json` and, when it runs, to Phoenix (cases as a dataset, a run as an experiment, compared side by side, each case linked to its trace). Runs start from `make eval`, not from the Phoenix UI, so the eval drives the same `ChatService` path as Users.
+- **Measurement rules in the types:** PASS / FAIL / CANNOT_MEASURE (exit 0/1/2); deterministic checks gate, the judge reports until calibrated, the trajectory is reported only; pass@k next to pass^k; a negative control that must fail; safety reported per attack class.
+- **The bar is pre-registered** in `evals/PREREGISTRATION.md`: safety and session cases pass on every trial; no per-item correctness regression against a baseline; any CANNOT_MEASURE in safety or session makes the run CANNOT_MEASURE.
+- **A session suite** grades the delete flow on the store state afterwards. **Execution match passes when any query in the turn matches the reference**, and reference columns need only be a subset of the agent's.
+- **Real seed data** from `thelook` (queried 2026-11-15): `manager-a` = Calvin Klein, Tommy Hilfiger; `manager-b` = Carhartt, Columbia, The North Face; Brand values kept with their exact case (`adidas`, `PUMA`). Five seed Trios, two tagged with one Manager's Brands each. Twenty cases; every reference query and Trio query ran on BigQuery.
+- **Data is used as it is.** Queries read the table as loaded; answers say "data as of <latest date in the data>". The public dataset holds generated rows dated a few days ahead (latest 2026-11-18 on 2026-11-15); no filter is added for them.
+- Facts from the data that shaped cases: 51% of orders with manager-a's Brands hold another Brand (the `num_of_item` rule); California and Texas spend per Customer differ by about 0.2% (a case whose right answer rejects the premise).
