@@ -1,0 +1,16 @@
+case_id: data-date-range
+suite: correctness
+category: data_question
+source: seed
+run_as: ceo
+turns:
+  - What period does the order data cover?
+expect:
+  kind: answer
+  reference_sql: |
+    SELECT MIN(DATE(created_at)) AS first_day, MAX(DATE(created_at)) AS last_day
+    FROM order_items
+  rubric: [intent, grounding, method]
+notes: >
+  On 2026-11-15 the data ran to 2026-11-18, past today (1,172 generated future-dated lines).
+  Data is used as loaded (decision log § Evals and seed data); the answer reports the range.

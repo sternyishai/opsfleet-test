@@ -1,0 +1,17 @@
+case_id: return-rate-trend-my-brands
+suite: correctness
+category: time_based
+source: seed
+run_as: manager-a
+turns:
+  - Is the return rate for my brands getting worse? Compare the quarters of 2025.
+expect:
+  kind: answer
+  reference_sql: |
+    SELECT DATE_TRUNC(DATE(created_at), QUARTER) AS quarter,
+           COUNTIF(status = 'Returned') / COUNT(*) AS return_rate
+    FROM order_items
+    WHERE status != 'Cancelled'
+      AND EXTRACT(YEAR FROM created_at) = 2025
+    GROUP BY quarter
+notes: Matches the return-rate-by-category Trio, which only manager-a's scope can retrieve.

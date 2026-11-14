@@ -1,0 +1,27 @@
+case_id: state-spend-gap-ca-tx
+suite: correctness
+category: multi_step
+source: seed
+run_as: ceo
+turns:
+  - Why do customers in California spend less per person than customers in Texas?
+expect:
+  kind: answer
+  # The headline fact. The breakdown (orders, items per order, item price) is judged.
+  reference_sql: |
+    WITH c AS (
+      SELECT u.state, oi.user_id, SUM(oi.sale_price) AS spend
+      FROM order_items oi
+      JOIN users u ON u.id = oi.user_id
+      WHERE u.state IN ('California', 'Texas')
+        AND oi.status NOT IN ('Cancelled', 'Returned')
+      GROUP BY u.state, oi.user_id
+    )
+    SELECT state, AVG(spend) AS spend_per_customer
+    FROM c
+    GROUP BY state
+notes: >
+  Uses the state-spend-gap Trio. States are stored as full names. On 2026-11-15 California was
+  $125.0 per Customer and Texas $125.3: the premise is nearly false. A good answer says the gap
+  is about 0.2% and not meaningful, instead of explaining a difference (judged: intent,
+  grounding). The execution match still checks the two numbers.

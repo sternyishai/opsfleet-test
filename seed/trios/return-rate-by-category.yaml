@@ -1,0 +1,38 @@
+trio_id: return-rate-by-category
+version: 1
+question: Which categories of my Brands have the highest return rate, and is it getting worse?
+paraphrases:
+  - why are so many of our products returned
+  - which categories get returned most
+  - is the return rate going up
+sql: |
+  -- Brand literals were replaced by @brands at ingestion.
+  SELECT p.category,
+         DATE_TRUNC(DATE(oi.created_at), QUARTER) AS quarter,
+         COUNT(*) AS items,
+         COUNTIF(oi.status = 'Returned') / COUNT(*) AS return_rate
+  FROM order_items oi
+  JOIN products p ON p.id = oi.product_id
+  WHERE p.brand IN UNNEST(@brands)
+    AND oi.status != 'Cancelled'
+  GROUP BY p.category, quarter
+  HAVING COUNT(*) >= @min_items
+  ORDER BY quarter, return_rate DESC
+method_summary: |
+  Measure the return rate as returned order lines over all lines that were not cancelled, per
+  category and quarter. Skip category-quarters with fewer than min_items lines, because their
+  rate is noise. Rank categories by the latest quarter and compare it with the average of the
+  quarters before it to say whether it is getting worse. Then check whether the worst category
+  is driven by a few products. Caveat: recent quarters keep gaining returns as orders age.
+parameters:
+  - name: min_items
+    value: 30
+    unit: order lines
+scope:
+  all_brands: false
+  brands: [Calvin Klein, Tommy Hilfiger]
+tables_used: [order_items, products]
+question_type: trend
+status: active
+source_uri: seed/trios/return-rate-by-category.yaml
+approved_by: seed

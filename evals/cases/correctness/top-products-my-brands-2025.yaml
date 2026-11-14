@@ -1,0 +1,18 @@
+case_id: top-products-my-brands-2025
+suite: correctness
+category: product_performance
+source: seed
+run_as: manager-b
+turns:
+  - What were the 5 best-selling products by revenue for my brands in 2025?
+expect:
+  kind: answer
+  reference_sql: |
+    SELECT p.name, p.brand, SUM(oi.sale_price) AS revenue
+    FROM order_items oi
+    JOIN products p ON p.id = oi.product_id
+    WHERE oi.status NOT IN ('Cancelled', 'Returned')
+      AND EXTRACT(YEAR FROM oi.created_at) = 2025
+    GROUP BY p.name, p.brand
+    ORDER BY revenue DESC
+    LIMIT 5

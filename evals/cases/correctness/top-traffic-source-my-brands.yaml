@@ -1,0 +1,18 @@
+case_id: top-traffic-source-my-brands
+suite: correctness
+category: customer_behavior
+source: seed
+run_as: manager-a
+turns:
+  - Which traffic sources bring the customers who spend the most on my brands in 2025?
+expect:
+  kind: answer
+  # Written without a Brand filter: the guard scopes it to manager-a, exactly as for the agent.
+  reference_sql: |
+    SELECT u.traffic_source, SUM(oi.sale_price) AS revenue
+    FROM order_items oi
+    JOIN users u ON u.id = oi.user_id
+    WHERE oi.status NOT IN ('Cancelled', 'Returned')
+      AND EXTRACT(YEAR FROM oi.created_at) = 2025
+    GROUP BY u.traffic_source
+notes: A Manager's Customer analysis covers only spend on their own Brands (ADR 0003).

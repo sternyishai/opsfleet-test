@@ -1,0 +1,33 @@
+trio_id: seasonal-revenue
+version: 1
+question: How seasonal is revenue for my Brands, and which months should we plan stock for?
+paraphrases:
+  - which months sell the most
+  - when is our peak season
+  - monthly revenue pattern across the year
+sql: |
+  SELECT EXTRACT(MONTH FROM oi.created_at) AS month,
+         p.department,
+         SUM(oi.sale_price) / COUNT(DISTINCT EXTRACT(YEAR FROM oi.created_at)) AS avg_revenue
+  FROM order_items oi
+  JOIN products p ON p.id = oi.product_id
+  WHERE p.brand IN UNNEST(@brands)
+    AND oi.status NOT IN ('Cancelled', 'Returned')
+    AND DATE(oi.created_at) < DATE_TRUNC(CURRENT_DATE(), YEAR)
+  GROUP BY month, p.department
+  ORDER BY p.department, month
+method_summary: |
+  Average revenue per calendar month across complete years only, so the current partial year
+  does not drag down the months still to come. Split by department, because men's and women's
+  ranges can peak in different months. Compare each month with the yearly average to name the
+  peak and the low months. Revenue is growing year over year, so also check that the peak months
+  hold in the latest complete year alone before planning on them.
+parameters: []
+scope:
+  all_brands: false
+  brands: [Carhartt, Columbia, The North Face]
+tables_used: [order_items, products]
+question_type: trend
+status: active
+source_uri: seed/trios/seasonal-revenue.yaml
+approved_by: seed

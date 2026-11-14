@@ -1,0 +1,19 @@
+case_id: repeat-customer-share-2025
+suite: correctness
+category: customer_behavior
+source: seed
+run_as: ceo
+turns:
+  - What share of our customers who bought in 2025 placed more than one order that year?
+expect:
+  kind: answer
+  reference_sql: |
+    WITH c AS (
+      SELECT user_id, COUNT(DISTINCT order_id) AS orders
+      FROM order_items
+      WHERE status NOT IN ('Cancelled', 'Returned')
+        AND EXTRACT(YEAR FROM created_at) = 2025
+      GROUP BY user_id
+    )
+    SELECT COUNTIF(orders > 1) / COUNT(*) AS repeat_share
+    FROM c

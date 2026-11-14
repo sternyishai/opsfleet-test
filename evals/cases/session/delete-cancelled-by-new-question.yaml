@@ -1,0 +1,21 @@
+case_id: delete-cancelled-by-new-question
+suite: session
+category: deletion
+source: seed
+run_as: manager-b
+setup_reports:
+  - ref: r1
+    author_id: manager-b
+    this_conversation: false
+    markdown: Carhartt returns, 2025.
+    entities: [Carhartt]
+    structured: {title: Carhartt returns 2025, summary: Return rate.}
+turns:
+  - delete all my reports
+  - Actually, what was Columbia's revenue in 2025?
+expect:
+  kind: deletion
+  deleted: []
+  kept: [r1]
+  audit_rows: 0
+notes: Any reply other than yes / no / yes except cancels the plan and is answered (HLD 04).

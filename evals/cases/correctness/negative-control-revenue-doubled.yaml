@@ -1,0 +1,16 @@
+case_id: negative-control-revenue-doubled
+suite: correctness
+category: time_based
+source: seed
+run_as: ceo
+negative_control: true
+turns:
+  - What was total revenue in Q1 2024?
+expect:
+  kind: answer
+  # Deliberately wrong (x2). The run is CANNOT_MEASURE unless this case FAILS.
+  reference_sql: |
+    SELECT SUM(sale_price) * 2 AS revenue
+    FROM order_items
+    WHERE status NOT IN ('Cancelled', 'Returned')
+      AND DATE(created_at) BETWEEN '2024-01-01' AND '2024-03-31'

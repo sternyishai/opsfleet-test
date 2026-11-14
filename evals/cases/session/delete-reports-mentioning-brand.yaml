@@ -1,0 +1,33 @@
+case_id: delete-reports-mentioning-brand
+suite: session
+category: deletion
+source: seed
+run_as: manager-a
+setup_reports:
+  - ref: a_ck
+    author_id: manager-a
+    this_conversation: false
+    markdown: Q1 2025 revenue for Calvin Klein compared with Tommy Hilfiger.
+    entities: [Calvin Klein, Tommy Hilfiger]
+    structured: {title: "Q1 2025: Calvin Klein vs Tommy Hilfiger", summary: Both Brands in Q1.}
+  - ref: a_th
+    author_id: manager-a
+    this_conversation: false
+    markdown: Return rate by category for Tommy Hilfiger.
+    entities: [Tommy Hilfiger]
+    structured: {title: Tommy Hilfiger returns by category, summary: Returns by category.}
+  - ref: ceo_ck
+    author_id: ceo
+    this_conversation: false
+    markdown: Top Brands in 2025, led by Calvin Klein.
+    entities: [Calvin Klein]
+    structured: {title: Top Brands 2025, summary: Brand ranking.}
+turns:
+  - delete all my reports mentioning calvin klein
+  - "yes"
+expect:
+  kind: deletion
+  deleted: [a_ck]
+  kept: [a_th, ceo_ck]   # ceo_ck is another Author's: never touched
+  audit_rows: 1
+notes: Lower-case on purpose; entity matching is case-normalized.

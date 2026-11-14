@@ -1,0 +1,47 @@
+# Stored form (HLD 02): measured results removed, numbers only as declared parameters.
+trio_id: churn-monthly
+version: 1
+question: Why did customer churn rise last month?
+paraphrases:
+  - why are we losing customers
+  - are fewer customers coming back to buy again
+  - what is driving the increase in churn
+sql: |
+  WITH customer_days AS (
+    SELECT user_id, DATE(created_at) AS order_date
+    FROM order_items
+    WHERE status NOT IN ('Cancelled', 'Returned')
+    GROUP BY user_id, order_date
+  ),
+  next_order AS (
+    SELECT user_id, order_date,
+           LEAD(order_date) OVER (PARTITION BY user_id ORDER BY order_date) AS next_date
+    FROM customer_days
+  )
+  SELECT DATE_TRUNC(order_date, MONTH) AS month,
+         COUNT(*) AS order_days,
+         COUNTIF(next_date IS NULL
+                 OR DATE_DIFF(next_date, order_date, DAY) > @churn_window_days) / COUNT(*) AS churn_rate
+  FROM next_order
+  WHERE order_date < DATE_SUB(CURRENT_DATE(), INTERVAL @churn_window_days DAY)
+  GROUP BY month
+  ORDER BY month
+method_summary: |
+  Define churn per order day: a Customer churns after an order when they place no further
+  order within churn_window_days. Compute the monthly churn rate and compare the latest month
+  whose window has closed with the month before it. Leave out order days closer to today than
+  the churn window, because their outcome is not final yet. Then break the change down by
+  product category and by traffic source, and check whether a larger share of first-time
+  buyers explains it before concluding that retention got worse.
+  Caveat: say which months are excluded as not yet final.
+parameters:
+  - name: churn_window_days
+    value: 90
+    unit: days
+scope:
+  all_brands: true   # analyst query covered every Brand: Executives only (ADR 0005)
+tables_used: [order_items]
+question_type: churn
+status: active
+source_uri: seed/trios/churn-monthly.yaml
+approved_by: seed
