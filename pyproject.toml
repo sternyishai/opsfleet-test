@@ -1,0 +1,60 @@
+[project]
+name = "agent"
+version = "0.1.0"
+description = "Retail Analysis Assistant: a LangGraph agent that answers leadership's sales questions on BigQuery, safely."
+authors = [
+    { name = "Yishai Stern" }
+]
+requires-python = ">=3.12"
+# Only what the contracts and ports import. Adapter SDKs (google-cloud-bigquery,
+# langchain-google-genai, sqlglot, tenacity, opentelemetry, ...) are added by the
+# slice that builds each adapter, so the core never depends on them (ADR 0006).
+dependencies = [
+    "langchain-core>=0.3",
+    "langgraph>=0.4",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+]
+
+[project.optional-dependencies]
+# The optional web channel (ADR 0010). `uv sync --extra web`.
+web = [
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+]
+
+[project.scripts]
+agent = "agent.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Ship the DDL and the ER diagram with the package, so adapters can load them.
+source-include = ["src/agent/db/*.sql", "src/agent/db/*.md"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "TID"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# ADR 0006: provider SDKs only inside adapters.
+"google.cloud".msg = "Import provider SDKs only in agent.adapters.*"
+"google.genai".msg = "Import provider SDKs only in agent.adapters.*"
+"langchain_google_genai".msg = "Import provider SDKs only in agent.adapters.*"
+
+[tool.ruff.lint.per-file-ignores]
+"src/agent/adapters/**" = ["TID251"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
