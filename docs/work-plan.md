@@ -111,22 +111,26 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 8. **Optional: web UI** ([ADR 0010](adr/0010-ui-is-a-plain-folder-with-generated-types.md)): FastAPI adapter (`agent web`, SSE), `make types`, a small React app in `web/` with chat, the Deletion Plan checkboxes and "My reports". Everything the CLI does goes through `ChatService` and `Views`, so the UI adds no backend logic.
 
 **Done when:**
-- [ ] every slice is an issue with acceptance criteria and links to the LLD
+- [x] every slice is an issue with acceptance criteria and links to the LLD: #5–#14 (slice 7 is split into #11 Trios, #12 Persona, #13 Profile notes)
+- [x] build guardrails: `CODING_STANDARDS.md` (what `/code-review` checks), a pre-commit hook running `ruff`, `pyright` and `pytest`
 
 ## Phase 4: Build, one slice per session (~4–5 h total)
 
-**Prerequisites (once, before slice 1):**
-- [ ] a Gemini API key from Google AI Studio, put in `.env`
-- [ ] `gcloud auth application-default login` (BigQuery access)
-- If either step is unclear, use `/mattpocock-skills:wizard`.
+**Prerequisites (once):**
+- [ ] a Gemini API key from Google AI Studio, put in `.env`. Needed only for the manual check at the end of slice 1; the tests run without it.
+- [x] `gcloud auth application-default login` (BigQuery access)
+- [x] `git config core.hooksPath .githooks` in this clone (commit-message and pre-commit hooks)
+- If a step is unclear, use `/mattpocock-skills:wizard`.
 
-**Branch per issue:** `feat/<n>-<slug>`, e.g. `feat/2-query-guard`
+**Branch per issue:** `feat/<n>-<slug>`, e.g. `feat/6-query-guard`
 
-**Prompt:**
+**Prompt** (one issue per session; `/clear` between issues):
 
-> Work on issue #N with the tdd skill. Read docs/lld/ for the interfaces. Keep docs/lld/ in sync with any interface change.
+> /mattpocock-skills:implement #N
 
-**Loop:** red → green → refactor → `/code-review` → PR (closes #N) → merge.
+`implement` reads the issue, builds it test-first with the `tdd` skill at the seams listed in the issue, runs `/code-review` (Standards against `CODING_STANDARDS.md`, Spec against the issue) and commits. Keep `docs/lld/` in sync with any interface change.
+
+**Loop:** `/mattpocock-skills:implement #N` → PR (closes #N) → merge → `/clear`. After the first issue (#5), run `/mattpocock-skills:retro` once in that session, before clearing.
 
 **Done when:**
 - [ ] slices 1–6 are merged (7 if time allows)

@@ -14,7 +14,7 @@ Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/d
 
 ### Commits
 
-Conventional Commits, enforced by `.githooks/commit-msg` (enable per clone: `git config core.hooksPath .githooks`). The subject line is `type(scope): summary`, where `type` is one of `feat fix docs refactor test chore ci build perf style revert`. Scopes follow the design areas: `hld`, `lld`, `adr`, `glossary`, `agent`, `guard`, `reports`, `obs`, `eval`, `cli`. The summary is imperative and lowercase, at most 72 chars; the body says *why*.
+Conventional Commits, enforced by `.githooks/commit-msg`; `.githooks/pre-commit` runs `ruff`, `pyright` and `pytest` (enable both per clone: `git config core.hooksPath .githooks`). Code is reviewed against `CODING_STANDARDS.md`. The subject line is `type(scope): summary`, where `type` is one of `feat fix docs refactor test chore ci build perf style revert`. Scopes follow the design areas: `hld`, `lld`, `adr`, `glossary`, `agent`, `guard`, `reports`, `obs`, `eval`, `cli`. The summary is imperative and lowercase, at most 72 chars; the body says *why*.
 
 ### Excalidraw skill
 
