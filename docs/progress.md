@@ -2,10 +2,10 @@
 
 The session-to-session handoff. Updated at the end of every session (see [work-plan.md](work-plan.md#how-context-moves-between-sessions)). Newest state at the top; history kept short.
 
-## Current state (2026-11-14)
+## Current state (2026-11-15)
 
-**Phase:** 2 (LLD) merged (PR #3); eval LLD in PR #4. Next: Phase 3 (GitHub issues) once PR #4 is merged.
-**Branch:** `docs/lld`
+**Phase:** 3 (GitHub issues) done: #5–#14. Build guardrails on branch `chore/build-guardrails`. Next: Phase 4, issue #5.
+**Branch:** `chore/build-guardrails`
 
 | Step | Status |
 |---|---|
@@ -16,6 +16,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Phase 2: LLD | ✅ committed (165e81d … b0bbc30): `uv` skeleton, Pydantic contracts, 12 `Protocol` ports, graph state, stubbed tools and core modules, Postgres + SQLite DDL (Postgres verified in `pgvector/pg17`), ER diagram, `docs/lld/01`–`07`, 12 passing tests |
 | One model setting per call | ✅ 12 `ModelStep`s with inheritance; HLD 10 table and 02 updated; settles the figure-stripping model (`MODEL_TRIO_INGEST`, Flash) |
 | ADR 0010: UI in a plain `web/` folder | ✅ optional slice 8 in the work plan; CLI and UI share `ChatService` and `Views` (LLD 07) |
+| Phase 3: GitHub issues | ✅ #5–#14 labelled `ready-for-agent`, native blocked-by links; slice 7 split into #11 Trios, #12 Persona, #13 Profile notes |
+| Build guardrails | ✅ `CODING_STANDARDS.md`, `.githooks/pre-commit` (ruff, pyright, pytest), pyright in dev deps; Phase 4 prompt is now `/mattpocock-skills:implement #N` |
 | Eval LLD + real seed data (PR #4) | ✅ LLD 08, `evals/` (20 cases, pre-registered bar), `seed/users.yaml`, 5 seed Trios; all queries verified on BigQuery via project `opsfleet-prototype` (ADC set up) |
 
 ## Decisions made this session, not yet written elsewhere
@@ -31,4 +33,6 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Read docs/hld/, docs/lld/ and docs/work-plan.md. Create GitHub issues as vertical slices following docs/agents/issue-tracker.md, labeled `ready-for-agent`, each one referencing the ports and schemas it implements and including acceptance criteria. Use the slice order in docs/work-plan.md (slice 8, the web UI, is optional).
+> /mattpocock-skills:implement #5
+
+(The Gemini key in `.env` is needed only for #5's final manual check.)
