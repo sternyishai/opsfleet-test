@@ -17,7 +17,8 @@ flowchart LR
         end
         subgraph internal [internal ingress only]
             API[Chat API<br/>Cloud Run, CPU always allocated,<br/>min 1 instance]
-            JOBS[Background jobs<br/>Cloud Run jobs]
+            WRK[Background worker<br/>Cloud Run service]
+            JOBS[Batch jobs<br/>Cloud Run jobs]
             OTC[OTel Collector +<br/>trace backend]
         end
         PS[(Pub/Sub<br/>+ dead-letter topics)]
@@ -38,14 +39,18 @@ flowchart LR
     API --> BQ
     API --> SDP
     API -- events --> PS
-    SCH --> PS
+    SCH --> JOBS
+    SCH -- nightly sweep --> PS
     GCS -- object finalized --> PS
-    PS --> JOBS
+    PS -- push --> WRK
+    WRK --> SQL
+    WRK --> VX
     JOBS --> SQL
     JOBS --> VX
     JOBS --> BQ
     ADM --> SQL
     API --> OTC
+    WRK --> OTC
     JOBS --> OTC
     OTC --> MON
     SM -. secrets .-> API
@@ -56,14 +61,15 @@ flowchart LR
 | **Channel Gateway** | Cloud Run service, public ingress | Acknowledges each channel within its deadline; holds the per-turn deadline that sends "taking too long" ([06](06-resilience.md)) |
 | **Chat API** | Cloud Run service, internal ingress only | CPU always allocated (turns continue after the ack); min 1 instance so the first question of the day has no cold start; a max-instances cap sized to the Postgres connection limit |
 | **Admin UI** | Cloud Run service behind IAP | Scales to zero; used weekly by the CEO for the Persona and daily by analysts ([09](09-persona-management.md), [02](02-hybrid-intelligence.md)) |
-| **Background jobs** | Cloud Run jobs, same image as the services | Triggered by Pub/Sub or Cloud Scheduler; run off-peak with their own model budget so they never compete with Users |
+| **Background worker** | Cloud Run service, internal ingress, same image as the services | Pub/Sub push subscriptions, because a Cloud Run job is not an HTTP endpoint and cannot receive a push ([Cloud Run jobs](https://cloud.google.com/run/docs/execute/jobs), [Pub/Sub tutorial](https://cloud.google.com/run/docs/tutorials/pubsub)). Returns success only after its work commits; the dead-letter topic sits on each subscription. Its own model budget, so it never competes with Users |
+| **Batch jobs** | Cloud Run jobs, same image | Started by Cloud Scheduler; run off-peak with their own model budget. A failed run is retried and alerted |
 | **Postgres** | Cloud SQL, HA (regional, standby in a second zone) | Automatic failover; point-in-time recovery; private IP only |
 | **Trace backend** | Self-hosted Phoenix or Langfuse ([08](08-observability.md)) | Internal ingress; access limited to the AI-ops team |
 
 - **One region.** Every service runs in the region of the governed BigQuery dataset, so no query result or prompt crosses regions. Vertex AI has a second region configured as a fallback only ([06](06-resilience.md)).
 - **Environments.** Separate projects for dev, staging and production, created from the same infrastructure-as-code definitions. Staging points at a copy of the governed dataset and runs the canaries and the release gate ([07](07-quality-assurance.md)).
 - **Delivery.** CI builds one container image per commit, runs the deterministic tests and pushes the image to Artifact Registry. A release deploys a new Cloud Run revision with no traffic; the canary percentage and full rollout are traffic splits between revisions, and rollback is moving traffic back. Prompt, model and Persona changes do not need a deploy at all: they are configuration or Persona versions ([09](09-persona-management.md)).
-- **Restarts lose nothing.** Graph state is checkpointed after every node ([01](01-architecture.md#conversation-state)), so an instance replaced during a rollout, or a paused Deletion Plan, resumes from Postgres.
+- **Restarts keep saved state, not work in progress.** Graph state is checkpointed after every node ([01](01-architecture.md#conversation-state)), so Conversation history and a paused Deletion Plan survive any instance. A turn that was running when its instance stopped is **not resumed**: Cloud Run may stop an instance at any time with a short grace period, even with min instances and CPU always allocated ([Cloud Run billing settings](https://cloud.google.com/run/docs/configuring/billing-settings)). Each turn has a status (`running`, `done`, `failed`) and a deadline in Postgres. When the stream ends without a reply, or the deadline passes, the Gateway sends the failure message with the reference ID and the User asks again ([06](06-resilience.md#never-crashing-the-ui)). Every BigQuery job carries a job timeout, so a query left behind stops by itself. Guaranteed resume would need a queue and workers, the growth path in [Scale](#scale).
 - **Portable.** Every box is a container or a managed service behind a port. The same images run on any container host; the equivalents are listed in [10](10-stack-rationale.md).
 
 ## Scale
@@ -143,10 +149,10 @@ Every control below is a ceiling, so a bug or a heavy User cannot turn into an o
 | Model calls per turn | Analysis-step cap, 2 SQL retries, 1 empty-result probe (code, not a model call), a turn deadline | Graph state ([06](06-resilience.md)) |
 | Prompt size | Last N turns verbatim plus a running summary; result summaries, never rows | Conversation state ([01](01-architecture.md#conversation-state)) |
 | Per-User daily quota | Tokens and BigQuery bytes, about 5× a typical User's day; "daily quota reached" message, resets at midnight | Chat API |
-| Global daily spend cap | About 3× the expected daily spend; alert at 80%, then interactive traffic only | Chat API + billing alert ([08](08-observability.md)) |
-| Repeated questions | Result cache per question and scope until the next data load, plus BigQuery's own cache | `QueryRunner` adapter |
+| Global daily spend cap | About 3× the expected daily spend. At 80%: an alert, and background jobs pause so only interactive turns spend. At 100%: new turns get the "daily quota reached" message until midnight | Chat API, from its own token and bytes counters; billing data arrives late, so the billing alert is only a backstop ([08](08-observability.md)) |
+| Repeated questions | Result cache keyed on the final SQL, its bound parameters and the User's scope version, valid until the next data load, plus BigQuery's own cache | `QueryRunner` adapter |
 | Model tier per step | Flash-Lite for classification and extraction; Pro only for reports and the judge | `.env` ([10](10-stack-rationale.md)) |
-| Background jobs | Off-peak, with their own budget; batch API pricing where the provider offers it | Cloud Run jobs |
+| Background jobs | Off-peak, with their own budget; batch API pricing where the provider offers it | Worker service and Cloud Run jobs |
 | Canaries | 4 short questions every 15 minutes in business hours, hourly outside them (~220 runs a day instead of ~380) | Cloud Scheduler |
 
 The cost metric that matters is **cost per successful answer** ([08](08-observability.md)): a change that saves tokens by failing more often shows up as a cost increase, not a saving.

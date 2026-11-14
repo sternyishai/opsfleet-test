@@ -23,7 +23,7 @@ Every assumption the design rests on, every point the client has already confirm
 |---|---|---|---|
 | A1 | `thelook` has no link between people and Brands, so Brand Assignments are our own table: seeded in the prototype, administered in production. | [03](03-safety-and-pii.md#identity-and-roles) | If an HR or CRM system already holds the mapping, a sync job imports it into the same table. Nothing downstream changes. |
 | A2 | Executives may analyze all Brands, Managers only their Brand Assignments, and anyone else is denied by default (an authenticated User with no role gets no data). | [03](03-safety-and-pii.md#identity-and-roles) | New roles (for example a regional manager) are new scope rules in the query guard and new row access policies. The default-deny stays. |
-| A3 | Users have Google identities through SSO, so queries can run with their own short-lived credentials and BigQuery row access policies apply to the real person. | [03](03-safety-and-pii.md#data-platform-production), [10](10-stack-rationale.md) | Any OIDC provider works for sign-in, but queries then run as the service account and the query guard carries Brand scoping alone, as in the prototype. Still safe, with one layer fewer. |
+| A3 | Queries run as the agent's read-only service account, and the query guard carries Brand scoping, because SSO identifies Users but gives no BigQuery credentials. Per-User queries, so row access policies apply to the real person, need Google identities and a one-time OAuth consent with a read-only BigQuery scope. | [03](03-safety-and-pii.md#data-platform-production), [10](10-stack-rationale.md) | If the client wants per-User queries, we add the consent flow and encrypted token storage; Users who have not consented stay on the service account. Either way it is still safe; per-User queries add one layer. |
 
 ### Data platform and the data team
 
@@ -58,7 +58,7 @@ Every assumption the design rests on, every point the client has already confirm
 |---|---|---|---|
 | A16 | Vertex AI is the production model endpoint, under terms that exclude training on customer data. | [10](10-stack-rationale.md), [11](11-operations.md#security) | Another provider is a `.env` change through the model factory, after it passes the per-step evals. |
 | A17 | Contracts or keys exist for a second Vertex AI region and a second provider, so the fallback chain can reach them. | [06](06-resilience.md) | The chain ends at Flash-Lite in the primary region. A full Gemini outage then gives the "model busy" message. |
-| A18 | The cost inputs in [11](11-operations.md#cost-estimate-back-of-the-envelope): list prices from November 2026, ~6 analysis calls of ~8k tokens per question, ~5 GB billed per question. | [11](11-operations.md#cost-estimate-back-of-the-envelope) | They are replaced by measured values from the prototype and pilot traces. The cost ceilings bound spend either way. |
+| A18 | The cost inputs in [11](11-operations.md#cost-estimate-back-of-the-envelope): list prices from November 2026, ~5 analysis calls of ~8k tokens per question, ~5 GB billed per question. | [11](11-operations.md#cost-estimate-back-of-the-envelope) | They are replaced by measured values from the prototype and pilot traces. The cost ceilings bound spend either way. |
 
 ### Extensions
 
@@ -72,10 +72,10 @@ Each question has our proposed default, so the design proceeds while it is open.
 
 | # | Question | Our default until answered | Relates to |
 |---|---|---|---|
-| Q1 | May an Author's private Saved Report be *proposed* (anonymized, figures stripped) as a Trio Candidate for analyst review? | Yes, only after analyst approval, and only from reports with strong signals | [02](02-hybrid-intelligence.md), [05](05-learning-loop.md) |
+| Q1 | May an Author's private Saved Report be *proposed* (anonymized, figures stripped) as a Trio Candidate for analyst review? | No, until answered: an analyst's approval is not the Author's consent to expose the report. Candidate generation from Saved Reports is off, and Trios come from expert files only. A yes turns it on as a setting; Candidates still need analyst approval | [02](02-hybrid-intelligence.md), [05](05-learning-loop.md) |
 | Q2 | When an Author deletes a Saved Report, we delete any pending Trio Candidate derived from it but keep an already-approved Trio. Is that acceptable? | Yes, as described | [04](04-destructive-ops.md) |
 | Q3 | Is 90-day retention for raw traces, interaction records and checkpoints acceptable, and indefinite retention for anonymized aggregates and the deletion audit? | As stated (A8, A9) | [01](01-architecture.md), [08](08-observability.md) |
-| Q4 | Do all Users sign in with Google identities (Workspace or Cloud Identity)? | Yes (A3) | [03](03-safety-and-pii.md), [10](10-stack-rationale.md) |
+| Q4 | Do all Users have Google identities (Workspace or Cloud Identity), and is a one-time OAuth consent for BigQuery acceptable so queries can run as each User? | No consent flow: queries run as the service account with the query guard (A3) | [03](03-safety-and-pii.md), [10](10-stack-rationale.md) |
 | Q5 | Where do Brand Assignments come from today (an HR or CRM system, a spreadsheet), and who changes them? | Administered in our own table (A1) | [03](03-safety-and-pii.md) |
 | Q6 | Can the data team publish the four tables into a governed dataset, date-partitioned, and in which region? | Yes (A4, A5, A7) | [03](03-safety-and-pii.md), [11](11-operations.md) |
 | Q7 | Who owns and is on call for the agent in production? | An AI-ops team, business hours (A10) | [08](08-observability.md), [11](11-operations.md) |
@@ -88,6 +88,7 @@ Each question has our proposed default, so the design proceeds while it is open.
 | Q14 | Is a second model provider acceptable for fallback, and which one? | A second Vertex AI region first, then one provider the client approves (A17) | [06](06-resilience.md) |
 | Q15 | May a User send a report to someone other than themselves, by email or Slack? | No: only to the Author (A19) | [04](04-destructive-ops.md), [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md) |
 | Q16 | Which outbound capability, if any, should come first: email, Slack posting or push notifications? | None until asked; email first, as the assignment's example. Each is one `Delivery` adapter | [01](01-architecture.md#agent-graph), [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md) |
+| Q17 | Deleting a Saved Report removes it from the library. Must it also purge copies of its answer in Conversation history, interaction records and traces, or is the 90-day age-out enough? | Library removal plus the 90-day age-out (A8) | [04](04-destructive-ops.md#executing-the-deletion) |
 
 ## POCs to run
 

@@ -80,7 +80,7 @@ flowchart LR
 | **Postgres** | None. Without it there is no identity, no Brand Assignments and no checkpoint, so the turn fails closed. Cloud SQL runs in high-availability mode ([11](11-operations.md)). | "I'm unavailable right now. Please try again shortly." |
 | **Golden Trio search** | The agent continues from the schema alone; the turn is flagged as degraded. | Nothing visible; the answer may be less informed. |
 | **Persona store** | The last cached version, or the bundled default Persona on a cold start ([09](09-persona-management.md)). | Nothing visible. |
-| **Output PII filter (Sensitive Data Protection)** | The regex detectors used in the prototype stay in production as the fallback. **The filter is never skipped**: it sits at the single outbound function, so no message leaves without it ([03](03-safety-and-pii.md#pii-never-in-never-out)). | Nothing visible. |
+| **Output PII filter (Sensitive Data Protection)** | The regex detectors used in the prototype stay in production as the fallback. **The filter is never skipped**: it sits at the single outbound function, so no message leaves without it ([03](03-safety-and-pii.md#pii-never-in-never-out)). **Accepted trade-off:** during the outage detection is narrower (emails, phone numbers, street addresses, postal codes and coordinates, not free-form names). PII columns are already blocked by the schema, the query guard and the platform, and failing closed would stop every answer; each fallback activation is traced and alerted. | Nothing visible. |
 | **Pub/Sub** (events after commit) | Publishing is retried. If it still fails, nightly sweeps redo the missed work, for example extracting entities for reports that have none; the full-text fallback covers matching meanwhile. | Nothing visible. |
 | **Observability backend** | Spans are exported asynchronously in batches and dropped on overflow. Tracing never blocks or fails a turn; errors still reach Cloud Logging. | Nothing visible. |
 
@@ -94,6 +94,7 @@ Background jobs have their own resilience: at-least-once delivery, idempotent ha
 - **The Gateway has its own deadline.** If the Chat API does not answer in time, the Gateway sends the "taking too long" message itself, so a channel never waits in silence.
 - **Progress keeps long turns from looking stuck.** Retries and fallbacks emit progress events ("Checking that filter again…"), streamed to the channel ([01](01-architecture.md#how-components-communicate)). They are templates, not free model text, and pass the output PII filter on the way out ([03](03-safety-and-pii.md#pii-never-in-never-out)).
 - **The Conversation survives.** State is checkpointed after every node, so after a failure the User simply continues. A failed turn is never replayed later, because a late answer to an old question confuses the User.
+- **A stopped instance ends its turn, not the Conversation.** If the Chat API instance stops mid-turn, the turn is not resumed. The Gateway sees the stream end without a reply, or its deadline pass, and sends the failure message with the reference ID. Every BigQuery job has a job timeout, so a query left behind stops by itself ([11](11-operations.md#deployment)).
 
 ### The message catalog
 
@@ -125,8 +126,8 @@ Resilience must not become a way to spend money. Every loop has a ceiling:
 | Retries multiplying model calls | Retries only on retryable errors, within a per-turn budget; the breaker stops retry storms |
 | Diagnosis costing a model call | The empty-result probe is code reading the AST, not a model call |
 | Big results re-sent on every retry | Only a compact result summary enters the context, never the rows ([01](01-architecture.md#conversation-state)) |
-| Repeated questions | Result cache per question and scope until the next data load, plus BigQuery's own cache ([11](11-operations.md)) |
-| One heavy User | Per-User daily quotas on tokens and bytes; a global daily spend cap with an alert at 80% ([11](11-operations.md)) |
+| Repeated questions | Result cache keyed on the final SQL, its bound parameters and the User's scope version, valid until the next data load, plus BigQuery's own cache ([11](11-operations.md)) |
+| One heavy User | Per-User daily quotas on tokens and bytes; a global daily spend cap: an alert and paused background jobs at 80%, new turns refused at 100% ([11](11-operations.md#cost-controls)) |
 
 Retries per question, bytes per question and cost per successful answer are tracked metrics, so a change that makes self-correction more expensive is visible in the next review ([08](08-observability.md)).
 

@@ -107,7 +107,7 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 4. **Saved Reports + Deletion Plan (Req 3):** create a report with action items; confirm-before-delete with `yes / no / yes except N`.
 5. **Observability (Req 7):** JSONL traces, `/trace`, Phoenix export.
 6. **Eval (Req 6, small):** `make eval` scorecard.
-7. **Stretch:** seed Golden Trios, `persona.yaml`, User Profile notes.
+7. **Stretch:** seed Golden Trios, the Persona mechanism (chat or `/persona edit`, quality gate, versions in SQLite; `persona.yaml` is version 1), User Profile notes.
 
 **Done when:**
 - [ ] every slice is an issue with acceptance criteria and links to the LLD

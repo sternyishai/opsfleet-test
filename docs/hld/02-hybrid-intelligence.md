@@ -12,7 +12,11 @@ A Trio pairs a Question with the SQL Query that answered it and the Analyst Repo
 
 Its **figures** are a liability. They are stale by the next data load, and they may describe Brands the requesting User may not see.
 
-So the Golden Bucket stores each Trio with its figures removed, and the numbers in an answer always come from a fresh query scoped to the User ([ADR 0005](../adr/0005-golden-trios-teach-method-not-figures.md)).
+So the Golden Bucket keeps a Trio's **method parameters** and removes its **measured results** ([ADR 0005](../adr/0005-golden-trios-teach-method-not-figures.md)):
+- A **parameter** is part of a definition: the 90-day churn window, a threshold, a minimum order count. Parameters stay, declared by name in the Trio.
+- A **measured result** is what the data showed: "churn rose to 6.3%", "Brand A fell 38%". Results are removed from all three parts of the Trio, the question, the SQL and the report, together with identifiers such as Brand names and Customer IDs.
+
+The numbers in an answer always come from a fresh query scoped to the User.
 
 | | Raw Analyst Report (in GCS) | What the agent sees (in pgvector) |
 |---|---|---|
@@ -29,7 +33,8 @@ One Trio is one retrieval unit, never split into chunks. A Trio is a small, self
 | `trio_id`, `version` | Stable identity. Each edit creates a new version; traces record the exact `trio_id@version` used. |
 | `question`, `paraphrases[]` | **The only embedded text.** Analysts may add paraphrases that should lead to the same Trio. |
 | `sql` | Payload: returned with a match, not embedded. |
-| `method_summary` | Payload: the figure-free summary of how the analyst reasoned. Long reports are summarized, not chunked. |
+| `method_summary` | Payload: how the analyst reasoned, with measured results removed. Long reports are summarized, not chunked. |
+| `parameters` | Payload: the method's definition values, with names and units (`churn_window_days: 90`). A number may appear in a Trio only as one of these. |
 | `brands[]` | The Brands the Trio's data covers. Used to filter retrieval. |
 | `tables_used[]`, `question_type` | Filtering and analytics: comparison, trend, churn, cohort, … |
 | `status` | `active`, `superseded` or `retired`. Only `active` Trios are retrieved. Trio Candidates live in their own table until approved. |
@@ -42,10 +47,10 @@ flowchart LR
     A[Analyst drops Trio file<br/>into GCS golden/raw/] -- object finalized --> PS[(Pub/Sub)]
     S[Cloud Scheduler<br/>nightly sweep] --> PS
     PS --> J
-    subgraph J [ingestion job on Cloud Run]
+    subgraph J [ingestion handler on the worker service]
         p[parse + validate shape] --> d[dry-run SQL against<br/>current schema]
-        d --> m[summarize report into method<br/>and strip figures]
-        m --> v{figure check:<br/>any numbers left?}
+        d --> m[summarize into method,<br/>keep parameters, remove results]
+        m --> v{figure check: any number<br/>that is not a parameter?}
         v -- yes --> q[quarantine for<br/>analyst review]
         v -- no --> t[tag Brands, tables,<br/>question type]
         t --> e[embed question<br/>+ paraphrases]
@@ -54,10 +59,10 @@ flowchart LR
     PS -. after N failures .-> DLQ[(dead-letter topic<br/>+ alert)]
 ```
 
-- **Triggered by** a GCS object-finalize event, plus a nightly sweep that catches anything missed. The job is idempotent on `trio_id + version`, so a redelivered message is a no-op.
+- **Triggered by** a GCS object-finalize event, plus a nightly sweep that catches anything missed. The handler runs on the background worker service, acknowledges only after it commits, and is idempotent on `trio_id + version`, so a redelivered message is a no-op.
 - **SQL is dry-run at ingestion.** A Trio whose SQL does not compile against the current schema is never published.
-- **Figure stripping is verified, not trusted.** An LLM step (Flash) writes the method summary without figures. A deterministic check then looks for remaining numbers, percentages and currency amounts. Any hit sends the Trio to an analyst instead of publishing it.
-- **Brand tagging** combines the Brand literals found in the SQL with entities named in the report. If a Trio cannot be tagged with confidence, it is tagged as covering all Brands, so only Executives can retrieve it until an analyst corrects it.
+- **Figure stripping is verified, not trusted.** An LLM step (Flash) writes the method summary without figures. A deterministic check then looks for numbers, percentages and currency amounts in the question, the SQL literals and the summary. A number is allowed only where it matches a declared parameter; any other hit sends the Trio to an analyst instead of publishing it.
+- **Brand tagging** combines the Brand literals found in the SQL with entities named in the report. If a Trio cannot be tagged with confidence, it is tagged as covering all Brands, so only Executives can retrieve it until an analyst corrects it. After tagging, Brand literals in the SQL become a query parameter and Brand names in the question a placeholder, so the Trio itself names no Brand.
 - **Embedding** uses a Gemini embedding model through the same model factory as every other model call (`MODEL_EMBEDDING`).
 
 ## Query time: giving the agent the right knowledge
@@ -109,11 +114,10 @@ stateDiagram-v2
 
 1. **Experts add or edit Trios.** Analysts drop new files, or new versions of existing ones, into GCS. Ingestion publishes them. The previous version is marked superseded and kept for traceability.
 2. **Growth from real usage (Trio Candidates).**
-   - A Saved Report with strong signals (a thumbs-up, no follow-up correction) is turned into a **Trio Candidate**: anonymized, figures stripped, Brand-tagged.
+   - *Off until the client says whether a private Saved Report may be proposed at all ([12](12-assumptions-and-open-questions.md), Q1).* When enabled, a Saved Report with strong signals (a thumbs-up, no follow-up correction) is turned into a **Trio Candidate**: anonymized, results removed, Brand-tagged.
    - Candidates wait in the Admin UI review queue. An analyst approves, edits or rejects each one.
    - Retrieval gaps (clusters of questions with no Trio above the threshold) and low-satisfaction topics from the weekly aggregation ([05](05-learning-loop.md)) become requests for analysts to write new Trios. They are also the agenda for the scheduled domain-expert sessions.
    - Deleting a Saved Report deletes any pending Candidate derived from it. A Trio already approved and rewritten by an analyst is company knowledge and stays ([04](04-destructive-ops.md)).
-   - *Open with the client:* may a private Saved Report be proposed as a Candidate at all ([12](12-assumptions-and-open-questions.md))?
 3. **Maintenance.**
    - A nightly job dry-runs every active Trio's SQL. A Trio that no longer compiles (a renamed column, a dropped table) is retired, and its analyst is notified.
    - Approved Trios are activated in batches, and the offline correctness suite ([07](07-quality-assurance.md)) must pass before a batch goes live. A bad Trio can therefore not silently degrade answers.
@@ -127,7 +131,7 @@ stateDiagram-v2
 ## In the prototype
 
 Hybrid Intelligence is design-only in the assignment. The prototype includes a **stretch** slice, cut first if time runs short:
-- 5–10 hand-written seed Trios in `seed/trios/`, already in stored form (question, paraphrases, SQL, figure-free method summary, Brands);
+- 5–10 hand-written seed Trios in `seed/trios/`, already in stored form (question, paraphrases, SQL, method summary with results removed, parameters, Brands);
 - embeddings from the Gemini embedding model, stored in SQLite and searched by cosine similarity in Python, with the same Brand filter and threshold;
 - the `retrieve_trios` node and the `search_golden_trios` tool, both behind the `TrioRetriever` port, so the production pgvector adapter replaces it without touching the agent. If the slice is cut, the node calls an adapter that returns nothing, and the graph stays the same.
 
