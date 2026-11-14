@@ -78,7 +78,7 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 - [x] `/mock-interview audit` shows all **design** items as met
 - [ ] one `/mock-interview interview` rehearsal is done
 
-## Phase 2: LLD → PR #3 (~1–1.5 h)
+## Phase 2: LLD → PR #3 (~1–1.5 h) — done, PR open
 
 **Branch:** `docs/lld`
 
@@ -87,9 +87,9 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 > Read docs/hld/, docs/adr/, docs/lld/README.md and docs/work-plan.md. Build the code-first LLD: a `uv` project skeleton, Pydantic schemas, `Protocol` ports, SQL DDL and an ER diagram in `src/`, with explanations in `docs/lld/`. Use the codebase-design skill. Stubs only, no implementation.
 
 **Done when:**
-- [ ] `uv run python -c "import agent"` works
-- [ ] every tool and port has its LLD checklist filled in (`docs/lld/README.md`)
-- [ ] the ER diagram and graph state are documented and match the code
+- [x] `uv run python -c "import agent"` works
+- [x] every tool and port has its LLD checklist filled in (`docs/lld/README.md`)
+- [x] the ER diagram and graph state are documented and match the code
 
 ## Phase 3: GitHub issues (~30 min)
 

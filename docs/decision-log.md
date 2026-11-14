@@ -354,3 +354,16 @@ Detail in `docs/hld/12-assumptions-and-open-questions.md`, which supersedes `ope
 - **LangSmith** is a production trace-backend option next to Phoenix and Langfuse; self-hosting it is an Enterprise-plan add-on, and its SaaS needs client approval. The prototype stays on Phoenix.
 - **Canary deployment** is out of the assignment's scope: described once, in 11 Delivery; other sections link there. Synthetic canaries (monitoring probes) stay.
 - **Consistency fixes:** the ADR 0004 tool list, the 03 guard classes matching the router's actions, and the 08 canary schedule matching 11.
+
+## LLD (Phase 2, 2026-11-14)
+
+Code-first: the schemas, Protocols and DDL in `src/agent/` are the source of truth; `docs/lld/` explains them. Approved additions beyond the HLD and ADRs:
+
+- **Two ports added to ADR 0006's list:** `UserDirectory` (identity for the load-context step) and `Delivery` (declared, not wired; ADR 0009).
+- **Two tables added:** `trio_embeddings` (one vector per question and paraphrase) and `persona_events` (publish, rejection and rollback records). Embeddings are 768-dimensional to stay inside pgvector's HNSW limit.
+- **One model setting per separate model call** (see Models above): 12 `ModelStep`s, each with `MODEL_<STEP>` and `_FALLBACK`; unset steps inherit. The delete filter is its own call (`MODEL_DELETION_FILTER`), and the Persona gate follows the analysis model unless set on purpose.
+- **Starting limits** marked "LLD default" in `config.py`: 200 rows to the model, 2 GiB bytes cap, 8 analysis steps, 90 s turn deadline, 0.75 Trio score, 6 verbatim turns, 30 s breaker cool-down. Tuned from traces.
+- **Contracts:** another User's report is "not found", never "forbidden"; catalog keys added for `no_role`, `unavailable`, `plan_expired`, `report_not_found`, `report_out_of_scope` and the Persona outcomes.
+- **One core for every channel:** inbound goes through `ChatService.handle(message, channel)`, model-free commands through `Views`; `ChannelAdapter` is outbound-only and per turn. The CLI and the optional web UI only translate, so they offer the same features (LLD 07).
+- **Web UI (optional slice 8):** a plain `web/` folder, types generated from Pydantic, no Nx (ADR 0010). `/stats` is limited to Executives and `/trace` to the User's own turns.
+- **Enforced in tooling:** a ruff rule bans provider SDK imports outside `agent.adapters`; a test fails if any tool input names a User, Author or scope, or if a model step lacks its settings.
