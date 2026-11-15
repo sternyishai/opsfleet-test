@@ -172,13 +172,14 @@ The data-access layers (input guard, query guard, row and column security, least
 | **Model provider** | Gemini through Vertex AI, in our project and region, under terms that exclude training on customer data. Prompts carry business data but no PII. |
 | **Audit** | Deletion audit rows, Persona publish and rollback history, logged reads of raw traces, and Cloud Audit Logs for every admin action on the platform. |
 | **Supply chain** | Locked dependencies (`uv.lock`); images scanned in Artifact Registry; deploys only from CI. |
+| **Dead-letter queues** | The Pub/Sub service agent holds `roles/pubsub.publisher` on each dead-letter topic and `roles/pubsub.subscriber` on each source subscription; without them nothing is forwarded ([dead-letter topics](https://docs.cloud.google.com/pubsub/docs/dead-letter-topics)). Each dead-letter topic has a pull subscription set never to expire, because a topic with no subscription loses what is published to it. Messages carry IDs only, so the DLQ holds no PII. |
 | **Recovery** | Postgres: point-in-time recovery (RPO of minutes), HA failover in about a minute, restore drills each quarter. BigQuery data is the data team's to back up. Persona versions and Trio versions are never overwritten, so a bad edit is a rollback, not a restore. |
 
 ## Running it
 
 - **Ownership.** The AI-ops team owns the agent in production: on-call in business hours, paged at any hour only for a PII hit or an out-of-scope answer ([08](08-observability.md)). *(Assumption, [12](12-assumptions-and-open-questions.md).)*
-- **Regular work:** the weekly review of findings and unclassified errors ([05](05-learning-loop.md)); dead-letter queues inspected and replayed after a fix; the monthly domain-expert session; quarterly restore drills and quota reviews.
-- **Retention.** Raw traces, interaction records and Conversation checkpoints are kept 90 days; anonymized aggregates and deletion audit rows indefinitely; Saved Reports and User Profiles until their User deletes them ([01](01-architecture.md#where-data-lives-and-how-it-is-handled)). *(Assumptions, [12](12-assumptions-and-open-questions.md).)*
+- **Regular work:** the weekly review of findings and unclassified errors ([05](05-learning-loop.md)); dead-letter queues inspected and, after a fix, replayed by re-publishing to the source topic (handlers are idempotent, so a double replay is safe); the monthly domain-expert session; quarterly restore drills and quota reviews.
+- **Retention.** Raw traces, interaction records and Conversation checkpoints are kept 90 days; dead-lettered events 7 days (the Pub/Sub default, [subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)); anonymized aggregates and deletion audit rows indefinitely; Saved Reports and User Profiles until their User deletes them ([01](01-architecture.md#where-data-lives-and-how-it-is-handled)). *(Assumptions, [12](12-assumptions-and-open-questions.md).)*
 
 ## In the prototype
 
