@@ -79,7 +79,8 @@ class Ports:
     tracer: Tracer
     reports: ReportRepository
     profiles: ProfileStore | None = None
-    """None until slice 7: every User then has an empty profile."""
+    """``build_ports`` always wires it (slice 7c); None, as in most tests, is an empty
+    profile for every User and nothing saved."""
 
 
 def build_ports(settings: Settings, *, trios_enabled: bool = True) -> Ports:
@@ -89,6 +90,7 @@ def build_ports(settings: Settings, *, trios_enabled: bool = True) -> Ports:
     from agent.adapters.null import NullTrioRetriever
     from agent.adapters.persona_sqlite import SqlitePersonaStore
     from agent.adapters.pii_regex import RegexPiiFilter
+    from agent.adapters.profile_sqlite import SqliteProfileStore
     from agent.adapters.query_guard import SqlglotQueryGuard
     from agent.adapters.reports_sqlite import SqliteReportRepository
     from agent.adapters.tracer_jsonl import JsonlTracer
@@ -130,6 +132,7 @@ def build_ports(settings: Settings, *, trios_enabled: bool = True) -> Ports:
         personas=SqlitePersonaStore(app_db, seed=settings.seed_dir / "persona.yaml"),
         tracer=tracer,
         reports=SqliteReportRepository(app_db),
+        profiles=SqliteProfileStore(app_db, max_notes=limits.profile_max_notes),
     )
 
 

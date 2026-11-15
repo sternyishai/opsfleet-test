@@ -169,6 +169,7 @@ def analysis(state: AgentState, ports: Ports, limits: Limits) -> dict[str, Any]:
             scope_note(user.scope),
             state.get("trios", []),
             max_steps=limits.max_analysis_steps,
+            profile=state.get("profile"),
         ),
         *state["messages"],
     ]

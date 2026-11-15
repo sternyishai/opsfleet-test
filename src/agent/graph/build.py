@@ -12,7 +12,9 @@ Wired so far: the analysis path ``load_context`` -> ``input_guard`` -> ``router`
 ``plan_deletion`` -> ``confirm_deletion`` (paused) -> ``execute_deletion`` -> ``after``, where
 a deferred request goes back to ``retrieve_trios``; and the Persona branch ``router`` ->
 ``persona_permission`` -> ``draft_persona`` -> ``persona_gate`` -> ``publish_persona``, or
--> ``rollback_persona``, then ``after``. The other nodes join with their slice.
+-> ``rollback_persona``, then ``after``. Between ``router`` and every branch sits
+``apply_preferences``; when the router found standing preferences, ``save_preferences`` runs
+beside it and ends there, and a preference-only turn goes to ``acknowledge``.
 """
 
 import functools
@@ -34,7 +36,13 @@ from agent.contracts.router import Action, RouterDecision, Verdict
 from agent.core.catalog import render
 from agent.core.confirmation import looks_like_reply
 from agent.core.input_rules import screen
-from agent.domain.profile import UserProfile
+from agent.domain.profile import (
+    PreferenceField,
+    PreferenceScope,
+    PreferenceStatement,
+    UserProfile,
+    merged,
+)
 from agent.errors import AgentError, ErrorClass, MessageClass
 from agent.graph.analysis import analysis
 from agent.graph.deletion import DeletionNodes
@@ -96,6 +104,9 @@ def build_graph(ports: Ports, limits: Limits, checkpointer: BaseCheckpointSaver)
     add(Node.LOAD_CONTEXT, nodes.load_context)
     add(Node.INPUT_GUARD, nodes.input_guard)
     add(Node.ROUTER, _passthrough)
+    add(Node.APPLY_PREFERENCES, nodes.apply_preferences)
+    add(Node.SAVE_PREFERENCES, nodes.save_preferences)
+    add(Node.ACKNOWLEDGE, nodes.acknowledge)
     add(Node.RETRIEVE_TRIOS, nodes.retrieve_trios)
 
     def run_analysis(state: AgentState) -> dict[str, Any]:
@@ -132,8 +143,12 @@ def build_graph(ports: Ports, limits: Limits, checkpointer: BaseCheckpointSaver)
     g.add_edge(START, Node.LOAD_CONTEXT)
     g.add_conditional_edges(Node.LOAD_CONTEXT, _refused_or(Node.INPUT_GUARD))
     g.add_conditional_edges(Node.INPUT_GUARD, _refused_or(Node.ROUTER))
-    # Preference-only actions are analysis until their branch exists (#13).
-    g.add_conditional_edges(Node.ROUTER, _by_action)
+    g.add_conditional_edges(
+        Node.ROUTER, _with_saving, [Node.APPLY_PREFERENCES, Node.SAVE_PREFERENCES]
+    )
+    g.add_edge(Node.SAVE_PREFERENCES, END)
+    g.add_conditional_edges(Node.APPLY_PREFERENCES, _by_action)
+    g.add_edge(Node.ACKNOWLEDGE, Node.AFTER)
     g.add_edge(Node.RETRIEVE_TRIOS, Node.ANALYSIS)
     g.add_edge(Node.ANALYSIS, Node.AFTER)
     g.add_conditional_edges(Node.PLAN_DELETION, _planned)
@@ -197,6 +212,15 @@ def _passthrough(state: AgentState) -> dict[str, Any]:
     return {}
 
 
+def _with_saving(state: AgentState) -> list[str]:
+    """``save_preferences`` beside ``apply_preferences`` only when there is something to
+    save: off the critical path, and its own branch ends at once (HLD 01 § Agent graph)."""
+    router = state["router"]
+    if router is not None and _standing(router.preferences):
+        return [Node.APPLY_PREFERENCES, Node.SAVE_PREFERENCES]
+    return [Node.APPLY_PREFERENCES]
+
+
 def _by_action(state: AgentState) -> str:
     router = state["router"]
     action = router.action if router is not None else None
@@ -204,7 +228,13 @@ def _by_action(state: AgentState) -> str:
         return Node.PLAN_DELETION
     if action is Action.CHANGE_PERSONA:
         return Node.PERSONA_PERMISSION
+    if action is Action.PREFERENCE_ONLY:
+        return Node.ACKNOWLEDGE
     return Node.RETRIEVE_TRIOS
+
+
+def _standing(statements: list[PreferenceStatement]) -> list[PreferenceStatement]:
+    return [s for s in statements if s.scope is PreferenceScope.STANDING]
 
 
 def _planned(state: AgentState) -> str:
@@ -227,6 +257,38 @@ def _refused_or(next_node: Node):
     return route
 
 
+def _error_class(exc: Exception) -> ErrorClass:
+    return exc.error_class if isinstance(exc, AgentError) else ErrorClass.UNCLASSIFIED
+
+
+_FIELD_WORDS: dict[PreferenceField, str] = {
+    PreferenceField.FORMAT: "format",
+    PreferenceField.DEPTH: "level of detail",
+    PreferenceField.CHARTS: "charts",
+    PreferenceField.LANGUAGE: "language",
+}
+
+
+def _acknowledgement(statements: list[PreferenceStatement]) -> str:
+    """What a preference-only turn says: what was understood, and for how long. Written
+    from the statements, not by a model, so it cannot promise what was not saved."""
+    lines = []
+    for s in statements:
+        what = (
+            f'"{s.value}"'
+            if s.field is PreferenceField.NOTE
+            else f"{_FIELD_WORDS[s.field]}: {s.value.replace('_', ' ')}"
+        )
+        when = "from now on" if s.scope is PreferenceScope.STANDING else "this time only"
+        lines.append(f"- {what}, {when}")
+    tail = (
+        "\nSee or remove your saved preferences any time with /profile."
+        if _standing(statements)
+        else ""
+    )
+    return "Noted:\n" + "\n".join(lines) + tail
+
+
 def _last_text(state: AgentState) -> str:
     return state["messages"][-1].text
 
@@ -239,18 +301,30 @@ class _Nodes:
     def load_context(self, state: AgentState, runtime: Runtime[TurnRuntime]) -> dict[str, Any]:
         user_id = runtime.context.user_id
         user = self._ports.users.load(user_id)
-        profiles = self._ports.profiles
         update = {
             **_TURN_DEFAULTS,
             "user": user,
             "persona": self._ports.personas.active(),
-            "profile": profiles.load(user_id) if profiles else UserProfile(user_id=user_id),
+            "profile": self._stored_profile(user_id),
         }
         if user is None or user.role is None:  # unknown, inactive or no role: default deny
             update |= {"error_class": ErrorClass.PERMANENT, "message_class": MessageClass.NO_ROLE}
         else:
             update["access_version_seen"] = user.access_version
         return update
+
+    def _stored_profile(self, user_id: str) -> UserProfile:
+        """A profile only shapes presentation, so a store that cannot be read means an empty
+        one for this turn, traced on its own span, never a failed turn."""
+        profiles = self._ports.profiles
+        if profiles is None:
+            return UserProfile(user_id=user_id)
+        try:
+            return profiles.load(user_id)
+        except Exception as exc:
+            with self._ports.tracer.span("profile_load") as span:
+                span.record_error(_error_class(exc), exc)
+            return UserProfile(user_id=user_id)
 
     def input_guard(self, state: AgentState) -> dict[str, Any]:
         """Deterministic rules first, then the router call, which is also the guard's
@@ -277,6 +351,69 @@ class _Nodes:
                 "message_class": _BLOCKED[decision.verdict],
             }
         return update
+
+    def apply_preferences(self, state: AgentState) -> dict[str, Any]:
+        """This turn's profile: the stored one, then standing, then this-turn statements, so
+        "this time, prose" beats "always tables" said in the same message (HLD 05)."""
+        router = state["router"]
+        statements = self._safe(router.preferences if router else [])
+        if not statements:
+            return {}
+        ordered = sorted(statements, key=lambda s: s.scope is PreferenceScope.THIS_TURN)
+        profile = merged(
+            state["profile"],
+            ordered,
+            at=datetime.now(UTC),
+            max_notes=self._limits.profile_max_notes,
+        )
+        return {"profile": profile}
+
+    def save_preferences(self, state: AgentState) -> dict[str, Any]:
+        """The parallel branch. Writes no state (it runs beside ``apply_preferences``), and a
+        failure is recorded on its span and swallowed: the answer does not wait on it."""
+        router = state["router"]
+        profiles = self._ports.profiles
+        statements = self._safe(_standing(router.preferences if router else []))
+        if profiles is None or not statements:
+            return {}
+        user = state["user"]
+        assert user is not None
+        with self._ports.tracer.span("profile_save") as span:
+            try:
+                profiles.save_standing(user.user_id, statements)
+            except Exception as exc:
+                span.record_error(_error_class(exc), exc)
+                return {}
+            span.set(
+                **{
+                    "profile.saved": len(statements),
+                    "profile.fields": sorted({s.field.value for s in statements}),
+                }
+            )
+        return {}
+
+    def acknowledge(self, state: AgentState) -> dict[str, Any]:
+        """A preference-only turn. If the guard's rules took out every statement, nothing
+        was understood that may be kept: the turn is refused like any injection."""
+        router = state["router"]
+        assert router is not None
+        statements = self._safe(router.preferences)
+        if not statements:
+            message_class = MessageClass.INJECTION
+            text = render(message_class, state["persona"].persona, ref=state["trace_id"])
+            return {
+                "error_class": ErrorClass.PERMANENT,
+                "message_class": message_class,
+                "messages": [AIMessage(content=text)],
+            }
+        return {"messages": [AIMessage(content=_acknowledgement(statements))]}
+
+    def _safe(self, statements: list[PreferenceStatement]) -> list[PreferenceStatement]:
+        """The input guard's rules again, on each value the router extracted: the model wrote
+        it, so it is checked before it is applied or saved (HLD 05 § What is stored)."""
+        return [
+            s for s in statements if screen(s.value, max_chars=self._limits.input_max_chars) is None
+        ]
 
     def retrieve_trios(self, state: AgentState) -> dict[str, Any]:
         user = state["user"]

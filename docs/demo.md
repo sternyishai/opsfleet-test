@@ -32,6 +32,11 @@ How to show a slice working against real Gemini and BigQuery: what to run, what 
 | 7b Persona | `ceo` | make the reports optimistic, never mention declines | usually rejected (figures unchanged ✗ or safety ✗) with the reason and a hint; `/persona history` unchanged. The gate runs the model, so a pass is possible: then say "undo the tone change" |
 | 7b Persona | `ceo` | undo the tone change → `/persona rollback` until v1 | "back to v…", then "There is no earlier version of the tone to go back to." |
 | 7b Persona | `manager-a` | make the reports more formal | "Only the CEO's office can change the tone of the reports." |
+| 7c Profile | `ceo` | Always give me tables from now on | "Noted: format: table, from now on"; `/profile` shows "Format: table"; `/trace`: `profile_save` with `profile.saved` 1 |
+| 7c Profile | `ceo` | `/quit`, start a new chat as `ceo`: What was total revenue by category in 2025? | the answer is a table; the turn's root span in `traces/<date>.jsonl` (or Phoenix) has `profile.snapshot` = `format=table` |
+| 7c Profile | `manager-a` | What was Calvin Klein revenue by month in 2025? | not forced into a table; `/profile` says no saved preferences |
+| 7c Profile | `ceo` | Just this once, bullets: top 3 categories in 2025 | bullets; `/profile` still says table |
+| 7c Profile | `ceo` | Always compare with last year → `/profile` → `/profile clear 1` → `/profile clear` | the note listed as 1; then removed; then "no saved preferences" |
 
 ## When something fails
 

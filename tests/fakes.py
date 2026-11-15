@@ -46,6 +46,7 @@ from agent.graph.build import build_graph
 from agent.graph.state import CHECKPOINT_TYPES, AgentGraph
 from agent.ports.llm import ModelStep
 from agent.ports.persona import PersonaStore
+from agent.ports.profile import ProfileStore
 from agent.ports.reports import ReportRepository
 from agent.ports.tracer import SpanRecord, Tracer
 from agent.tools.context import TurnContext
@@ -328,6 +329,7 @@ def fake_ports(
     reports: ReportRepository | None = None,
     tracer: Tracer | None = None,
     personas: PersonaStore | None = None,
+    profiles: ProfileStore | None = None,
 ) -> Ports:
     return Ports(
         llm=llm or FakeLLMFactory(),
@@ -339,6 +341,7 @@ def fake_ports(
         personas=personas or FakePersonas(),
         tracer=tracer or FakeTracer(),
         reports=reports or InMemoryReportRepository(),
+        profiles=profiles,
     )
 
 

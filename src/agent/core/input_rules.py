@@ -19,7 +19,7 @@ _PHRASES = re.compile(
     r"|\bjailbreak"
     r"|\bnew\s+instructions\s*:"
     r"|</?\s*(?:message|conversation|system|instructions?|persona|current|tool_result|"
-    r"reference_trios)\s*>",
+    r"reference_trios|user_preferences)\s*>",
     re.IGNORECASE,
 )
 """Known injection phrasings, and tags that try to close the router's data delimiters."""

@@ -34,6 +34,7 @@ from agent.core.chat import ChatService
 from agent.core.persona_gate import rejection_text
 from agent.core.views import Views
 from agent.domain.persona import PersonaVersion
+from agent.domain.profile import UserProfile
 from agent.errors import AgentError, MessageClass
 from agent.ports.channel import ChannelAdapter
 
@@ -100,7 +101,8 @@ def run_chat(
     write: Callable[[str], None] = print,
 ) -> None:
     """Read a line, hand it to ``ChatService.handle``, repeat until EOF or ``/quit``.
-    ``/reports``, ``/persona [history|edit|rollback]``, ``/trace [id]`` and ``/stats [7d]``
+    ``/reports``, ``/profile [clear [n]]``, ``/persona [history|edit|rollback]``,
+    ``/trace [id]`` and ``/stats [7d]``
     go to ``Views`` instead, with no model call; ``Views`` has already run the PII filter on
     what ``write`` prints.
 
@@ -147,6 +149,8 @@ def _command(
     arg = arg.strip()
     if name == "/persona":
         return lambda: _persona(views, user_id, arg, read)
+    if name == "/profile":
+        return lambda: _profile(views, user_id, arg)
     if name == "/reports":
         return lambda: render_reports(views.reports(user_id, ListReportsInput(limit=50)))
     if name == "/trace":
@@ -154,6 +158,51 @@ def _command(
     if name == "/stats":
         return lambda: _stats(views, user_id, arg or "7d")
     return None
+
+
+def _profile(views: Views, user_id: str, arg: str) -> str:
+    """``/profile clear 2`` names a note by the number ``/profile`` shows; the number is
+    turned into that note's ID here, and ``Views`` removes it."""
+    if arg == "":
+        return render_profile(views.profile(user_id))
+    word, _, number = arg.partition(" ")
+    if word != "clear":
+        return "Use /profile, /profile clear <number> or /profile clear."
+    if not number.strip():
+        return render_profile(views.remove_preference(user_id))
+    notes = views.profile(user_id).notes
+    n = int(number) if number.strip().isdigit() else 0
+    if not 1 <= n <= len(notes):
+        return f"There is no note {number.strip()}. /profile lists your notes with their numbers."
+    return render_profile(views.remove_preference(user_id, notes[n - 1].note_id))
+
+
+_PROFILE_FIELDS = (
+    ("format", "Format"),
+    ("depth", "Level of detail"),
+    ("charts", "Charts"),
+    ("language", "Language"),
+)
+
+
+def render_profile(profile: UserProfile) -> str:
+    values = [
+        (label, getattr(profile, name)) for name, label in _PROFILE_FIELDS if getattr(profile, name)
+    ]
+    if not values and not profile.notes:
+        return (
+            'You have no saved preferences yet. Tell me one, for example "always give me tables".'
+        )
+    lines = ["Your preferences:"]
+    for label, v in values:
+        lines.append(
+            f"  {label}: {str(v.value).replace('_', ' ')}  (since {v.confirmed_at:%d %b %Y})"
+        )
+    if profile.notes:
+        lines.append("Your notes:")
+        lines += [f"  {n}. {note.text}" for n, note in enumerate(profile.notes, start=1)]
+    lines.append("Remove a note with /profile clear <number>, or everything with /profile clear.")
+    return "\n".join(lines)
 
 
 def _persona(views: Views, user_id: str, arg: str, read: Callable[[str], str]) -> str:
