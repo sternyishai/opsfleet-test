@@ -23,6 +23,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Slice 1: walking skeleton (#5, PR #17) | ✅ `agent chat --as <id>` → graph → Gemini → `run_sql` on BigQuery; CEO 2025 revenue $2,358,149.49 and manager-a Calvin Klein 2025 $46,399.46, both matching direct BigQuery queries; 66 offline tests. Real adapters: SQLite users, sqlglot guard (no scope rewrite yet), BigQuery runner, Gemini, file Persona, JSONL tracer, stdout channel; null Trio retriever and pass-through PII filter |
 | Slice 1 retro | ✅ ruff bans `sqlglot`, `yaml`, `langgraph.checkpoint.sqlite` and `agent.adapters` outside adapters/composition/tests; CI workflow; Gemini SDK gotchas in LLD 06 § LLMFactory; `CLAUDE.md` pointer for building a slice |
 | Slice 2: safety (#6) | ✅ full query guard (node-type allowlist, PII and order-level columns by name, out-of-scope Brand literals case-insensitively, per-role scope rewrite with `@brands`, forced `LIMIT`), guard span attributes, `RegexPiiFilter` behind `Outbound.emit` and `output_filter`, input rules before the router; 198 offline tests. New `RejectReason.UNSUPPORTED_SYNTAX`; model-written query parameters are rejected (the model inlines a Trio's parameters) |
+| Slice 2 retro | ✅ never-raises test over hostile input; `CODING_STANDARDS` §2: safety changes get an adversarial Spec review; ruff skips `ASSIGNMENT.md`; sqlglot notes in LLD 06; branch name in `CLAUDE.md` |
 
 ## Decisions made this session, not yet written elsewhere
 
@@ -39,8 +40,6 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 ## Next session prompt
 
 > /mattpocock-skills:implement #7
-
-Before `/clear`: slice 2 is due a retro (see [work-plan.md](work-plan.md#phase-4-build-one-slice-per-session-4-5-h-total) § When to run a retro).
 
 Notes from slice 2 for what comes next:
 
