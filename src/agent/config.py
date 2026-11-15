@@ -9,7 +9,7 @@ traces.
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from agent.ports.llm import INHERITS_FROM, ModelStep
@@ -104,6 +104,9 @@ class Limits(BaseSettings):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    models: ModelSettings = Field(default_factory=lambda: ModelSettings())  # pyright: ignore[reportCallIssue]  # read from .env
+    limits: Limits = Field(default_factory=Limits)
+    google_api_key: SecretStr | None = None  # AI Studio; GOOGLE_API_KEY in .env
     bigquery_project: str | None = None  # billing project; ADC credentials
     bigquery_dataset: str = "bigquery-public-data.thelook_ecommerce"
     app_db_url: str = "sqlite:///./data/app.db"

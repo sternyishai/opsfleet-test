@@ -1,4 +1,4 @@
-"""``agent`` command line. Stub.
+"""``agent`` command line.
 
 The CLI only translates (docs/lld/07-web.md): text goes to ``ChatService.handle`` with a
 stdout ``ChannelAdapter``; slash commands go to ``agent.core.views.Views``, the same calls the
@@ -14,6 +14,24 @@ web UI makes.
 """
 
 import argparse
+import logging
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Protocol
+from uuid import UUID
+
+from agent.contracts.channel import Channel, InboundMessage
+from agent.core.chat import ChatService
+from agent.ports.channel import ChannelAdapter
+
+_log = logging.getLogger("agent.cli")
+_QUIT = {"/quit", "/exit"}
+
+
+class ConversationChannel(ChannelAdapter, Protocol):
+    """A channel that remembers the Conversation of the last message it delivered."""
+
+    conversation_id: UUID | None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -33,4 +51,53 @@ def main(argv: list[str] | None = None) -> int:
     web = sub.add_parser("web", help="serve the HTTP API for the web UI")
     web.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
-    raise NotImplementedError(f"`agent {args.command}` is built in Phase 4")
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    if args.command == "chat":
+        return _chat(args.user_id)
+    raise NotImplementedError(f"`agent {args.command}` is built in a later slice")
+
+
+def _chat(user_id: str) -> int:
+    from agent.adapters.channel_stdout import StdoutChannel
+    from agent.composition import build_chat_service
+    from agent.config import Settings
+
+    print(f"Signed in as {user_id}. Ask a question; /quit or Ctrl-D to leave.\n")
+    run_chat(build_chat_service(Settings()), user_id, StdoutChannel(), input)
+    return 0
+
+
+def run_chat(
+    service: ChatService,
+    user_id: str,
+    channel: ConversationChannel,
+    read: Callable[[str], str],
+) -> None:
+    """Read a line, hand it to ``ChatService.handle``, repeat until EOF or ``/quit``.
+
+    Catches everything around a turn, so a failed turn never ends the session. ``handle``
+    already never raises; this is the last line, and it logs rather than prints, because
+    every message to the User leaves through ``Outbound.emit``.
+    """
+    while True:
+        try:
+            text = read("you> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return
+        if not text:
+            continue
+        if text in _QUIT:
+            return
+        try:
+            service.handle(
+                InboundMessage(
+                    user_id=user_id,
+                    channel=Channel.CLI,
+                    conversation_id=channel.conversation_id,
+                    text=text,
+                    received_at=datetime.now(UTC),
+                ),
+                channel,
+            )
+        except Exception as exc:
+            _log.error("the turn failed (%s); the session continues", type(exc).__name__)

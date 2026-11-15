@@ -22,7 +22,7 @@ The checklist from the [README](README.md#checklist-for-each-tool-or-port) is fi
 | | |
 |---|---|
 | **Schema** | `GetSchemaInput(tables?)` → `SchemaOutput(tables: [TableSchema], scope_note, data_as_of)` |
-| **Ports** | none. Column descriptions are bundled with the guard's allowlist, so the two cannot disagree |
+| **Ports** | none. Column descriptions are bundled with the guard's allowlist in [`domain/warehouse.py`](../../src/agent/domain/warehouse.py) (`ALLOWLIST`), so the two cannot disagree |
 | **Safety** | Shows only allowlisted, non-PII columns, as *this User's* scoped view projects them: no `orders.num_of_item` for a Manager |
 | **Failures** | none expected |
 | **Trace** | `tables`, `role` |
