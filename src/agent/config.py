@@ -85,6 +85,10 @@ class Limits(BaseSettings):
     deletion_plan_shown: int = Field(default=20, ge=1)
     # profile (HLD 05)
     profile_max_notes: int = Field(default=20, ge=1)
+    # input guard (HLD 03)
+    input_max_chars: int = Field(
+        default=2000, ge=1, description="LLD default; the channel caps a message at 4000."
+    )
     # conversation (HLD 01)
     verbatim_turns: int = Field(default=6, ge=1, description="LLD default.")
     # timeouts, seconds (HLD 06)

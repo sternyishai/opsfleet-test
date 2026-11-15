@@ -4,7 +4,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-15)
 
-**Phase:** 3 (GitHub issues) done: #5–#14. Design iteration on the DLQ, a story map and ADR 0011 merged from `docs/dlq-data`. Next: Phase 4, issue #5.
+**Phase:** 4. Slices 1 (#5) and 2 (#6) built. Next: slice 3.
 **Branch:** `main`
 
 | Step | Status |
@@ -22,6 +22,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Eval LLD + real seed data (PR #4) | ✅ LLD 08, `evals/` (20 cases, pre-registered bar), `seed/users.yaml`, 5 seed Trios; all queries verified on BigQuery via project `opsfleet-prototype` (ADC set up) |
 | Slice 1: walking skeleton (#5, PR #17) | ✅ `agent chat --as <id>` → graph → Gemini → `run_sql` on BigQuery; CEO 2025 revenue $2,358,149.49 and manager-a Calvin Klein 2025 $46,399.46, both matching direct BigQuery queries; 66 offline tests. Real adapters: SQLite users, sqlglot guard (no scope rewrite yet), BigQuery runner, Gemini, file Persona, JSONL tracer, stdout channel; null Trio retriever and pass-through PII filter |
 | Slice 1 retro | ✅ ruff bans `sqlglot`, `yaml`, `langgraph.checkpoint.sqlite` and `agent.adapters` outside adapters/composition/tests; CI workflow; Gemini SDK gotchas in LLD 06 § LLMFactory; `CLAUDE.md` pointer for building a slice |
+| Slice 2: safety (#6) | ✅ full query guard (node-type allowlist, PII and order-level columns by name, out-of-scope Brand literals case-insensitively, per-role scope rewrite with `@brands`, forced `LIMIT`), guard span attributes, `RegexPiiFilter` behind `Outbound.emit` and `output_filter`, input rules before the router; 198 offline tests. New `RejectReason.UNSUPPORTED_SYNTAX`; model-written query parameters are rejected (the model inlines a Trio's parameters) |
 
 ## Decisions made this session, not yet written elsewhere
 
@@ -37,10 +38,10 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> /mattpocock-skills:implement #6
+> /mattpocock-skills:implement #7
 
-#6 extends slice 1's code rather than starting fresh:
+Notes from slice 2 for what comes next:
 
-- `adapters/query_guard.py` (`SqlglotQueryGuard`) already does the single-SELECT check, the table allowlist (from `domain/warehouse.py`'s `ALLOWLIST`) and the forced `LIMIT`. Still missing: the per-role scope rewrite, `@brands` parameters, out-of-scope Brand literals, the `num_of_item` rejection, and span attributes. Until then it returns an all-Brands scope for everyone, Managers included.
-- `get_schema` already hides `num_of_item` from Managers, and `tests/test_tools_schema.py` covers it.
-- `adapters/null.py`'s `PassThroughPiiFilter` is the stand-in the regex `PiiFilter` replaces; `Outbound.emit` and the `output_filter` node already call the port.
+- `GuardAllowed.filters` is still `[]`; the empty-result probe (slice 3) needs it filled from the AST.
+- An out-of-scope Brand already returns `RunSqlRetry(reason=BRAND_OUT_OF_SCOPE, hint=<scope note>)`; slice 3 adds "model insists → `OUT_OF_SCOPE` ends the turn".
+- `save_report` (slice 4) should call `ports.pii.scan` on every text field; `RegexPiiFilter` is wired.

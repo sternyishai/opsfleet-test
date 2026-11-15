@@ -4,7 +4,7 @@ Every schema here is a Pydantic model in `src/agent/contracts/` or `src/agent/do
 
 ## Router output: `RouterDecision`
 
-[`contracts/router.py`](../../src/agent/contracts/router.py). One Flash-Lite call (`MODEL_ROUTER`) with a locked prompt and structured output. Deterministic rules (length, known injection phrases, encoded payloads) run first and can block without the call.
+[`contracts/router.py`](../../src/agent/contracts/router.py). One Flash-Lite call (`MODEL_ROUTER`) with a locked prompt and structured output. Deterministic rules run first and can block without the call ([core/input_rules.py](../../src/agent/core/input_rules.py)): a length cap (`INPUT_MAX_CHARS`, LLD default 2000, below the channel's 4000), known injection phrasings and tags that close the router's `<message>` / `<conversation>` delimiters, and encoded payloads (base64 runs of 40+ characters, URL-encoded or escaped code points, invisible and bidi control characters). Each rule blocks as `injection`. A rule is a shape no analysis question has, so it never needs the model; a router failure ends the turn at the `ChatService` catch-all, so no analysis runs (fail closed).
 
 | Field | Type | Rule (validator) |
 |---|---|---|

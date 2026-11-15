@@ -14,6 +14,7 @@ type TableName = Literal["orders", "order_items", "products", "users"]
 class RejectReason(StrEnum):
     UNPARSEABLE = "unparseable"  # fail closed
     NOT_SINGLE_SELECT = "not_single_select"  # DML, DDL, scripting, multiple statements
+    UNSUPPORTED_SYNTAX = "unsupported_syntax"  # a node type, function or parameter not allowed
     TABLE_NOT_ALLOWED = "table_not_allowed"
     COLUMN_NOT_ALLOWED = "column_not_allowed"  # PII columns, other tables' columns
     ORDER_LEVEL_FIELD = "order_level_field"  # orders.num_of_item for a Manager
@@ -39,7 +40,9 @@ class GuardAllowed(BaseModel):
     scope: BrandScope = Field(description="What the rewritten query can touch; saved with reports.")
     tables: list[TableName]
     filters: list[FilterLiteral]
-    rewritten: bool = Field(description="False only when the rewrite was a no-op projection.")
+    rewritten: bool = Field(
+        description="True when the SQL that runs differs from the SQL the model wrote."
+    )
 
 
 class GuardRejected(BaseModel):
