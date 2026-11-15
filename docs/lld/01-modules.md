@@ -30,7 +30,7 @@ flowchart TB
 | [`domain/`](../../src/agent/domain/) | Records: identity and scope, Saved Reports and Deletion Plans, Trios, User Profile, Persona and gate result, guard decisions and query results | `errors` |
 | [`contracts/`](../../src/agent/contracts/) | `RouterDecision`, channel messages, every tool's input and output | `domain` |
 | [`ports/`](../../src/agent/ports/) | One `Protocol` per external dependency | `domain`, `contracts`, `langchain_core` types |
-| [`core/`](../../src/agent/core/) | Deep modules with no dependency of their own: `ChatService` (the inbound entry point), `Views` (model-free commands), `Outbound` (single exit), `parse_reply` (confirmation), `PersonaQualityGate` | `ports`; `Views` also calls the report tools in `tools/`, so the agent and every channel share one implementation ([07](07-web.md)) |
+| [`core/`](../../src/agent/core/) | Deep modules with no dependency of their own: `ChatService` (the inbound entry point), `Views` (model-free commands), `Outbound` (single exit), `parse_reply` (confirmation), `PersonaQualityGate` | `ports`; `Views` also calls the report and Persona functions in `tools/`, so the agent and every channel share one implementation ([07](07-web.md)); `PersonaQualityGate` builds its answers with the analyst prompt in `graph/prompts.py`, so the gate tests the prompt real turns use |
 | [`tools/`](../../src/agent/tools/) | The eleven tool functions and `TurnContext` | `ports`, `contracts` |
 | [`graph/`](../../src/agent/graph/) | `AgentState`, the `Node` map, `build_graph` | all of the above |
 | [`evals/`](../../src/agent/evals/) | Eval runner, scorers, the bar and the fan-out sink ([08](08-eval.md)) | `core`, `contracts`, `ports`, `graph` (a trial builds its own graph over its fresh store) |

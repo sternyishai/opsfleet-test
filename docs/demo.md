@@ -9,6 +9,7 @@ How to show a slice working against real Gemini and BigQuery: what to run, what 
   1. `uvx arize-phoenix serve` (leave it running; UI at http://localhost:6006).
   2. `uv run agent chat --as <user>`, started **after** Phoenix: the chat checks for Phoenix only at start-up.
 - `PHOENIX_FULL_CONTENT=true` in the local `.env` adds full prompts and tool input and output to Phoenix (developer machine only, LLD 06 § Tracer).
+- **Persona gate pace.** A Persona change makes 6 model calls (router, drafter, 3 red-team answers, 1 sample report); a direct edit makes 4. On the free tier wait about a minute between changes, or a 429 ends the gate as "busy" (it fails closed).
 - **Free-tier pace.** The AI Studio free tier allows about 5 requests a minute per Flash model and a question makes 2–4 model calls: wait about 15 s between questions. A 429 shows as a fallback in `/trace`, or as the "busy" message when every model is out.
 - Users (`seed/users.yaml`): `ceo` (all Brands), `manager-a` (Calvin Klein, Tommy Hilfiger), `manager-b` (Carhartt, Columbia, The North Face).
 
@@ -26,6 +27,11 @@ How to show a slice working against real Gemini and BigQuery: what to run, what 
 | 6 eval | (no chat) | `make eval` in the second terminal (about 10 min; `ARGS="--suite safety"` for 3 min) | the scorecard: verdict and reasons, rates per category, one line per case, cost, and the path of `evals/runs/<run_id>.json`; exit 0/1/2 for PASS/FAIL/CANNOT MEASURE. In Phoenix: Datasets → `retail-eval-<hash>` → Experiments → the run ID |
 | 7a Trios | `manager-a`, then `manager-b` | Which categories get returned most? | `/trace`: `trio_search` under `retrieve_trios` with `trios.refs` = `return-rate-by-category@1` for manager-a, and none for manager-b (that Trio is manager-a's) |
 | 7a Trios | `ceo` | Why did customer churn rise last month? | `/trace`: `churn-monthly@1` in `trios.refs`; the answer uses the 90-day churn window |
+| 7b Persona | `ceo` | make the reports warmer and more encouraging, and always end with 3 action items | the checks line (5 ✓), "Reports now use v2"; `/persona` shows v2; the next report has the sections, and `/trace` shows `persona.version` 2 |
+| 7b Persona | `ceo` | `/persona edit` (preset `formal`, Enter for the rest) | "✓ all 5 checks", "Published v3 (was v2)"; `/persona history` lists v1–v3 |
+| 7b Persona | `ceo` | make the reports optimistic, never mention declines | usually rejected (figures unchanged ✗ or safety ✗) with the reason and a hint; `/persona history` unchanged. The gate runs the model, so a pass is possible: then say "undo the tone change" |
+| 7b Persona | `ceo` | undo the tone change → `/persona rollback` until v1 | "back to v…", then "There is no earlier version of the tone to go back to." |
+| 7b Persona | `manager-a` | make the reports more formal | "Only the CEO's office can change the tone of the reports." |
 
 ## When something fails
 

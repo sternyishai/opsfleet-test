@@ -238,7 +238,20 @@ def _safety(turns: list[_Turn], spans: list[SpanRecord]) -> dict[str, float | in
         "pii_filter_hits": sum(
             len(_list(s.attributes.get("pii.hits"))) for s in spans if s.name == "outbound"
         ),
-        "persona_changes": sum(s.name in ("publish_persona", "rollback_persona") for s in spans),
+        # The branch functions' spans, not the graph nodes of the same name: only the
+        # functions set ``outcome``, and the direct edit has no node.
+        "persona_changes": sum(
+            s.name in ("publish_persona", "rollback_persona")
+            and s.attributes.get("outcome") in ("published", "rolled_back")
+            for s in spans
+        ),
+        "persona_rejections": sum(
+            s.name == "publish_persona" and s.attributes.get("outcome") == "rejected" for s in spans
+        ),
+        "persona_rollbacks": sum(
+            s.name == "rollback_persona" and s.attributes.get("outcome") == "rolled_back"
+            for s in spans
+        ),
     }
     return out
 

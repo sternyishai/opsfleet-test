@@ -124,6 +124,7 @@ Numbers and `LIKE` patterns are not probed. The probe SQL is built from allowlis
 | **Failures** | model down → `TransientError` (`MODEL_BUSY`); nothing changes |
 | **Trace** | `changed_fields` |
 | **Tests** · slice 7 · `tests/test_persona.py` | only the fields the request names change (fake model) |
+| **Built** (#12) | `draft_persona(drafted, ctx, current)`: like the deletion filter, the node makes the model call (`persona_drafter_messages`: the current Persona and the request, both escaped) and passes the model's whole `Persona` in; code compares it with the current one for `changed_fields` and the `summary`. So `tools/` imports neither `core` nor `graph` (LLD 01). A draft that does not parse ends the turn as `PERSONA_GATE_FAILED` with a hint to ask more simply; nothing is stored. That only the named fields change rests on the drafter prompt; code cannot know which fields a request named |
 
 ### `publish_persona` (branch)
 
@@ -133,8 +134,9 @@ Numbers and `LIKE` patterns are not probed. The probe SQL is built from allowlis
 | **Ports** | `PersonaQualityGate` (uses `LLMFactory` with `PERSONA_GATE`, `PiiFilter`), `PersonaStore` |
 | **Safety** | Gate before publish; `PersonaStore.publish` refuses a non-passing result; fail closed when the gate cannot run |
 | **Failures** | a check fails → `rejected` (`PERSONA_GATE_FAILED`, the reason shown); gate cannot run → `rejected` (`MODEL_BUSY`) |
-| **Trace** | `path`, `gate.<check>` results, `version.before`, `version.after` |
+| **Trace** | `path`, `gate.<check>` results (`gate.field_limits`, `gate.injection_scan`, `gate.safety_holds`, `gate.sections_present`, `gate.figures_unchanged`, for the checks that ran), `gate.could_not_run`, `version.before`, `version.after`, `outcome` (`published`, `rejected`) |
 | **Tests** · slice 7 · `tests/test_persona.py` | each check failing on its own; fail closed on model outage; rejection recorded, no version created |
+| **Built** (#12) | `publish_persona(args, ctx, gate)`: the caller runs `PersonaQualityGate.check` (the `persona_gate` node, or `Views.edit_persona`) and passes the result; the store refuses anything but a pass, so a wrong caller cannot publish either. A gate that could not run is also recorded with `record_rejection`. The gate's cases are in [`core/persona_gate.py`](../../src/agent/core/persona_gate.py): 3 red-team cases (an out-of-scope `ToolError`, an incomplete month, a planted email) and 1 sample report (Q1 vs Q2 revenue, −5.0%); each answer is written with the **analyst's own system prompt** and the candidate Persona (`gate_answer_messages`), so check 3 tests the prompt real turns use. Figures match at the precision they are written to (391,761 as "$391.8K" or "$0.39 million"); a percentage must be written as one, and a fall as a fall: −5.0 matches "down 5.0%" or "a 5% decline", never "up 5.0%", "a 5.0% change" or a bare "5". Section headings may be numbered ("### 1. Summary") |
 
 ### `rollback_persona` (branch)
 
@@ -144,5 +146,5 @@ Numbers and `LIKE` patterns are not probed. The probe SQL is built from allowlis
 | **Ports** | `PersonaStore` |
 | **Safety** | `persona_editor` checked first; no gate (the version already passed it) |
 | **Failures** | version 1 active → `PERSONA_NOTHING_TO_ROLL_BACK` |
-| **Trace** | `version.before`, `rollback.target` |
+| **Trace** | `version.before`, `rollback.target`, `version.after`, `outcome` (`rolled_back`, `nothing_to_roll_back`) |
 | **Tests** · slice 7 · `tests/test_persona.py` | rollback to previous; rollback at v1; Manager refused before any call |

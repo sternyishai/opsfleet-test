@@ -6,7 +6,7 @@ A structured form, not a free-form prompt, so every field can be checked. The Pe
 
 from datetime import datetime
 from enum import IntEnum, StrEnum
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -61,6 +61,17 @@ class PersonaVersion(BaseModel):
     path: PersonaPath
     changed_fields: list[str] = Field(default_factory=list)
     is_active: bool
+
+
+class PersonaEvent(BaseModel):
+    """One row of the Persona's audit: who, when, which path and what happened (HLD 09)."""
+
+    kind: Literal["published", "rejected", "rolled_back"]
+    actor_id: UserId
+    occurred_at: datetime
+    path: PersonaPath | None = Field(description="None for a rollback.")
+    from_version: int | None
+    to_version: int | None = Field(description="None for a rejection.")
 
 
 class GateCheck(IntEnum):

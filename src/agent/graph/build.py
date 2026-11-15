@@ -10,7 +10,9 @@ Wired so far: the analysis path ``load_context`` -> ``input_guard`` -> ``router`
 ``retrieve_trios`` -> ``analysis`` -> ``after`` -> ``output_filter`` -> ``respond``, with
 ``refuse`` for a missing role or a blocked verdict; and the deletion branch ``router`` ->
 ``plan_deletion`` -> ``confirm_deletion`` (paused) -> ``execute_deletion`` -> ``after``, where
-a deferred request goes back to ``retrieve_trios``. The other nodes join with their slice.
+a deferred request goes back to ``retrieve_trios``; and the Persona branch ``router`` ->
+``persona_permission`` -> ``draft_persona`` -> ``persona_gate`` -> ``publish_persona``, or
+-> ``rollback_persona``, then ``after``. The other nodes join with their slice.
 """
 
 import functools
@@ -36,6 +38,7 @@ from agent.domain.profile import UserProfile
 from agent.errors import AgentError, ErrorClass, MessageClass
 from agent.graph.analysis import analysis
 from agent.graph.deletion import DeletionNodes
+from agent.graph.persona import PersonaNodes
 from agent.graph.prompts import router_messages
 from agent.graph.state import TURN_KEYS, AgentGraph, AgentState, TurnRuntime
 from agent.ports.llm import ModelStep
@@ -56,8 +59,8 @@ class Node(StrEnum):
     EXECUTE_DELETION = "execute_deletion"
     PERSONA_PERMISSION = "persona_permission"  # persona_editor, checked in code
     DRAFT_PERSONA = "draft_persona"
-    PERSONA_GATE = "persona_gate"
-    PUBLISH_PERSONA = "publish_persona"
+    PERSONA_GATE = "persona_gate"  # the five checks; a few model calls, no BigQuery
+    PUBLISH_PERSONA = "publish_persona"  # publish, or record_rejection
     ROLLBACK_PERSONA = "rollback_persona"
     ACKNOWLEDGE = "acknowledge"  # preference-only turns
     REFUSE = "refuse"  # catalog message
@@ -109,6 +112,18 @@ def build_graph(ports: Ports, limits: Limits, checkpointer: BaseCheckpointSaver)
     add(Node.PLAN_DELETION, deletion.plan_deletion)
     add(Node.CONFIRM_DELETION, deletion.confirm_deletion, destinations=deletion.confirm_to)
     add(Node.EXECUTE_DELETION, deletion.execute_deletion)
+    persona = PersonaNodes(
+        ports,
+        limits,
+        refuse=Node.REFUSE,
+        draft=Node.DRAFT_PERSONA,
+        rollback=Node.ROLLBACK_PERSONA,
+    )
+    add(Node.PERSONA_PERMISSION, persona.persona_permission)
+    add(Node.DRAFT_PERSONA, persona.draft_persona)
+    add(Node.PERSONA_GATE, persona.persona_gate)
+    add(Node.PUBLISH_PERSONA, persona.publish_persona)
+    add(Node.ROLLBACK_PERSONA, persona.rollback_persona)
     add(Node.REFUSE, nodes.refuse)
     add(Node.AFTER, nodes.after)
     add(Node.OUTPUT_FILTER, nodes.output_filter)
@@ -117,12 +132,17 @@ def build_graph(ports: Ports, limits: Limits, checkpointer: BaseCheckpointSaver)
     g.add_edge(START, Node.LOAD_CONTEXT)
     g.add_conditional_edges(Node.LOAD_CONTEXT, _refused_or(Node.INPUT_GUARD))
     g.add_conditional_edges(Node.INPUT_GUARD, _refused_or(Node.ROUTER))
-    # Persona and preference-only actions are analysis until their branches exist (slice 7).
+    # Preference-only actions are analysis until their branch exists (#13).
     g.add_conditional_edges(Node.ROUTER, _by_action)
     g.add_edge(Node.RETRIEVE_TRIOS, Node.ANALYSIS)
     g.add_edge(Node.ANALYSIS, Node.AFTER)
     g.add_conditional_edges(Node.PLAN_DELETION, _planned)
     g.add_edge(Node.EXECUTE_DELETION, Node.AFTER)
+    g.add_conditional_edges(Node.PERSONA_PERMISSION, persona.permission_to)
+    g.add_conditional_edges(Node.DRAFT_PERSONA, persona.drafted_to(Node.PERSONA_GATE, Node.AFTER))
+    g.add_edge(Node.PERSONA_GATE, Node.PUBLISH_PERSONA)
+    g.add_edge(Node.PUBLISH_PERSONA, Node.AFTER)
+    g.add_edge(Node.ROLLBACK_PERSONA, Node.AFTER)
     g.add_edge(Node.REFUSE, Node.AFTER)
     g.add_conditional_edges(Node.AFTER, _deferred)
     g.add_edge(Node.OUTPUT_FILTER, Node.RESPOND)
@@ -179,8 +199,12 @@ def _passthrough(state: AgentState) -> dict[str, Any]:
 
 def _by_action(state: AgentState) -> str:
     router = state["router"]
-    deleting = router is not None and router.action is Action.DELETE_REPORTS
-    return Node.PLAN_DELETION if deleting else Node.RETRIEVE_TRIOS
+    action = router.action if router is not None else None
+    if action is Action.DELETE_REPORTS:
+        return Node.PLAN_DELETION
+    if action is Action.CHANGE_PERSONA:
+        return Node.PERSONA_PERMISSION
+    return Node.RETRIEVE_TRIOS
 
 
 def _planned(state: AgentState) -> str:

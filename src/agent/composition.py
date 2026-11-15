@@ -18,7 +18,8 @@ ReportRepository    SQLite + FTS5, same file as the users                 4
 TrioRetriever       SQLite + cosine over ``seed/trios/``; Null if        1, 7
                     ``MODEL_EMBEDDING`` is empty or ``eval --no-trios``
 ProfileStore        SQLite notes (stretch)                                7
-PersonaStore        bundled ``persona.yaml``; SQLite versions (stretch)   1, 7
+PersonaStore        SQLite versions, ``persona.yaml`` as version 1 and    1, 7
+                    the cold-start default; same file as the users
 ChannelAdapter      CLI (stdout); web SSE stream (optional, ADR 0010)     1, 8
 Tracer              JSONL in ``./traces/``; OTel -> Phoenix if it answers 1, 5
                     at start-up (``PHOENIX_ENDPOINT``)
@@ -86,7 +87,7 @@ def build_ports(settings: Settings, *, trios_enabled: bool = True) -> Ports:
     from agent.adapters.bigquery import BigQueryRunner
     from agent.adapters.llm_gemini import GeminiLLMFactory
     from agent.adapters.null import NullTrioRetriever
-    from agent.adapters.persona_file import FilePersonaStore
+    from agent.adapters.persona_sqlite import SqlitePersonaStore
     from agent.adapters.pii_regex import RegexPiiFilter
     from agent.adapters.query_guard import SqlglotQueryGuard
     from agent.adapters.reports_sqlite import SqliteReportRepository
@@ -126,7 +127,7 @@ def build_ports(settings: Settings, *, trios_enabled: bool = True) -> Ports:
         pii=RegexPiiFilter(),
         users=users,
         trios=trios,
-        personas=FilePersonaStore(settings.seed_dir / "persona.yaml"),
+        personas=SqlitePersonaStore(app_db, seed=settings.seed_dir / "persona.yaml"),
         tracer=tracer,
         reports=SqliteReportRepository(app_db),
     )

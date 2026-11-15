@@ -22,12 +22,19 @@ from uuid import UUID
 
 from agent.contracts.channel import Channel, InboundMessage
 from agent.contracts.eval import Layer, LayerScore, Outcome, Scorecard
-from agent.contracts.tools import ListReportsInput, ListReportsOutput
+from agent.contracts.tools import (
+    ListReportsInput,
+    ListReportsOutput,
+    PersonaPublished,
+    PersonaRolledBack,
+)
 from agent.contracts.views import SpanNode, StatsView, TraceView
-from agent.core.catalog import BUNDLED
+from agent.core.catalog import BUNDLED, render
 from agent.core.chat import ChatService
+from agent.core.persona_gate import rejection_text
 from agent.core.views import Views
-from agent.errors import AgentError
+from agent.domain.persona import PersonaVersion
+from agent.errors import AgentError, MessageClass
 from agent.ports.channel import ChannelAdapter
 
 _log = logging.getLogger("agent.cli")
@@ -93,8 +100,9 @@ def run_chat(
     write: Callable[[str], None] = print,
 ) -> None:
     """Read a line, hand it to ``ChatService.handle``, repeat until EOF or ``/quit``.
-    ``/reports``, ``/trace [id]`` and ``/stats [7d]`` go to ``Views`` instead, with no model
-    call; ``Views`` has already run the PII filter on what ``write`` prints.
+    ``/reports``, ``/persona [history|edit|rollback]``, ``/trace [id]`` and ``/stats [7d]``
+    go to ``Views`` instead, with no model call; ``Views`` has already run the PII filter on
+    what ``write`` prints.
 
     Catches everything around a turn, so a failed turn never ends the session. ``handle``
     already never raises; this is the last line, and it logs rather than prints, because
@@ -109,7 +117,7 @@ def run_chat(
             continue
         if text in _QUIT:
             return
-        command = _command(text, views, user_id)
+        command = _command(text, views, user_id, read)
         if command is not None:
             try:
                 write(command())
@@ -131,10 +139,14 @@ def run_chat(
             _log.error("the turn failed (%s); the session continues", type(exc).__name__)
 
 
-def _command(text: str, views: Views, user_id: str) -> Callable[[], str] | None:
+def _command(
+    text: str, views: Views, user_id: str, read: Callable[[str], str]
+) -> Callable[[], str] | None:
     """The view a slash command asks for, or None for a message to the agent."""
     name, _, arg = text.partition(" ")
     arg = arg.strip()
+    if name == "/persona":
+        return lambda: _persona(views, user_id, arg, read)
     if name == "/reports":
         return lambda: render_reports(views.reports(user_id, ListReportsInput(limit=50)))
     if name == "/trace":
@@ -142,6 +154,92 @@ def _command(text: str, views: Views, user_id: str) -> Callable[[], str] | None:
     if name == "/stats":
         return lambda: _stats(views, user_id, arg or "7d")
     return None
+
+
+def _persona(views: Views, user_id: str, arg: str, read: Callable[[str], str]) -> str:
+    if arg == "":
+        return render_persona(views.persona(user_id))
+    if arg == "history":
+        return render_persona_history(views.persona_history(user_id))
+    if arg == "rollback":
+        before = views.persona(user_id)  # the permission check, and the wording to use
+        out = views.rollback_persona(user_id)
+        if isinstance(out, PersonaRolledBack):
+            return (
+                f"Back to v{out.active.version} (was v{out.from_version}). "
+                "Your next answer uses it."
+            )
+        return render(out.message_class, before.persona, ref="none")
+    if arg == "edit":
+        return _edit_persona(views, user_id, read)
+    return "Use /persona, /persona history, /persona edit or /persona rollback."
+
+
+def _edit_persona(views: Views, user_id: str, read: Callable[[str], str]) -> str:
+    """Field by field; Enter keeps the current value (HLD 09 § In the prototype). Only what
+    was typed is sent: ``Views`` applies it to the stored version, and the gate judges it."""
+    current = views.persona(user_id)  # the permission check, before any prompt
+    p = current.persona
+    changes: dict[str, object] = {}
+
+    def ask(field: str, label: str, shown: str) -> None:
+        if answer := read(f"{label} [{shown}]: ").strip():
+            changes[field] = answer
+
+    try:
+        ask("tone.preset", "tone preset", p.tone.preset.value)
+        ask("tone.notes", "tone notes", p.tone.notes)
+        ask("report_sections", "report sections", ", ".join(p.report_sections))
+        ask("emphasis", "emphasis", p.emphasis)
+        message = read("reword a message, e.g. model_busy (Enter to skip): ").strip()
+        if message:
+            known = MessageClass(message) if message in set(MessageClass) else None
+            shown = (p.messages.get(known) or BUNDLED[known]) if known else ""
+            ask(f"messages.{message}", "wording", shown)
+    except (EOFError, KeyboardInterrupt):
+        return "Edit cancelled; nothing changed."
+    if not changes:
+        return f"Nothing changed; v{current.version} stays."
+    if isinstance(sections := changes.get("report_sections"), str):
+        changes["report_sections"] = [s.strip() for s in sections.split(",")]
+    out = views.edit_persona(user_id, changes)
+    if isinstance(out, PersonaPublished):
+        return (
+            f"Checking the new tone… ✓ all {len(out.gate.checks)} checks\n"
+            f"Published v{out.active.version} (was v{out.previous_version}). "
+            "Your next answer uses it."
+        )
+    return rejection_text(out.gate, render(out.message_class, p, ref="none"))
+
+
+def render_persona(v: PersonaVersion) -> str:
+    p = v.persona
+    by = f" by {v.created_by}" if v.created_by else ""
+    lines = [
+        f"Persona v{v.version} · {v.path.value.replace('_', ' ')}{by} · {v.created_at:%d %b %Y}",
+        f"  tone: {p.tone.preset.value}" + (f". {p.tone.notes}" if p.tone.notes else ""),
+        f"  report sections: {', '.join(p.report_sections)}",
+        f"  emphasis: {p.emphasis or 'none'}",
+    ]
+    if p.vocabulary.prefer or p.vocabulary.avoid:
+        say = "; ".join(f'say "{new}" for "{old}"' for old, new in p.vocabulary.prefer.items())
+        avoid = f"avoid {', '.join(p.vocabulary.avoid)}" if p.vocabulary.avoid else ""
+        lines.append(f"  vocabulary: {'; '.join(x for x in (say, avoid) if x)}")
+    lines.append(f"  examples: {len(p.examples)} · message wordings: {len(p.messages)}")
+    return "\n".join(lines)
+
+
+def render_persona_history(versions: list[PersonaVersion]) -> str:
+    lines = ["Persona versions:"]
+    for v in versions:
+        by = f" by {v.created_by}" if v.created_by else ""
+        changed = f"  changed: {', '.join(v.changed_fields)}" if v.changed_fields else ""
+        active = "  (active)" if v.is_active else ""
+        lines.append(
+            f"  v{v.version}  {v.created_at:%d %b %Y %H:%M}  "
+            f"{v.path.value.replace('_', ' ')}{by}{changed}{active}"
+        )
+    return "\n".join(lines)
 
 
 def _trace(views: Views, user_id: str, trace_id: str | None) -> str:
@@ -321,7 +419,9 @@ def render_stats(view: StatsView) -> str:
             [
                 f"out-of-scope refusals {safety['out_of_scope_refusals']}",
                 f"PII-filter hits {safety['pii_filter_hits']}",
-                f"Persona changes {safety['persona_changes']}",
+                f"Persona changes {safety['persona_changes']} "
+                f"(rollbacks {safety['persona_rollbacks']}, "
+                f"gate rejections {safety['persona_rejections']})",
             ],
         ),
         (

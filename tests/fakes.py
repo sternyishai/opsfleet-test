@@ -45,6 +45,7 @@ from agent.errors import ErrorClass, TransientError
 from agent.graph.build import build_graph
 from agent.graph.state import CHECKPOINT_TYPES, AgentGraph
 from agent.ports.llm import ModelStep
+from agent.ports.persona import PersonaStore
 from agent.ports.reports import ReportRepository
 from agent.ports.tracer import SpanRecord, Tracer
 from agent.tools.context import TurnContext
@@ -113,7 +114,7 @@ class FakeEmbeddings(Embeddings):
 class FakeLLMFactory:
     """The router returns ``decision`` (a list: one per turn, the last repeats); the analyst
     replies with ``analyst`` in order. ``structured`` gives other structured-output steps
-    their value (``ModelStep.ENTITY_EXTRACTION``, ``ModelStep.DELETION_FILTER``); an unset
+    their value (``ENTITY_EXTRACTION``, ``DELETION_FILTER``, ``PERSONA_DRAFTER``); an unset
     one raises, like a model outage. ``fail`` makes every ``chat`` call raise it;
     ``router_fail`` only the router's. ``steps`` records every model asked for."""
 
@@ -147,7 +148,11 @@ class FakeLLMFactory:
             raise self.router_fail
         if step is ModelStep.ROUTER:
             return self.router
-        if step in (ModelStep.ENTITY_EXTRACTION, ModelStep.DELETION_FILTER):
+        if step in (
+            ModelStep.ENTITY_EXTRACTION,
+            ModelStep.DELETION_FILTER,
+            ModelStep.PERSONA_DRAFTER,
+        ):
             return self.others.get(step) or ScriptedChatModel(
                 messages=iter([]), structured=TransientError("unscripted", dependency="gemini")
             )
@@ -265,6 +270,9 @@ class FakePersonas:
     def rollback(self, *, by: UserId, to_version: int | None = None) -> PersonaVersion:
         raise LookupError("version 1 is active")
 
+    def events(self) -> list[Any]:
+        return []
+
 
 class FakeSpan:
     def __init__(self, name: str, attributes: dict[str, Any]) -> None:
@@ -319,6 +327,7 @@ def fake_ports(
     trios: Any = None,
     reports: ReportRepository | None = None,
     tracer: Tracer | None = None,
+    personas: PersonaStore | None = None,
 ) -> Ports:
     return Ports(
         llm=llm or FakeLLMFactory(),
@@ -327,7 +336,7 @@ def fake_ports(
         pii=RegexPiiFilter(),
         users=FakeUsers(*users),
         trios=trios or NullTrioRetriever(),
-        personas=FakePersonas(),
+        personas=personas or FakePersonas(),
         tracer=tracer or FakeTracer(),
         reports=reports or InMemoryReportRepository(),
     )
