@@ -4,7 +4,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-15)
 
-**Phase:** 4. Slices 1 (#5), 2 (#6), 3 (#7) and 4 (#8) built. Next: the slice 4 manual CLI demo (screenshot for the PR), then slice 5.
+**Phase:** 4. Slices 1 (#5), 2 (#6), 3 (#7) and 4 (#8, PR #22) built. Next: slice 5 (#9).
 **Branch:** `feat/8-saved-reports`
 
 | Step | Status |
@@ -26,7 +26,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Slice 2 retro | ✅ never-raises test over hostile input; `CODING_STANDARDS` §2: safety changes get an adversarial Spec review; ruff skips `ASSIGNMENT.md`; sqlglot notes in LLD 06; branch name in `CLAUDE.md` |
 | Slice 3: resilience (#7, branch `feat/7-resilience`) | ✅ `run_sql` guard → dry run → execute with one shared budget, `QUERY_TOO_LARGE`/`SELF_CORRECTION_EXHAUSTED` give-up with a plain `tried` list, empty-result probe in code (`tools/probe.py`) from guard filter literals, insisted out-of-scope Brand → `OUT_OF_SCOPE` ends the turn; `adapters/resilience.py` (tenacity retry honouring `Retry-After`, breaker, token bucket) behind both the Gemini factory (fallback chain → `MODEL_BUSY`, `llm` spans) and the BigQuery runner (client retries off); 282 offline tests. Live: CEO 2025 revenue still $2,358,149.49; a free-tier 429 ends as `MODEL_BUSY` with `llm.errors` naming it. Review fixed: half-open breaker stuck after a non-retryable probe, raw transport errors unclassified, filters attributed to the wrong table, `brand` compared with an expression slipping past the refusal |
 
-| Slice 4: Saved Reports + deletion (#8, branch `feat/8-saved-reports`) | ✅ `SqliteReportRepository` (FTS5, same file as the users) + in-memory fake, both under one test suite; `save_report` (PII filter on every field, guard scope, entity extraction with `MODEL_ENTITY_EXTRACTION` failing soft), `list_my_reports`, `get_my_report` bound to the analyst; `parse_reply`; deletion branch `plan_deletion` → `confirm_deletion` (`interrupt()`) → `execute_deletion` → `after` (deferred request); `ChatService` resumes a paused Conversation; `/reports`; 409 offline tests. Deviations in `decision-log.md` § Slice 4. Not yet seen live |
+| Slice 4: Saved Reports + deletion (#8, branch `feat/8-saved-reports`) | ✅ `SqliteReportRepository` (FTS5, same file as the users) + in-memory fake, both under one test suite; `save_report` (PII filter on every field, guard scope, entity extraction with `MODEL_ENTITY_EXTRACTION` failing soft), `list_my_reports`, `get_my_report` bound to the analyst; `parse_reply`; deletion branch `plan_deletion` → `confirm_deletion` (`interrupt()`) → `execute_deletion` → `after` (deferred request); `ChatService` resumes a paused Conversation; `/reports`; 438 offline tests. Deviations in `decision-log.md` § Slice 4. Adversarial review fixed: a punctuation-only topic matched every report, ticking every box on a large plan skipped the count, Unicode digits and multi-line replies were read as answers. Live demo done (screenshot in PR #22): manager-a saved two reports and deleted one by Brand with `yes except`. Found live: the prompt always suggested "yes except 2", even for a one-report plan; it now names an item in the plan |
 
 ## Decisions made this session, not yet written elsewhere
 
@@ -42,9 +42,11 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Run the slice 4 CLI demo (save two reports, delete one by Brand with `yes except`), then /mattpocock-skills:implement for the next ready slice
+> /mattpocock-skills:implement #9
 
 Notes for what comes next:
 
 - The probe was not seen live: the AI Studio free-tier quota for the analyst model ran out during the session. Try "orders from Customers whose state is 'CA'" (thelook stores full state names) when quota allows.
-- No `MODEL_ANALYST_FALLBACK` is set in `.env`, so a 429 on Flash goes straight to `MODEL_BUSY`; setting it to Flash-Lite makes the fallback live.
+- `.env` now sets `MODEL_ANALYST_FALLBACK=gemini-3.5-flash-lite`; the fallback answered live when Flash hit its free-tier 429. `gemini-2.5-flash-lite` returns 404 for new AI Studio users: a 404 is a permanent error, so the turn ends as `UNCLASSIFIED` rather than falling back.
+- Slice 5 (`/trace`, `/stats`): the deletion spans already carry `plan_id`, `plan.size`, `outcome` (`confirmed`, `partial`, `expired`), `deleted`, `kept`, `already_gone`; `save_report` carries `redactions` and `entities`.
+- Open wording point from slice 4: a `yes except N` naming an item not in the plan cancels it with "That confirmation is no longer open", which reads as a timeout. A clearer catalog message was offered, not built.
