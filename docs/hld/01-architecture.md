@@ -10,7 +10,7 @@ This section names every building block, says how the blocks talk to each other,
 | **Chat API** | Cloud Run service (CPU always allocated) | Hosts the LangGraph agent. Loads the User context, runs the turn, streams progress and checkpoints the Conversation. Stateless: all state is in Postgres. |
 | **Agent graph** | inside the Chat API | A fixed shell (input guard, intent router, output PII filter) around a ReAct analysis sub-agent with a fixed Golden Trio retrieval step in front of it, and a deterministic report-deletion branch ([ADR 0004](../adr/0004-hybrid-agent-graph.md), [ADR 0008](../adr/0008-trio-retrieval-is-a-fixed-step.md)). See [Agent graph](#agent-graph). |
 | **Admin UI** | Cloud Run service behind IAP | Lets the CEO edit the Persona with preview, scheduling and rollback (the CEO can also change it in chat) ([09](09-persona-management.md)). Shows the Trio Candidate review queue to analysts ([02](02-hybrid-intelligence.md)). |
-| **Background jobs** | Event work: a **worker Cloud Run service** behind Pub/Sub push subscriptions. Batch work: **Cloud Run jobs** started by Cloud Scheduler | Events: Trio ingestion, entity extraction for Saved Reports, Trio Candidate generation. Batch: nightly Trio validation and sweep, preference inference, weekly aggregation and synthetic canaries. Every handler is idempotent. A push handler returns success only after its work commits; a failure is redelivered with backoff and, after N attempts, moved to its subscription's dead-letter topic with an alert. A failed batch run is retried by Cloud Run and alerted. |
+| **Background jobs** | Event work: a **worker Cloud Run service** behind Pub/Sub push subscriptions. Batch work: **Cloud Run jobs** started by Cloud Scheduler | Events: Trio ingestion, entity extraction for Saved Reports, Trio Candidate generation, and the nightly sweep for missed work (Cloud Scheduler publishes it to Pub/Sub, so the Worker runs it with the same handlers). Batch: nightly Trio validation, preference inference, weekly aggregation and synthetic canaries. Every handler is idempotent. A push handler returns success only after its work commits; a failure is redelivered with backoff and, after N attempts, moved to its subscription's dead-letter topic with an alert. A failed batch run is retried by Cloud Run and alerted. |
 | **Gemini** | Vertex AI / Google AI Studio | Every model call goes through one model factory. Each step has its own model setting: router and guard on Flash-Lite, analysis on Flash, long reports on Pro ([10](10-stack-rationale.md)). |
 | **BigQuery** | managed | The analytics data (`orders`, `order_items`, `products`, `users`). Read-only to us, owned by the data team. |
 | **Cloud SQL Postgres + pgvector** | managed | All application state ([ADR 0002](../adr/0002-postgres-for-app-state.md)). See [Data stores](#where-data-lives-and-how-it-is-handled). |
@@ -78,7 +78,7 @@ sequenceDiagram
     API->>PG: checkpoint turn (compact result summary)
     API-->>GW: AgentReply
     GW-->>U: answer, formatted per User Profile and Persona
-    API--)PS: turn.completed (for preference inference and aggregation)
+    API--)PS: turn.completed (IDs only; the Worker writes the interaction store)
 ```
 
 Self-correction inside `run_sql` (retries on SQL errors, one diagnosis on empty results) is detailed in [06](06-resilience.md). The delete flow, which pauses mid-turn for confirmation, is detailed in [04](04-destructive-ops.md).
@@ -215,8 +215,9 @@ flowchart LR
 | **Channel Gateway** | none | none | none | none | 1, 4 (CEO in chat) |
 | **Chat API** | R: Users and Brand Assignments, Golden Trios, Persona (cached). R/W: checkpoints, User Profiles (explicit). W: Saved Reports, deletion audit, Persona versions. D: Saved Reports | R: `run_sql` through the query guard, as the service account or the User | none | publishes `report.saved`, `report.deleted`, `turn.completed` | 1–4 |
 | **Admin UI** | W: Persona versions. R/W: Trio Candidates (review queue) | none | none | none | 4, 5 |
-| **Worker service** | R: Saved Reports, checkpoints. W: entities, Golden Trios, Trio Candidates, interaction store | dry run of Trio SQL | R: Trio files. D: chart images | push subscriber; DLQ after ~5 failures | 2, 3, 5, 6, 7 |
-| **Batch jobs** | R: interaction store, Golden Trios. W: inferred User Profile values, aggregates, retired Trios | dry run of every active Trio | R: nightly sweep for missed files | publishes the sweep's missed events | 5, 6 |
+| **Worker service** | R: Saved Reports, checkpoints. W: entities, Golden Trios, Trio Candidates, interaction store | dry run of Trio SQL | R: Trio files, also in the nightly sweep. D: chart images | push subscriber; DLQ after ~5 failures | 2, 3, 5, 6, 7 |
+| **Batch jobs** | R: interaction store, Golden Trios. W: inferred User Profile values, aggregates, retired Trios | dry run of every active Trio | none | none | 5, 6 |
+| **Cloud Scheduler** | none | none | none | publishes the nightly sweep message | 5 |
 | **People** | admins and a sync job write Users and Brand Assignments | data team loads it | analysts upload Trio files | AI-ops replays the DLQ | 5, 7 |
 
 Every component also writes spans to the observability backend (story 8). Nothing writes to BigQuery; the only BigQuery calls besides `run_sql` are dry runs.

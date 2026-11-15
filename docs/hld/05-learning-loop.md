@@ -30,7 +30,7 @@ flowchart LR
     M[User message] --> R{router:<br/>preference statements}
     R -- "this time, just bullets" --> T[apply to this turn only]
     R -- "always give me tables" --> S[apply now +<br/>save as explicit]
-    E[(turn.completed<br/>events)] --> J[preference inference job<br/>daily]
+    E[(interaction store<br/>written from turn.completed)] --> J[preference inference job<br/>daily]
     J -- pattern seen ~3 times,<br/>above confidence threshold --> I[save as inferred +<br/>tell the User once]
     S --> P[(User Profile)]
     I --> P
@@ -38,7 +38,7 @@ flowchart LR
 ```
 
 - **Explicit statements apply immediately.** The router extracts them from any message, alongside its action ([01](01-architecture.md#agent-graph)). "This time" applies to the current answer only; "always" or "from now on" is saved.
-- **Patterns are inferred, slowly and visibly.** A daily job reads the turn events. When a pattern repeats about three times above a confidence threshold, it saves an inferred preference. Examples: the User asks to "turn that into a table" after answers; they often follow up with "why?" (prefers deeper analysis); they never open charts. The agent then says so once ("I've noticed you prefer tables, so I'll use them from now on. Say 'stop' to undo."), so learning is never a surprise.
+- **Patterns are inferred, slowly and visibly.** A daily job reads the interaction store (the `turn.completed` event carries only IDs; the Worker writes the turn there, PII redacted). When a pattern repeats about three times above a confidence threshold, it saves an inferred preference. Examples: the User asks to "turn that into a table" after answers; they often follow up with "why?" (prefers deeper analysis); they never open charts. The agent then says so once ("I've noticed you prefer tables, so I'll use them from now on. Say 'stop' to undo."), so learning is never a surprise.
 - **Explicit always beats inferred.** An inferred value never overwrites something the User said.
 - **The schema evolves from use.** A periodic aggregation looks for note types that recur across Users and promotes them into attributes or core fields, so the structured profile grows where people actually need it.
 
