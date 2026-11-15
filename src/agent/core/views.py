@@ -1,5 +1,5 @@
-"""Views: the model-free commands, in one place for every channel. Reports, traces and stats
-are built; the other views arrive with their slice.
+"""Views: the model-free commands, in one place for every channel. Reports, the Persona,
+traces and stats are built; the profile views arrive with #13.
 
 Rule: **a channel only translates.** The CLI turns ``/reports`` into ``Views.reports``; the web
 adapter turns ``GET /api/reports`` into the same call. No channel reads a store itself, so
@@ -9,7 +9,9 @@ the CLI and the UI cannot drift, and Author isolation and scope checks are writt
 everything that does not.
 """
 
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from agent.composition import Ports
@@ -21,7 +23,11 @@ from agent.contracts.tools import (
     GetReportOutput,
     ListReportsInput,
     ListReportsOutput,
+    PersonaPublished,
+    PersonaRolledBack,
+    PublishPersonaInput,
     PublishPersonaOutput,
+    RollbackPersonaInput,
     RollbackPersonaOutput,
 )
 from agent.contracts.views import SpanNode, StatsView, TraceView
@@ -32,10 +38,12 @@ from agent.core.observability import (
     last_turn,
     parse_since,
 )
+from agent.core.persona_gate import PersonaQualityGate
 from agent.domain.identity import Role, UserId
-from agent.domain.persona import Persona, PersonaVersion
+from agent.domain.persona import Persona, PersonaPath, PersonaVersion, TonePreset
 from agent.domain.profile import UserProfile
 from agent.errors import MessageClass, PermanentError
+from agent.tools.branches import may_edit_persona, publish_persona, rollback_persona
 from agent.tools.context import TurnContext
 from agent.tools.reports import get_my_report, list_my_reports
 
@@ -112,18 +120,59 @@ class Views:
 
     # Persona: /persona, /persona history|edit|rollback, /api/persona...
     def persona(self, user_id: UserId) -> PersonaVersion:
-        raise NotImplementedError
+        self._persona_editor(user_id)
+        return self._clean_version(self._ports.personas.active())
 
     def persona_history(self, user_id: UserId) -> list[PersonaVersion]:
-        raise NotImplementedError
+        self._persona_editor(user_id)
+        return [self._clean_version(v) for v in self._ports.personas.history()]
 
-    def edit_persona(self, user_id: UserId, persona: Persona) -> PublishPersonaOutput:
-        raise NotImplementedError
+    def edit_persona(self, user_id: UserId, changes: Mapping[str, Any]) -> PublishPersonaOutput:
+        """The direct edit: the same ``PersonaQualityGate`` and ``publish_persona`` as the
+        chat branch, without drafting. ``changes`` maps a field (``emphasis``,
+        ``report_sections``, ``tone.preset``, ``tone.notes``, ``messages.<class>``) to its new
+        value. They are applied to the active version as stored, never to what ``persona``
+        showed (that went through the PII filter), and passed on unvalidated: judging the
+        limits is the gate's first check, so a bad value comes back as a reason."""
+        ctx = self._persona_editor(user_id)
+        persona = _with_changes(self._ports.personas.active().persona, changes)
+        gate = PersonaQualityGate(self._ports.llm, self._ports.pii).check(persona)
+        out = publish_persona(
+            PublishPersonaInput(persona=persona, path=PersonaPath.DIRECT_EDIT), ctx, gate
+        )
+        if isinstance(out, PersonaPublished):
+            return out.model_copy(update={"active": self._clean_version(out.active)})
+        checks = [
+            c.model_copy(update={"reason": self._clean(c.reason) if c.reason else None})
+            for c in out.gate.checks
+        ]
+        return out.model_copy(update={"gate": out.gate.model_copy(update={"checks": checks})})
 
     def rollback_persona(
         self, user_id: UserId, to_version: int | None = None
     ) -> RollbackPersonaOutput:
-        raise NotImplementedError
+        out = rollback_persona(
+            RollbackPersonaInput(to_version=to_version), self._persona_editor(user_id)
+        )
+        if isinstance(out, PersonaRolledBack):
+            return out.model_copy(update={"active": self._clean_version(out.active)})
+        return out
+
+    def _persona_editor(self, user_id: UserId) -> TurnContext:
+        ctx = self._context(user_id)
+        if not may_edit_persona(ctx.user):
+            raise PermanentError(
+                f"{user_id!r} may not edit the Persona",
+                message_class=MessageClass.PERSONA_FORBIDDEN,
+            )
+        return ctx
+
+    def _clean_version(self, version: PersonaVersion) -> PersonaVersion:
+        return version.model_copy(
+            update={"persona": Persona.model_validate(_map_text(
+                version.persona.model_dump(mode="json"), self._clean
+            ))}
+        )  # fmt: skip
 
     # observability: /trace [id], /stats, GET /api/traces/{id}, GET /api/stats
     def trace(self, user_id: UserId, trace_id: str | None = None) -> TraceView | None:
@@ -158,3 +207,34 @@ class Views:
                 "children": [self._clean_node(c) for c in node.children],
             }
         )
+
+
+def _map_text(value: Any, clean: Callable[[str], str]) -> Any:
+    """``value`` with ``clean`` applied to every string in it, dictionary keys included."""
+    if isinstance(value, str):
+        return clean(value)
+    if isinstance(value, list):
+        return [_map_text(v, clean) for v in value]
+    if isinstance(value, dict):
+        return {_map_text(k, clean): _map_text(v, clean) for k, v in value.items()}
+    return value
+
+
+def _with_changes(persona: Persona, changes: Mapping[str, Any]) -> Persona:
+    """``persona`` with ``changes`` applied and not validated (``model_copy``)."""
+    top: dict[str, Any] = {}
+    tone: dict[str, Any] = {}
+    messages: dict[Any, str] = dict(persona.messages)
+    for path, value in changes.items():
+        head, _, rest = path.partition(".")
+        if head == "tone" and rest:
+            tone[rest] = (
+                TonePreset(value) if rest == "preset" and value in set(TonePreset) else value
+            )
+        elif head == "messages" and rest:
+            messages[MessageClass(rest) if rest in set(MessageClass) else rest] = value
+        else:
+            top[path] = value
+    return persona.model_copy(
+        update={**top, "tone": persona.tone.model_copy(update=tone), "messages": messages}
+    )

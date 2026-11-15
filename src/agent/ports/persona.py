@@ -3,7 +3,13 @@
 from typing import Protocol
 
 from agent.domain.identity import UserId
-from agent.domain.persona import Persona, PersonaGateResult, PersonaPath, PersonaVersion
+from agent.domain.persona import (
+    Persona,
+    PersonaEvent,
+    PersonaGateResult,
+    PersonaPath,
+    PersonaVersion,
+)
 
 
 class PersonaStore(Protocol):
@@ -20,8 +26,10 @@ class PersonaStore(Protocol):
       version.
     - ``rollback`` re-activates ``to_version`` (default: the version active before the current
       one) without re-running the gate. Raises ``LookupError`` when there is nothing to roll
-      back to.
-    - Versions are never deleted.
+      back to. Undo walks back along what was active, so repeated undos reach version 1 and
+      then raise.
+    - ``events`` is the audit, oldest first: every publish, rejection and rollback.
+    - Versions are never deleted. A write that fails raises ``TransientError``.
     """
 
     def active(self) -> PersonaVersion: ...
@@ -43,3 +51,5 @@ class PersonaStore(Protocol):
     ) -> None: ...
 
     def rollback(self, *, by: UserId, to_version: int | None = None) -> PersonaVersion: ...
+
+    def events(self) -> list[PersonaEvent]: ...

@@ -1,6 +1,7 @@
 """PersonaStore over the bundled ``persona.yaml``: version 1 only, read once (HLD 09 § Seed).
 
-Publishing, rejections and history beyond version 1 need the SQLite store (slice 7).
+The SQLite store reads its seed and cold-start default through this one. Publishing and
+rejections need the SQLite store.
 """
 
 from datetime import UTC, datetime
@@ -10,7 +11,7 @@ from typing import Any
 import yaml
 
 from agent.domain.identity import UserId
-from agent.domain.persona import Persona, PersonaPath, PersonaVersion
+from agent.domain.persona import Persona, PersonaEvent, PersonaPath, PersonaVersion
 
 
 class FilePersonaStore:
@@ -33,10 +34,13 @@ class FilePersonaStore:
         return [self._active]
 
     def publish(self, persona: Persona, **_: Any) -> PersonaVersion:
-        raise NotImplementedError("publishing needs the SQLite Persona store (slice 7)")
+        raise NotImplementedError("publishing needs the SQLite Persona store")
 
     def record_rejection(self, persona: Persona, **_: Any) -> None:
-        raise NotImplementedError("rejections need the SQLite Persona store (slice 7)")
+        raise NotImplementedError("rejections need the SQLite Persona store")
 
     def rollback(self, *, by: UserId, to_version: int | None = None) -> PersonaVersion:
         raise LookupError("version 1 is the only version")
+
+    def events(self) -> list[PersonaEvent]:
+        return []

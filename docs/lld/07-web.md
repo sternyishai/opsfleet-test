@@ -42,7 +42,7 @@ A test in Phase 4 pins this: for each row below, the CLI command and the web end
 | Remove a preference / reset | `/profile clear [n]` | `DELETE /api/profile[/notes/{id}]` | `Views.remove_preference` |
 | Active Persona | `/persona` | `GET /api/persona` | `Views.persona` |
 | Persona history | `/persona history` | `GET /api/persona/versions` | `Views.persona_history` |
-| Edit the Persona directly | `/persona edit` | `PUT /api/persona` (form) | `Views.edit_persona` → Quality Gate |
+| Edit the Persona directly | `/persona edit` | `PUT /api/persona` (the changed fields) | `Views.edit_persona(user_id, changes)` → Quality Gate. `changes` maps a field (`emphasis`, `tone.preset`, `messages.model_busy`, …) to its new value, applied to the stored version, never to the PII-filtered one `/persona` shows |
 | Roll back the Persona | `/persona rollback` | `POST /api/persona/rollback` | `Views.rollback_persona` |
 | Step tree of a turn | `/trace [id]` | `GET /api/traces/{id}` | `Views.trace` |
 | Agent metrics | `/stats [7d]`, `agent stats --as <id>` | `GET /api/stats` | `Views.stats` |

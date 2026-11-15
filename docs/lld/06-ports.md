@@ -14,13 +14,13 @@ ADR 0006 lists ten ports. The LLD adds three: **`UserDirectory`**, the seam betw
 | [`ReportRepository`](../../src/agent/ports/reports.py) | `save`, `find`, `get`, `match`, `delete_with_audit` | SQLite + FTS5 | Postgres + `tsvector` |
 | [`TrioRetriever`](../../src/agent/ports/trios.py) | `search(query, scope, limit)` | SQLite + cosine over the seed Trios; Null when off | pgvector + full text, RRF |
 | [`ProfileStore`](../../src/agent/ports/profile.py) | `load`, `save_standing`, `remove` | SQLite notes (stretch) | Postgres |
-| [`PersonaStore`](../../src/agent/ports/persona.py) | `active`, `history`, `publish`, `record_rejection`, `rollback` | bundled `persona.yaml`; SQLite (stretch) | Postgres, ~60 s cache; or a prompt registry |
+| [`PersonaStore`](../../src/agent/ports/persona.py) | `active`, `history`, `publish`, `record_rejection`, `rollback`, `events` | SQLite, same file as the users, `persona.yaml` as version 1 | Postgres, ~60 s cache; or a prompt registry |
 | [`ChannelAdapter`](../../src/agent/ports/channel.py) | `deliver(message)`, per turn | CLI stdout; web SSE stream (optional) | Slack, Teams, web in the Gateway |
 | [`Tracer`](../../src/agent/ports/tracer.py) | `turn(...)`, `span(name, ...)`, `current_trace_id()`, `read(since)` | JSONL; OTel → Phoenix if running | OTel Collector → Phoenix, Langfuse or LangSmith |
 | [`ScorecardSink`](../../src/agent/ports/scorecards.py) | `publish(cases, scorecard)`, `baseline(...)` | JSON in `evals/runs/`; Phoenix experiments if running | same, or Langfuse / LangSmith datasets |
 | [`Delivery`](../../src/agent/ports/delivery.py) | `render(report)`, `send(author_id, rendered, key)` | not wired | email, Slack, push |
 
-In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `None` until slice 7 wires it; until then every User has an empty profile. `reports` is the SQLite store, in the same file as the users (a report's Author is a foreign key into `users`). `trios` is `SqliteTrioRetriever` over the seed Trios (slice 7), in the same file again; `NullTrioRetriever` ([adapters/null.py](../../src/agent/adapters/null.py)) stands in when `MODEL_EMBEDDING` is empty and for `agent eval --no-trios`. Other stand-in: `FilePersonaStore` serving `seed/persona.yaml` as version 1 (catalog classes it does not word use the bundled wording in [core/catalog.py](../../src/agent/core/catalog.py)).
+In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `None` until slice 7 wires it; until then every User has an empty profile. `reports` is the SQLite store, in the same file as the users (a report's Author is a foreign key into `users`). `trios` is `SqliteTrioRetriever` over the seed Trios (slice 7), in the same file again; `NullTrioRetriever` ([adapters/null.py](../../src/agent/adapters/null.py)) stands in when `MODEL_EMBEDDING` is empty and for `agent eval --no-trios`. `personas` is `SqlitePersonaStore` (#12), in the same file again; it reads its seed and cold-start default through `FilePersonaStore`, which serves `seed/persona.yaml` as version 1 only (catalog classes the Persona does not word use the bundled wording in [core/catalog.py](../../src/agent/core/catalog.py)).
 
 ## Checklist per port
 
@@ -130,10 +130,11 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `No
 
 ### `PersonaStore`
 
-- **Schema:** `PersonaVersion`, `Persona`, `PersonaGateResult` ([domain/persona.py](../../src/agent/domain/persona.py)).
+- **Schema:** `PersonaVersion`, `Persona`, `PersonaGateResult`, `PersonaEvent` ([domain/persona.py](../../src/agent/domain/persona.py)). `events` (added in #12) is the audit the HLD asks for (who, when, which path, what happened), so a rejection is visible through the port, not only in the table.
 - **Depends on:** nothing.
 - **Safety:** `publish` refuses a non-passing gate result; versions are immutable; exactly one active (index).
-- **Failures:** `active()` never raises (cache, then bundled default); `rollback` raises `LookupError` at version 1.
+- **Failures:** `active()` never raises (the last version it read, then the bundled default); `rollback` raises `LookupError` at version 1; any other read or write that fails raises `TransientError(UNAVAILABLE)`, and a publish is one transaction.
+- **Rollback target** ([`adapters/persona_sqlite.py`](../../src/agent/adapters/persona_sqlite.py)): undo walks back along what was active, replayed from `persona_events`, not by version number. v1 → v2 → v3, undo → v2, publish v4, undo → v2 (not v3), undo → v1, undo → `LookupError`.
 - **Trace:** `persona.version` on every turn's root span.
 - **Tests** · slice 7 · `tests/test_persona.py`: publish moves the pointer; refused without a pass; rollback; cold-start default.
 

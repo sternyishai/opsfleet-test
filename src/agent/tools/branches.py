@@ -1,15 +1,18 @@
 """Branch functions: called only from router-opened fixed branches, never bound to a model
-(ADR 0004). The deletion pair is built; the Persona functions are stubs until slice 7."""
+(ADR 0004). The Persona functions are also what ``Views`` calls for ``/persona edit`` and
+``/persona rollback``, so both paths share one gate and one store (HLD 09)."""
 
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from agent.contracts.tools import (
-    DraftPersonaInput,
     ExecuteDeletionInput,
     ExecuteDeletionOk,
     ExecuteDeletionOutput,
     PersonaDraft,
+    PersonaPublished,
+    PersonaRejected,
+    PersonaRolledBack,
     PlanDeletionInput,
     PlanDeletionNothing,
     PlanDeletionOk,
@@ -20,7 +23,8 @@ from agent.contracts.tools import (
     RollbackPersonaOutput,
     ToolError,
 )
-from agent.domain.persona import PersonaVersion
+from agent.domain.identity import Permission, UserContext
+from agent.domain.persona import Persona, PersonaGateResult, PersonaVersion
 from agent.domain.reports import DeletionOutcome, DeletionPlan
 from agent.errors import MessageClass
 from agent.tools.context import TurnContext
@@ -99,20 +103,98 @@ def execute_deletion(
     return ExecuteDeletionOk(outcome=outcome, replayed=receipt.replayed)
 
 
-def draft_persona(
-    args: DraftPersonaInput, ctx: TurnContext, current: PersonaVersion
-) -> PersonaDraft:
-    """``ModelStep.PERSONA_DRAFTER`` with structured output into ``Persona``. Only reached after
-    the ``persona_editor`` check."""
-    raise NotImplementedError
+def may_edit_persona(user: UserContext) -> bool:
+    """The ``persona_editor`` permission, from the identity tables (HLD 09 § Who may change
+    it). Checked by the caller before any Persona function, and before any model call."""
+    return Permission.PERSONA_EDITOR in user.permissions
 
 
-def publish_persona(args: PublishPersonaInput, ctx: TurnContext) -> PublishPersonaOutput:
-    """Run ``agent.core.persona_gate.PersonaQualityGate``; on pass ``PersonaStore.publish``,
-    on fail ``PersonaStore.record_rejection``."""
-    raise NotImplementedError
+def draft_persona(drafted: Persona, ctx: TurnContext, current: PersonaVersion) -> PersonaDraft:
+    """The draft from the ``PERSONA_DRAFTER`` model's structured ``Persona``, which the node
+    asks for before this function (like the deletion filter). Code, not the model, says what
+    changed. Only reached after the ``persona_editor`` check; untrusted until the gate passes."""
+    with ctx.ports.tracer.span("draft_persona") as span:
+        changed = changed_fields(current.persona, drafted)
+        span.set(changed_fields=changed)
+    return PersonaDraft(persona=drafted, changed_fields=changed, summary=describe(drafted, changed))
+
+
+def publish_persona(
+    args: PublishPersonaInput, ctx: TurnContext, gate: PersonaGateResult
+) -> PublishPersonaOutput:
+    """``gate`` is ``PersonaQualityGate.check(args.persona)``, run by the caller (the
+    ``persona_gate`` node, or ``Views.edit_persona``). On pass ``PersonaStore.publish``; on
+    fail, or when the gate could not run, ``PersonaStore.record_rejection``. The store refuses
+    a result that did not pass, so a wrong caller cannot publish either. The caller has
+    checked ``persona_editor``."""
+    store = ctx.ports.personas
+    with ctx.ports.tracer.span("publish_persona", path=args.path.value) as span:
+        current = store.active()
+        span.set(
+            **{f"gate.{c.check.name.lower()}": c.passed for c in gate.checks},
+            **{"gate.could_not_run": gate.could_not_run, "version.before": current.version},
+        )
+        if not gate.passed:
+            store.record_rejection(args.persona, by=ctx.user.user_id, path=args.path, gate=gate)
+            span.set(outcome="rejected", **{"version.after": current.version})
+            return PersonaRejected(
+                gate=gate,
+                current_version=current.version,
+                message_class=MessageClass.MODEL_BUSY
+                if gate.could_not_run
+                else MessageClass.PERSONA_GATE_FAILED,
+            )
+        active = store.publish(
+            args.persona,
+            by=ctx.user.user_id,
+            path=args.path,
+            changed_fields=changed_fields(current.persona, args.persona),
+            gate=gate,
+        )
+        span.set(outcome="published", **{"version.after": active.version})
+    return PersonaPublished(active=active, previous_version=current.version, gate=gate)
 
 
 def rollback_persona(args: RollbackPersonaInput, ctx: TurnContext) -> RollbackPersonaOutput:
-    """``PersonaStore.rollback``; no gate, the version already passed it."""
-    raise NotImplementedError
+    """``PersonaStore.rollback``; no gate, the version already passed it. The caller has
+    checked ``persona_editor``."""
+    store = ctx.ports.personas
+    with ctx.ports.tracer.span("rollback_persona") as span:
+        current = store.active()
+        span.set(**{"version.before": current.version, "rollback.target": args.to_version})
+        try:
+            active = store.rollback(by=ctx.user.user_id, to_version=args.to_version)
+        except LookupError as exc:
+            span.set(outcome="nothing_to_roll_back")
+            return ToolError(
+                message_class=MessageClass.PERSONA_NOTHING_TO_ROLL_BACK, detail=str(exc)
+            )
+        span.set(outcome="rolled_back", **{"version.after": active.version})
+    return PersonaRolledBack(active=active, from_version=current.version)
+
+
+def changed_fields(before: Persona, after: Persona) -> list[str]:
+    """The top-level Persona fields that differ, in the Persona's own field order."""
+    return [f for f in Persona.model_fields if getattr(before, f) != getattr(after, f)]
+
+
+def describe(persona: Persona, fields: list[str]) -> str:
+    """What the new version says, for the fields that changed: "warm (Encouraging and
+    plain.); report sections Summary, Risks, Action items"."""
+    parts: list[str] = []
+    for field in fields:
+        match field:
+            case "tone":
+                notes = f" ({persona.tone.notes})" if persona.tone.notes else ""
+                parts.append(f"{persona.tone.preset.value}{notes}")
+            case "report_sections":
+                parts.append(f"report sections {', '.join(persona.report_sections)}")
+            case "emphasis":
+                parts.append(f"emphasis: {persona.emphasis or 'none'}")
+            case "vocabulary":
+                parts.append("new vocabulary")
+            case "examples":
+                parts.append(f"{len(persona.examples)} example answers")
+            case "messages":
+                parts.append("new wording for some messages")
+    return "; ".join(parts) or "no change"

@@ -25,7 +25,7 @@ The LangGraph state is [`AgentState`](../../src/agent/graph/state.py): one per C
 | Routing | `router` | the `RouterDecision` |
 | Analysis | `trios`, `retrieval_degraded`, `analysis_steps`, `sql_attempts`, `sql_retries`, `empty_diagnoses`, `ran_sql`, `last_query_scope`, `result_summaries`, `saved_report_ids` | the retry counters are the `SqlBudget` that `run_sql` reads and returns; `ran_sql` with `trios == []` marks a retrieval gap |
 | Deletion | `confirmed_report_ids`, `deletion_outcome` | `confirm_deletion` writes the IDs the reply confirmed; `execute_deletion` reads them |
-| Persona | `persona_draft`, `persona_gate` | |
+| Persona | `persona_draft`, `persona_gate` | `draft_persona` writes the draft (the `PERSONA_DRAFTER` model's structured `Persona`, with `changed_fields` worked out in code); `persona_gate` writes the `PersonaQualityGate` result; `publish_persona` publishes or records the rejection. `/persona edit` runs the same gate and the same `publish_persona` function. A published or rolled-back version replaces `persona` for the rest of the turn, so a deferred request is answered in the new tone |
 | Outcome | `error_class`, `message_class` | set by the graph-boundary catch-all or a refusal |
 
 The HLD's scope list asks for "this turn's preference statements": they are `router.preferences`, and their effect is `profile`. Nothing stores them twice.

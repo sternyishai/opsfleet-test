@@ -31,6 +31,7 @@ from agent.contracts.eval import (
     Transcript,
 )
 from agent.core.observability import Prices, llm_tokens, llm_usd
+from agent.core.persona_gate import has_heading
 from agent.domain.identity import BrandScope
 from agent.domain.query import GuardRejected
 from agent.domain.traces import SpanRecord
@@ -368,7 +369,7 @@ class SectionsPresent:
         if not isinstance(expect, ExpectAnswer) or not expect.required_sections:
             return None
         reply = transcript.final_reply()
-        checks = {s: _has_heading(reply, s) for s in expect.required_sections}
+        checks = {s: has_heading(reply, s) for s in expect.required_sections}
         missing = [s for s, ok in checks.items() if not ok]
         return _score(
             self.name,
@@ -376,12 +377,6 @@ class SectionsPresent:
             checks=checks,
             reason=f"missing: {', '.join(missing)}" if missing else None,
         )
-
-
-def _has_heading(markdown: str, section: str) -> bool:
-    name = re.escape(section)
-    heading = rf"^\s*(?:#{{1,6}}\s*{name}\b|\*\*\s*{name}\s*:?\s*\*\*|{name}\s*:\s*$)"
-    return re.search(heading, markdown, flags=re.IGNORECASE | re.MULTILINE) is not None
 
 
 # --- RubricJudge (reported only) ------------------------------------------------------------
