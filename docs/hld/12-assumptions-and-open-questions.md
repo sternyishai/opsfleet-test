@@ -39,6 +39,7 @@ Every assumption the design rests on, every point the client has already confirm
 | # | Assumption | Used in | If it is wrong |
 |---|---|---|---|
 | A8 | Raw traces, interaction records and Conversation checkpoints are kept 90 days; anonymized aggregates indefinitely. | [01](01-architecture.md#where-data-lives-and-how-it-is-handled), [05](05-learning-loop.md), [08](08-observability.md) | A setting per store. Shorter raw retention gives the weekly review and replay less history to work with. |
+| A8a | Dead-lettered background events are kept 7 days, after about 5 failed deliveries (both Pub/Sub defaults). They hold IDs only. | [01](01-architecture.md#where-data-lives-and-how-it-is-handled), [11](11-operations.md#running-it) | A setting per subscription (retention up to 31 days, attempts 5–100). A shorter window means a fix must ship faster before messages are dropped; the nightly sweeps redo most missed work anyway. |
 | A9 | Deletion audit rows are kept indefinitely (metadata only: who, when, count, IDs, titles). | [04](04-destructive-ops.md), [01](01-architecture.md#where-data-lives-and-how-it-is-handled) | A setting. The audit row never holds content, so it does not undo the hard delete. |
 
 ### People and operations
