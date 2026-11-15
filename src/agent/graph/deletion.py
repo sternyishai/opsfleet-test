@@ -33,6 +33,7 @@ from agent.core.confirmation import (
     Decline,
     NeedsCount,
     NotAnAnswer,
+    looks_like_reply,
     parse_reply,
 )
 from agent.domain.reports import DeletionFilter, DeletionOutcome, DeletionPlan
@@ -119,13 +120,16 @@ class DeletionNodes:
                 said = f"Nothing was deleted. I kept all {_reports(plan.total)}."
                 update["messages"].append(AIMessage(content=said))
                 return Command(goto=self._after, update=update | {"open_plan": None})
-            case _:  # NotAnAnswer: cancel; a typed message is then handled as a new one
+            case _:  # NotAnAnswer: cancel; a new message is then handled as a new one
                 update |= {"open_plan": None, "deferred_request": None}
-                if text:
+                if text and not looks_like_reply(text):
                     return Command(goto=self._restart, update=update)
-                expired = render(MessageClass.PLAN_EXPIRED, persona, ref=reply["trace_id"])
-                update["messages"].append(AIMessage(content=expired))
-                update["message_class"] = MessageClass.PLAN_EXPIRED
+                # An answer that does not fit this plan ("yes except 4" of 3), or a button
+                # for another request: say so here rather than guess at it.
+                why = MessageClass.PLAN_ANSWER_INVALID if text else MessageClass.PLAN_EXPIRED
+                said = render(why, persona, ref=reply["trace_id"])
+                update["messages"].append(AIMessage(content=said))
+                update["message_class"] = why
                 return Command(goto=self._after, update=update)
 
     def execute_deletion(self, state: AgentState) -> dict[str, Any]:

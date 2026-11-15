@@ -51,6 +51,6 @@ The HLD's scope list asks for "this turn's preference statements": they are `rou
 | `ConfirmAll`, `ConfirmExcept` | `execute_deletion` with the confirmed IDs |
 | `Decline` | `after` |
 | `NeedsCount` | a second `interrupt()` in the same node, asking for the count; a second bare `yes` is `NotAnAnswer` |
-| `NotAnAnswer` | the plan is cancelled (`open_plan = None`) and a typed reply re-enters as a new message at `load_context`, so it passes `input_guard` with fresh turn keys and a freshly loaded User; a button for another request ends with `PLAN_EXPIRED` |
+| `NotAnAnswer` | the plan is cancelled (`open_plan = None`). A reply shaped like an answer that does not fit the plan (`yes except 4` to a plan of 3, a second bare `yes` to a large plan) ends with `PLAN_ANSWER_INVALID`; a button for another request with `PLAN_EXPIRED`; any other message re-enters as a new message at `load_context`, so it passes `input_guard` with fresh turn keys and a freshly loaded User |
 
 Everything a node does before `interrupt()` must be safe to run twice, because LangGraph re-runs the node from its start on resume. `plan_deletion` is a separate node for that reason: the plan is built once, and `confirm_deletion` only reads it.

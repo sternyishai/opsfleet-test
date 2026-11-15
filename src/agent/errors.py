@@ -50,6 +50,7 @@ class MessageClass(StrEnum):
     # deletion branch (HLD 04)
     NOTHING_MATCHED = "nothing_matched"
     PLAN_EXPIRED = "plan_expired"
+    PLAN_ANSWER_INVALID = "plan_answer_invalid"  # "yes except 4" to a plan of 3
     # reports (HLD 04)
     REPORT_NOT_FOUND = "report_not_found"
     REPORT_OUT_OF_SCOPE = "report_out_of_scope"
