@@ -203,3 +203,20 @@ flowchart LR
 **Data the agent writes.** The agent never writes to BigQuery. Its only writes are its own state in Postgres: Saved Reports, audit rows, User Profiles, Trio Candidates and interaction and observability records. This matches the client's split: the data team owns ETL and modelling, and the agent only reads.
 
 **PII path, end to end.** PII never enters the system through queries, because the columns are hidden and not in the queryable schema. It cannot leak through retrieval, because Trios are figure-stripped and Brand-tagged. It is caught on the way out by the output filter, at the single exit that every message and every Saved Report passes. It is redacted again before anything is stored for learning. The full layering is in [03](03-safety-and-pii.md).
+
+## Story map: who touches which store
+
+![Story map: every flow, every component, every store](diagrams/story-map.png)
+
+<sub>Eight numbered stories across every component. Follow one color to tell one story; each Postgres table lists who reads, writes or deletes it. Source: [diagrams/story-map.excalidraw](diagrams/story-map.excalidraw).</sub>
+
+| Component | Postgres | BigQuery | GCS | Pub/Sub | Stories |
+|---|---|---|---|---|---|
+| **Channel Gateway** | none | none | none | none | 1, 4 (CEO in chat) |
+| **Chat API** | R: Users and Brand Assignments, Golden Trios, Persona (cached). R/W: checkpoints, User Profiles (explicit). W: Saved Reports, deletion audit, Persona versions. D: Saved Reports | R: `run_sql` through the query guard, as the service account or the User | none | publishes `report.saved`, `report.deleted`, `turn.completed` | 1–4 |
+| **Admin UI** | W: Persona versions. R/W: Trio Candidates (review queue) | none | none | none | 4, 5 |
+| **Worker service** | R: Saved Reports, checkpoints. W: entities, Golden Trios, Trio Candidates, interaction store | dry run of Trio SQL | R: Trio files. D: chart images | push subscriber; DLQ after ~5 failures | 2, 3, 5, 6, 7 |
+| **Batch jobs** | R: interaction store, Golden Trios. W: inferred User Profile values, aggregates, retired Trios | dry run of every active Trio | R: nightly sweep for missed files | publishes the sweep's missed events | 5, 6 |
+| **People** | admins and a sync job write Users and Brand Assignments | data team loads it | analysts upload Trio files | AI-ops replays the DLQ | 5, 7 |
+
+Every component also writes spans to the observability backend (story 8). Nothing writes to BigQuery; the only BigQuery calls besides `run_sql` are dry runs.
