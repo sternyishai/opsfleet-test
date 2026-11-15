@@ -314,3 +314,34 @@ def test_the_audit_row_holds_metadata_only(tmp_path, reports: ReportRepository) 
     assert json.loads(row["titles"]) == ["Q1 sales"]
     assert json.loads(row["report_ids"]) == [str(plan.items[0].report_id)]
     assert row["author_id"] == "manager-a"
+
+
+@pytest.mark.parametrize("topic", ["!!!", "*", ":", '"', "(", "   ", "\x00"])
+def test_a_topic_with_no_words_matches_nothing(reports: ReportRepository, topic: str) -> None:
+    save(reports, "one")
+
+    out = plan_deletion(
+        PlanDeletionInput.model_construct(filter=DeletionFilter.model_construct(topic=topic)),
+        ctx(reports),
+    )
+    listed = list_my_reports(ListReportsInput(text=topic), ctx(reports))
+
+    assert isinstance(out, PlanDeletionNothing)
+    assert listed.total == 0
+
+
+@pytest.mark.parametrize("bad", [{"topic": "!!!"}, {"entities": ["***"]}])
+def test_a_filter_with_no_words_is_refused(bad: dict) -> None:
+    with pytest.raises(ValueError):
+        DeletionFilter.model_validate(bad)
+
+
+def test_a_malformed_extraction_still_saves(reports: ReportRepository) -> None:
+    from langchain_core.exceptions import OutputParserException
+
+    llm = FakeLLMFactory(structured={ModelStep.ENTITY_EXTRACTION: OutputParserException("bad")})
+    c = ctx_for(MANAGER_A, reports, llm=llm, conversation_id=HERE)
+
+    out = save_report(report_input(), c, queried(c))
+
+    assert isinstance(out, SaveReportOk)

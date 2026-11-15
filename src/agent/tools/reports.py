@@ -8,6 +8,7 @@ import json
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import ValidationError
 
@@ -28,7 +29,6 @@ from agent.domain.reports import (
     EntityType,
     ReportEntity,
     ReportId,
-    ReportStructured,
     SavedReport,
     normalize_entity,
 )
@@ -59,7 +59,6 @@ def save_report(args: SaveReportInput, ctx: TurnContext, budget: SqlBudget) -> S
             hits.extend(scan.hits)
             return scan.text
 
-        structured = args.structured
         report = SavedReport(
             report_id=uuid4(),
             author_id=ctx.user.user_id,
@@ -70,13 +69,7 @@ def save_report(args: SaveReportInput, ctx: TurnContext, budget: SqlBudget) -> S
             question=clean(args.question),
             sql=clean(args.sql),
             markdown=clean(args.markdown),
-            structured=ReportStructured(
-                title=clean(structured.title),
-                summary=clean(structured.summary),
-                insights=[clean(i) for i in structured.insights],
-                action_items=[clean(a) for a in structured.action_items],
-                period=clean(structured.period) if structured.period else None,
-            ),
+            structured=args.structured.map_text(clean),
             scope=budget.last_scope,
             # thelook is regenerated daily, so the data a report used is as of today.
             data_as_of=date.today(),
@@ -102,7 +95,7 @@ def _entities(report: SavedReport, ctx: TurnContext) -> list[ReportEntity]:
         out = model.invoke(
             [SystemMessage(ENTITY_PROMPT), HumanMessage(f"<report>\n{block}\n</report>")]
         )
-    except (AgentError, ValidationError):
+    except (AgentError, ValidationError, OutputParserException):
         return []
     if not isinstance(out, ExtractedEntities):
         return []

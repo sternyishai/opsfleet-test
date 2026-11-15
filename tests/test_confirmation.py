@@ -120,3 +120,29 @@ def test_a_button_for_another_request_or_user_is_not_an_answer() -> None:
     assert parse_reply(button(SMALL, approved=True, user_id="manager-b"), SMALL) == NotAnAnswer()
     assert parse_reply(button(SMALL, approved=True, selected=[]), SMALL) == NotAnAnswer()
     assert parse_reply(button(SMALL, approved=True, selected=[9]), SMALL) == NotAnAnswer()
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "yes except ２",  # fullwidth digit
+        "yes except ٢",  # Arabic-Indic digit
+        "yes\nexcept 2",
+        "yes except 1,1",
+        "yes except 02",
+        "yes\n",
+    ],
+)
+def test_only_plain_ascii_answers_count(reply: str) -> None:
+    decision = parse_reply(reply, SMALL)
+    assert decision == NotAnAnswer() or (reply == "yes\n" and decision == ConfirmAll())
+
+
+@pytest.mark.parametrize("reply", ["yes, delete all ３７", "yes, delete all 037"])
+def test_the_count_is_plain_digits(reply: str) -> None:
+    assert parse_reply(reply, LARGE) == NotAnAnswer()
+
+
+def test_selecting_every_box_on_a_large_plan_still_needs_the_count() -> None:
+    every = list(range(1, LARGE.total + 1))
+    assert parse_reply(button(LARGE, approved=True, selected=every), LARGE) == NeedsCount()
