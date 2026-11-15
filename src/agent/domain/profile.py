@@ -7,7 +7,7 @@ statements, explicit standing values, inferred values, Persona defaults.
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, ClassVar
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
@@ -89,3 +89,44 @@ class PreferenceStatement(BaseModel):
         max_length=200,
         description="An enum value for typed fields, the note text for NOTE.",
     )
+
+
+_TYPED: dict[PreferenceField, type[StrEnum] | type[str]] = {
+    PreferenceField.FORMAT: AnswerFormat,
+    PreferenceField.DEPTH: Depth,
+    PreferenceField.CHARTS: Charts,
+    PreferenceField.LANGUAGE: str,
+}
+
+
+def merged(
+    profile: UserProfile,
+    statements: list[PreferenceStatement],
+    *,
+    at: datetime,
+    max_notes: int = UserProfile.MAX_NOTES,
+) -> UserProfile:
+    """``profile`` with ``statements`` applied in order, each as an ``explicit`` value: the
+    User said it, so it overwrites an inferred or earlier value of the same field. A value
+    that is not one of the field's options is skipped (the router's mistake, not the User's
+    wish). A note already present (case ignored) is not added twice; past ``max_notes`` the
+    oldest notes are dropped. The one merge both the store and this turn's profile use, so
+    what is saved is what was applied."""
+    update: dict[str, Any] = {}
+    notes = list(profile.notes)
+    for s in statements:
+        if s.field is PreferenceField.NOTE:
+            text = s.value.strip()
+            if text and all(n.text.casefold() != text.casefold() for n in notes):
+                notes.append(
+                    ProfileNote(note_id=uuid4(), text=text, source=Source.EXPLICIT, created_at=at)
+                )
+            continue
+        kind = _TYPED[s.field]
+        try:
+            value = kind(s.value.strip())
+        except ValueError:
+            continue
+        update[s.field.value] = {"value": value, "source": Source.EXPLICIT, "confirmed_at": at}
+    update["notes"] = notes[-min(max_notes, UserProfile.MAX_NOTES) :]
+    return UserProfile.model_validate(dict(profile) | update)

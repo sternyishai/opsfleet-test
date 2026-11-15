@@ -1,5 +1,5 @@
 """Views: the model-free commands, in one place for every channel. Reports, the Persona,
-traces and stats are built; the profile views arrive with #13.
+traces, stats and the User Profile.
 
 Rule: **a channel only translates.** The CLI turns ``/reports`` into ``Views.reports``; the web
 adapter turns ``GET /api/reports`` into the same call. No channel reads a store itself, so
@@ -64,6 +64,8 @@ class Views:
       is the second check.
     - ``edit_persona`` is the direct-edit path: it enters the Persona branch at the permission
       check, skips drafting, and runs the same Quality Gate (HLD 09).
+    - ``profile`` and ``remove_preference`` are the User's own Profile, read and changed
+      through ``ProfileStore`` with no model call (HLD 05 § The User is in control).
     - ``trace`` and ``stats`` read the spans back through ``Tracer.read`` (JSONL in the
       prototype) and build them with ``agent.core.observability``. ``trace`` is limited to
       the User's own turns; ``stats`` is limited to Executives (LLD default) because it spans
@@ -113,10 +115,30 @@ class Views:
 
     # profile: /profile, GET|DELETE /api/profile
     def profile(self, user_id: UserId) -> UserProfile:
-        raise NotImplementedError
+        self._context(user_id)  # a User with no role has no profile to see either
+        profiles = self._ports.profiles
+        return self._clean_profile(
+            profiles.load(user_id) if profiles else UserProfile(user_id=user_id)
+        )
 
     def remove_preference(self, user_id: UserId, note_id: UUID | None = None) -> UserProfile:
-        raise NotImplementedError
+        """One note, or with ``None`` the whole profile. A ``note_id`` the User does not have
+        removes nothing."""
+        self._context(user_id)
+        profiles = self._ports.profiles
+        if profiles is None:
+            return UserProfile(user_id=user_id)
+        return self._clean_profile(profiles.remove(user_id, note_id))
+
+    def _clean_profile(self, profile: UserProfile) -> UserProfile:
+        """Notes are the User's own words, guarded on write; the filter runs on the way out
+        too, like every view. ``language`` is the one other free-text value."""
+        notes = [n.model_copy(update={"text": self._clean(n.text)}) for n in profile.notes]
+        update: dict[str, object] = {"notes": notes}
+        if profile.language is not None:
+            language = profile.language
+            update["language"] = language.model_copy(update={"value": self._clean(language.value)})
+        return profile.model_copy(update=update)
 
     # Persona: /persona, /persona history|edit|rollback, /api/persona...
     def persona(self, user_id: UserId) -> PersonaVersion:
