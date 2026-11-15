@@ -25,7 +25,12 @@ Delivery            not wired (ADR 0009)                                  -
 ==================  ====================================================  =========
 """
 
+import atexit
+import shutil
 import sqlite3
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -48,8 +53,10 @@ if TYPE_CHECKING:
     from langgraph.checkpoint.sqlite import SqliteSaver
 
     from agent.adapters.channel_stdout import StdoutChannel
+    from agent.contracts.eval import EvalCase
     from agent.core.chat import ChatService
     from agent.core.views import Views
+    from agent.evals.runner import EvalRunner, TrialStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +146,110 @@ def build_cli_channel() -> "StdoutChannel":
     from agent.adapters.channel_stdout import StdoutChannel
 
     return StdoutChannel()
+
+
+EVAL_CASES = Path("evals/cases")
+EVAL_RUNS = Path("evals/runs")
+PREREGISTRATION = Path("evals/PREREGISTRATION.md")
+_EVAL_MAX_QUEUE_S = 180.0
+"""An eval waits for the free tier's rate limit instead of ending a trial as MODEL_BUSY."""
+
+
+@dataclass(frozen=True, slots=True)
+class EvalApp:
+    runner: "EvalRunner"
+    cases: "list[EvalCase]"
+    runs_dir: Path
+
+
+def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
+    """The eval harness over the real adapters (docs/lld/08-eval.md). Differences from the
+    chat app: traces go to ``traces/eval/`` (kept out of ``/stats``), the rate limiter waits
+    longer, the base ports use a throwaway app store (each trial gets its own), and the
+    scorecard goes to ``evals/runs/`` and, if it answers, Phoenix. ``trios_enabled=False`` is
+    the Golden Bucket ablation; until slice 7 the retriever is the Null one either way."""
+    from agent.adapters.eval_files import (
+        JsonScorecardSink,
+        fixture_hash,
+        git_sha,
+        prereg_id,
+        read_case_files,
+    )
+    from agent.adapters.scorecard_phoenix import PhoenixScorecardSink
+    from agent.evals.runner import EvalEnvironment, EvalRunner, load_cases
+    from agent.evals.scorers import (
+        ExecutionMatch,
+        RubricJudge,
+        SafetyChecks,
+        SectionsPresent,
+        StoreState,
+        TrajectoryStats,
+    )
+    from agent.evals.sinks import FanOutSink
+    from agent.ports.llm import ModelStep
+    from agent.ports.scorecards import ScorecardSink
+
+    limits = settings.limits.model_copy(
+        update={"llm_max_queue_s": max(settings.limits.llm_max_queue_s, _EVAL_MAX_QUEUE_S)}
+    )
+    scratch = Path(tempfile.mkdtemp(prefix="agent-eval-"))
+    atexit.register(shutil.rmtree, scratch, ignore_errors=True)
+    eval_settings = settings.model_copy(
+        update={
+            "limits": limits,
+            "traces_dir": settings.traces_dir / "eval",
+            "app_db_url": f"sqlite:///{scratch / 'base.db'}",
+        }
+    )
+    ports = build_ports(eval_settings)
+    models = settings.models
+    resolved = {step: models.resolve(step) for step in ModelStep}
+    env = EvalEnvironment(
+        ports=ports,
+        limits=limits,
+        fresh_store=lambda: fresh_eval_store(settings.seed_dir / "users.yaml"),
+        git_sha=git_sha(Path.cwd()),
+        fixture_hash=fixture_hash(EVAL_CASES, settings.seed_dir / "trios"),
+        prereg_id=prereg_id(PREREGISTRATION),
+        models={
+            step.value: primary + (f" -> {fallback}" if fallback else "")
+            for step, (primary, fallback) in resolved.items()
+        },
+        judge=resolved[ModelStep.JUDGE][0],
+        trios_enabled=trios_enabled,
+    )
+    scorers = [
+        ExecutionMatch(ports.guard, ports.warehouse, limits),
+        SafetyChecks(ports.pii),
+        StoreState(),
+        SectionsPresent(),
+        RubricJudge(ports.llm),
+        TrajectoryStats(models.prices),
+    ]
+    sinks: list[ScorecardSink] = [JsonScorecardSink(EVAL_RUNS)]
+    if settings.phoenix_endpoint:
+        sinks.append(PhoenixScorecardSink(settings.phoenix_endpoint))
+    cases = load_cases(read_case_files(EVAL_CASES))
+    return EvalApp(EvalRunner(env, scorers, FanOutSink(sinks)), cases, EVAL_RUNS)
+
+
+@contextmanager
+def fresh_eval_store(users_seed: Path) -> "Iterator[TrialStore]":
+    """One trial's app store: a new SQLite file seeded with the Users, deleted afterwards."""
+    from agent.adapters.reports_sqlite import SqliteReportRepository
+    from agent.adapters.users_sqlite import SqliteUserDirectory
+    from agent.evals.runner import TrialStore
+
+    with tempfile.TemporaryDirectory(prefix="agent-eval-trial-") as folder:
+        db = Path(folder) / "app.db"
+        users = SqliteUserDirectory(db, seed=users_seed)
+        reports = SqliteReportRepository(db)
+        yield TrialStore(
+            users=users,
+            reports=reports,
+            report_ids=reports.all_report_ids,
+            audit_rows=reports.audit_rows,
+        )
 
 
 def _sqlite_path(url: str) -> Path:

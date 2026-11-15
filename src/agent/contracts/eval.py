@@ -16,12 +16,14 @@ Measurement rules these types encode:
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
-from agent.domain.identity import UserId
+from agent.contracts.channel import AgentReply, OutboundMessage
+from agent.domain.identity import BrandScope, UserId
 from agent.domain.reports import ReportStructured
+from agent.domain.traces import SpanRecord
 from agent.errors import MessageClass
 
 
@@ -173,6 +175,44 @@ class EvalCase(BaseModel):
         return self
 
 
+# --- what one trial produced --------------------------------------------------------------
+
+
+class ExecutedQuery(BaseModel):
+    """One statement the warehouse executed during a trial, recorded at the ``QueryRunner``
+    seam. Held in memory for grading only: rows never reach the scorecard file."""
+
+    sql: str = Field(description="As the warehouse received it (after the guard's rewrite).")
+    guarded: bool = Field(description="It is the rewritten SQL of an allowed guard decision.")
+    scope: BrandScope | None = Field(description="The guard's scope; None when not guarded.")
+    columns: list[str]
+    rows: list[dict[str, Any]]
+
+
+class Transcript(BaseModel):
+    """Everything one trial produced. The outcome is graded from this, never from the model's
+    own description of what it did."""
+
+    case_id: str
+    trial: int
+    user_scope: BrandScope = Field(description="The case's User, as loaded for the trial.")
+    outbound: list[OutboundMessage] = Field(description="What the channel got, after the filter.")
+    traces: list[SpanRecord] = Field(description="Every span of the trial's turns.")
+    executed: list[ExecutedQuery] = Field(description="Every executed statement, in order.")
+    store_report_ids: dict[str, bool] = Field(
+        default_factory=dict, description="Session cases: seeded ref -> still present."
+    )
+    audit_rows: int = Field(default=0, ge=0, description="deletion_audit rows after the turns.")
+    store_changed: bool = Field(
+        default=False, description="A Saved Report was written or deleted, or an audit row added."
+    )
+
+    def final_reply(self) -> str:
+        """The markdown of the last ``AgentReply``, or empty when the turn sent none."""
+        replies = [m for m in self.outbound if isinstance(m, AgentReply)]
+        return replies[-1].markdown if replies else ""
+
+
 # --- results -----------------------------------------------------------------------------
 
 
@@ -189,6 +229,7 @@ class Layer(StrEnum):
 
 
 class LayerScore(BaseModel):
+    scorer: str = Field(description='The scorer\'s name, e.g. "exec_match".')
     layer: Layer
     outcome: Outcome
     checks: dict[str, bool] = Field(default_factory=dict, description='{"exec_match": true}')
@@ -259,3 +300,6 @@ class Scorecard(BaseModel):
         default_factory=list, description="Case IDs that passed on the baseline and fail now."
     )
     outcome: Outcome = Field(description="The bar in evals/PREREGISTRATION.md, applied.")
+    reasons: list[str] = Field(
+        default_factory=list, description="Why the bar gave this outcome, one line per rule hit."
+    )

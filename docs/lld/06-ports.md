@@ -160,9 +160,11 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `No
 - **Schema:** `EvalCase`, `Scorecard` ([contracts/eval.py](../../src/agent/contracts/eval.py)).
 - **Depends on:** nothing.
 - **Safety:** cases and scorecards hold no rows or PII; traces are linked by ID.
-- **Failures:** a Phoenix outage is reported; the JSON file is always written. No baseline → the regression gate is CANNOT_MEASURE.
-- **Trace:** none of its own.
-- **Tests** · slice 6 · `tests/test_eval_harness.py`: the negative control fails; a crash is CANNOT_MEASURE, not FAIL; a manifest mismatch refuses the comparison.
+- **Adapters:** `JsonScorecardSink` ([adapters/eval_files.py](../../src/agent/adapters/eval_files.py)), one `<run_id>.json` per run in `evals/runs/`; `PhoenixScorecardSink` ([adapters/scorecard_phoenix.py](../../src/agent/adapters/scorecard_phoenix.py)), Phoenix's REST API (`/v1/datasets/upload`, `/v1/datasets/{id}/experiments`, `/v1/experiments/{id}/runs`, `/v1/experiment_evaluations`) with the standard library only. `FanOutSink` ([evals/sinks.py](../../src/agent/evals/sinks.py)) publishes to both.
+- **Baseline:** by run ID; with no ID, the latest JSON run on the same fixture hash whose outcome was PASS, so a failed run never becomes the bar. Phoenix answers no baseline.
+- **Failures:** a Phoenix outage (down, or an HTTP error) is logged and listed in `FanOutSink.failures`; the JSON file is always written. `--baseline <id>` that does not exist → CANNOT_MEASURE; no baseline at all → correctness is reported, not gated (PREREGISTRATION rule 4).
+- **Trace:** none of its own. Each Phoenix experiment run carries the trial's first trace ID (as the 32-hex OTel ID the tracer exported), so a case links to its step tree.
+- **Tests** · slice 6 · `tests/test_eval_harness.py`: the JSON sink writes every run and returns the latest passing one; Phoenix down is reported and the JSON is still written.
 
 ## Trace attributes
 

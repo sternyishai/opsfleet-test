@@ -426,3 +426,20 @@ Deviations from issue #9, for approval:
 - **`llm.cost_usd` is not on the span.** `/stats` prices tokens from `MODEL_PRICES` (USD per million tokens by model ID, empty by default), so a price change re-prices past turns and the adapter stays as it was. With no prices, the dollar figure is "n/a".
 - **`agent stats` needs `--as <user_id>`.** `/stats` spans every User and is for Executives (`STATS_FORBIDDEN` otherwise, new catalog class), so the command outside the chat needs to know who asks.
 - **`Views.trace` returns `None`** for a missing turn and for another User's turn alike, so the reply cannot tell them apart.
+
+## Slice 6: eval scorecard (2026-11-15)
+
+Deviations from issue #10, for approval:
+
+- **`EvalRunner(env, scorers, sink)` takes an `EvalEnvironment`, not `Ports`.** A trial needs a fresh store, so the runner gets a `fresh_store()` factory (a `TrialStore`: users, reports, and two grading reads across Authors) plus the manifest inputs the composition root resolves (git SHA, fixture hash, pre-registration ID, models, judge, Trio switch). `run(cases, trials, baseline_run_id)` loses `trios_enabled`: the switch picks the ports, so it is fixed when the runner is built.
+- **`load_cases` validates already-parsed files.** `yaml` is banned outside adapters, so `adapters/eval_files.read_case_files` parses and `evals.runner.load_cases` validates (schema, file name = case ID, folder = suite, unique IDs).
+- **`Transcript` moved to `contracts/eval.py`** (as the issue lists it) and holds `SpanRecord`s and `ExecutedQuery` records (statement, guarded or not, scope, columns, rows) instead of `TraceView`s and SQL text. `ExecutionMatch` grades each statement on the result the agent actually got, recorded at the `QueryRunner` seam, instead of running the agent's SQL a second time: cheaper on BigQuery, and it is what left the system. Rows stay in memory; the scorecard JSON holds none.
+- **`LayerScore.scorer` and `Scorecard.reasons` are new fields**, so two deterministic scores of one trial (execution match and sections) are told apart, and the printout says which rule of the bar decided.
+- **`SafetyChecks.no_pii` counts a `[REDACTED:…]` marker as a leak.** Scanning text after the output filter alone would always pass; a redaction means the agent tried.
+- **The baseline is the latest PASS run on the same fixture** (or `--baseline <id>`). The port said "the latest run"; PREREGISTRATION says the first. Latest-passing keeps the bar current without letting a failed run lower it.
+- **Manifest comparison:** `prereg_id`, `fixture_hash`, `judge`, `rubric_hash`, `persona_version` and `trials` must match; of `git_sha`, `models` and `trios_enabled` at most one may differ (the lever). `data_as_of` (the run date) is recorded, not compared, because references are recomputed on each run's data.
+- **The negative control is required only when correctness runs**, so `--suite safety` can PASS.
+- **Rule order:** CANNOT_MEASURE that invalidates the measurement (negative control, mismatch) comes before FAIL; a measured safety or session FAIL comes before a CANNOT_MEASURE of another case. A real miss is not hidden behind an unrelated outage.
+- **The eval's rate limiter waits up to 180 s** (`llm_max_queue_s`), and its traces go to `traces/eval/`, out of the chat's `/stats`.
+- **`--no-trios` is recorded but changes nothing yet:** the retriever is the Null one until #11, so both arms retrieve nothing. The manifest records the switch so the ablation is comparable once Trios land.
+- **The judge runs on every correctness trial** that reached the agent (one extra `MODEL_JUDGE` call each, inheriting the analyst model). It reports and never gates.

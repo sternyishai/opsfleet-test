@@ -63,7 +63,7 @@ def build_trace(spans: Iterable[SpanRecord], trace_id: str, user_id: str) -> Tra
         started_at=root.start,
         action=str(action) if action else None,
         duration_ms=round(root.duration_ms),
-        tokens=sum(_tokens(s) for s in mine),
+        tokens=sum(llm_tokens(s) for s in mine),
         outcome=str(root.attributes.get("outcome") or "unknown"),
         root=[node(c) for c in children[root.span_id]],
     )
@@ -248,9 +248,9 @@ def _cost(
 ) -> dict[str, float | int | str]:
     llm = [s for s in spans if s.name == "llm"]
     answered = sum(t.attr("outcome") == "answered" for t in turns)
-    spent = sum(_usd(s, prices) for s in llm)
+    spent = sum(llm_usd(s, prices) for s in llm)
     return {
-        "tokens_per_turn": _rate(sum(_tokens(s) for s in llm), len(turns)),
+        "tokens_per_turn": _rate(sum(llm_tokens(s) for s in llm), len(turns)),
         "bigquery_bytes_per_turn": _rate(
             sum(_int(s.attributes.get("bytes_billed")) for s in spans if s.name == "run_sql"),
             len(turns),
@@ -355,7 +355,7 @@ def _status(s: SpanRecord) -> AttrValue:
     return s.attributes.get("sql.status")
 
 
-def _tokens(s: SpanRecord) -> int:
+def llm_tokens(s: SpanRecord) -> int:
     if s.name != "llm":
         return 0
     return _int(s.attributes.get("llm.tokens.prompt")) + _int(
@@ -363,7 +363,7 @@ def _tokens(s: SpanRecord) -> int:
     )
 
 
-def _usd(s: SpanRecord, prices: Prices) -> float:
+def llm_usd(s: SpanRecord, prices: Prices) -> float:
     price = prices.get(str(s.attributes.get("llm.model")))
     if price is None:
         return 0.0
