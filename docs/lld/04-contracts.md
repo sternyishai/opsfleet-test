@@ -66,7 +66,7 @@ The three outbound messages share `conversation_id`, `trace_id` (the reference I
 |---|---|---|---|
 | `SelfCorrectableError` | `self_correctable` | Back to the model inside `run_sql`, within the budget | syntax, schema, runtime error |
 | `TransientError(dependency=…)` | `transient` | The adapter already retried and fell back; the graph shows the catalog message | Gemini down, BigQuery down, app DB down |
-| `PermanentError` | `permanent` | Catalog message, no retry | quota reached |
+| `PermanentError` | `permanent` | Catalog message, no retry | quota reached; a model 400 or permission error (`UNCLASSIFIED` wording, no fallback); BigQuery permission error (`DATA_SOURCE_DOWN`) |
 | any other exception | `unclassified` | Graph-boundary catch-all: `UNCLASSIFIED` message with the reference ID, traced and alerted | |
 
 `MessageClass` holds every catalog key, failures and refusals alike: `data_source_down`, `model_busy`, `self_correction_exhausted`, `query_too_large`, `out_of_scope`, `quota_reached`, `unavailable`, `unclassified`, `off_topic`, `pii_request`, `injection`, `no_role`, `persona_forbidden`, `persona_gate_failed`, `persona_nothing_to_roll_back`, `nothing_matched`, `plan_expired`, `report_not_found`, `report_out_of_scope`. The wording is in the Persona's `messages` field, with bundled defaults ([09](../hld/09-persona-management.md)).

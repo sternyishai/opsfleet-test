@@ -33,4 +33,6 @@ class SqlBudget:
     diagnoses_used: int = 0
     attempts: int = 0
     last_scope: BrandScope | None = None
+    refused_brand: bool = False
+    """An out-of-scope Brand was already refused this turn; asking again ends the turn."""
     tried: tuple[str, ...] = field(default_factory=tuple)

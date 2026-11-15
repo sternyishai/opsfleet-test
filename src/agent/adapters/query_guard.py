@@ -18,7 +18,14 @@ from sqlglot import exp
 from sqlglot.errors import SqlglotError
 
 from agent.domain.identity import BrandScope
-from agent.domain.query import GuardAllowed, GuardDecision, GuardRejected, RejectReason, TableName
+from agent.domain.query import (
+    FilterLiteral,
+    GuardAllowed,
+    GuardDecision,
+    GuardRejected,
+    RejectReason,
+    TableName,
+)
 from agent.domain.warehouse import ALLOWLIST, HIDDEN_COLUMNS
 
 _SPECS = {spec.name: spec for spec in ALLOWLIST}
@@ -135,7 +142,7 @@ class SqlglotQueryGuard:
             params={} if scope.all_brands else {"brands": sorted(scope.brands)},
             scope=scope,
             tables=tables,
-            filters=[],  # read for the empty-result probe in slice 3
+            filters=_filters(query, tables),
             rewritten=True,
         )
 
@@ -309,6 +316,84 @@ def _is_brand(node: exp.Expr) -> bool:
 
 def _is_string(node: exp.Expr) -> bool:
     return isinstance(node, exp.Literal) and node.is_string
+
+
+_OPERATORS: dict[type[exp.Expr], str] = {
+    exp.EQ: "=",
+    exp.NEQ: "!=",
+    exp.GT: ">",
+    exp.GTE: ">=",
+    exp.LT: "<",
+    exp.LTE: "<=",
+    exp.Like: "LIKE",
+    exp.ILike: "LIKE",
+}
+_FLIPPED = {">": "<", ">=": "<=", "<": ">", "<=": ">="}
+_VALUE_WRAPPERS = (exp.Cast, exp.TryCast, exp.Timestamp, exp.Date, exp.TsOrDsToDate)
+_COLUMN_WRAPPERS = (*_BRAND_WRAPPERS, exp.Date, exp.TsOrDsToDate, exp.Timestamp)
+
+
+def _filters(query: exp.Expr, tables: list[TableName]) -> list[FilterLiteral]:
+    """Every ``column <op> literal`` in the SQL, in source order, for the empty-result probe.
+
+    A column is kept only when its table is certain: through its qualifier (table name or
+    alias), or, unqualified, when exactly one table the query reads has that column. Anything
+    else (CTE columns, expressions, ambiguous names) is skipped: the probe checks less, it
+    never checks the wrong table.
+    """
+    resolve = _column_resolver(query, tables)
+    found: list[FilterLiteral] = []
+    for node in query.find_all(*_OPERATORS, exp.In, exp.Between, bfs=False):
+        if isinstance(node, exp.In):
+            pairs = [(node.this, "IN", value) for value in node.expressions]
+        elif isinstance(node, exp.Between):
+            pairs = [(node.this, ">=", node.args["low"]), (node.this, "<=", node.args["high"])]
+        else:
+            op = _OPERATORS[type(node)]
+            pairs = [(node.this, op, node.expression)]
+            if op in _FLIPPED or op in ("=", "!="):  # '2025-01-01' <= created_at
+                pairs.append((node.expression, _FLIPPED.get(op, op), node.this))
+        for column_side, op, value_side in pairs:
+            column, value = _unwrap(column_side, _COLUMN_WRAPPERS), _literal(value_side)
+            if not isinstance(column, exp.Column) or value is None:
+                continue
+            if table := resolve(column):
+                found.append(
+                    FilterLiteral(table=table, column=column.name.lower(), operator=op, value=value)
+                )
+    return found
+
+
+def _column_resolver(
+    query: exp.Expr, tables: list[TableName]
+) -> Callable[[exp.Column], TableName | None]:
+    aliases: dict[str, TableName] = {
+        t.alias_or_name.lower(): _SPECS[t.name.lower()].name for t in _warehouse_tables(query)
+    }
+
+    def resolve(column: exp.Column) -> TableName | None:
+        name = column.name.lower()
+        if column.table:
+            table = aliases.get(column.table.lower())
+            has = table is not None and any(c.name == name for c in _SPECS[table].columns)
+            return table if has else None
+        owners: list[TableName] = [
+            t for t in tables if any(c.name == name for c in _SPECS[t].columns)
+        ]
+        return owners[0] if len(owners) == 1 else None
+
+    return resolve
+
+
+def _unwrap(node: exp.Expr, wrappers: tuple[type[exp.Expr], ...]) -> exp.Expr:
+    while isinstance(node, wrappers):
+        node = node.this
+    return node
+
+
+def _literal(node: exp.Expr) -> str | None:
+    node = _unwrap(node, _VALUE_WRAPPERS)
+    return str(node.this) if isinstance(node, exp.Literal) else None
 
 
 def _scoped(query: exp.Query, scope: BrandScope, dialect: str) -> exp.Query:

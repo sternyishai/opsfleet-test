@@ -17,7 +17,7 @@ from pydantic import BaseModel, ValidationError
 
 from agent.composition import Ports
 from agent.config import Limits
-from agent.contracts.tools import GetSchemaInput, RunSqlInput, RunSqlOk
+from agent.contracts.tools import GetSchemaInput, RunSqlInput, RunSqlOk, ToolError
 from agent.core.catalog import render
 from agent.domain.query import ResultSummary
 from agent.errors import MessageClass
@@ -58,6 +58,8 @@ class _Turn:
         self.ctx = ctx
         self.budget = SqlBudget()
         self.summaries: list[ResultSummary] = []
+        self.ended: MessageClass | None = None
+        """Set when a tool returned a ``ToolError``: the turn ends with that catalog message."""
 
     def call(self, call: ToolCall) -> str:
         tools: dict[str, Callable[[dict[str, Any]], BaseModel]] = {
@@ -73,6 +75,8 @@ class _Turn:
         except ValidationError as exc:
             detail = exc.errors(include_url=False, include_context=False, include_input=False)
             return tool_result(name, json.dumps({"status": "error", "detail": detail}, default=str))
+        if isinstance(out, ToolError):
+            self.ended = out.message_class
         return tool_result(name, out.model_dump_json())
 
     def _run_sql(self, args: dict[str, Any]) -> BaseModel:
@@ -110,9 +114,12 @@ def analysis(state: AgentState, ports: Ports, limits: Limits) -> dict[str, Any]:
             break
         for call in reply.tool_calls:
             convo.append(ToolMessage(content=turn.call(call), tool_call_id=call["id"] or ""))
-    message_class = None
+        if turn.ended:  # a permanent refusal: no more model steps
+            break
+    message_class = turn.ended
     if answer is None:  # the step cap: answer from the catalog, not from a half-done loop
-        message_class = MessageClass.SELF_CORRECTION_EXHAUSTED
+        message_class = message_class or MessageClass.SELF_CORRECTION_EXHAUSTED
+    if message_class is not None:
         answer = render(message_class, persona, ref=state["trace_id"])
     return {
         "messages": [AIMessage(content=answer)],
@@ -120,6 +127,7 @@ def analysis(state: AgentState, ports: Ports, limits: Limits) -> dict[str, Any]:
         "analysis_steps": sum(isinstance(m, AIMessage) for m in convo),
         "sql_attempts": turn.budget.attempts,
         "sql_retries": turn.budget.retries_used,
+        "empty_diagnoses": turn.budget.diagnoses_used,
         "ran_sql": bool(turn.summaries),
         "last_query_scope": turn.budget.last_scope,
         "result_summaries": turn.summaries,
