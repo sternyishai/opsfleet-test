@@ -10,9 +10,9 @@ Port                Prototype adapter                                     Slice
 ==================  ====================================================  =========
 LLMFactory          ``langchain-google-genai`` (AI Studio), tenacity,     1, 3
                     token bucket, in-process breaker
-QueryGuard          ``sqlglot`` (BigQuery dialect)                        2
+QueryGuard          ``sqlglot`` (BigQuery dialect): minimal, then full     1, 2
 QueryRunner         ``google-cloud-bigquery`` with ADC                    1
-PiiFilter           regex detectors                                       2
+PiiFilter           pass-through placeholder; regex detectors             1, 2
 UserDirectory       ``seed/users.yaml`` loaded into SQLite                1
 ReportRepository    SQLite + FTS5                                         4
 TrioRetriever       ``NullTrioRetriever``; SQLite + cosine (stretch)      1, 7
@@ -46,6 +46,7 @@ from agent.ports import (
 if TYPE_CHECKING:
     from langgraph.checkpoint.sqlite import SqliteSaver
 
+    from agent.adapters.channel_stdout import StdoutChannel
     from agent.core.chat import ChatService
 
 
@@ -119,6 +120,12 @@ def build_chat_service(settings: Settings) -> "ChatService":
     ports = build_ports(settings)
     graph = build_graph(ports, settings.limits, build_checkpointer(settings))
     return ChatService(ports, graph)
+
+
+def build_cli_channel() -> "StdoutChannel":
+    from agent.adapters.channel_stdout import StdoutChannel
+
+    return StdoutChannel()
 
 
 def _sqlite_path(url: str) -> Path:

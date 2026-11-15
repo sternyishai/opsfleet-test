@@ -134,4 +134,4 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `pr
 
 ## Trace attributes
 
-The root span (`turn`) carries: `trace_id`, `conversation_id`, `user.id`, `user.role`, `channel`, `router.verdict`, `router.action`, `persona.version`, `profile.snapshot`, `retrieval.gap`, `retrieval.degraded`, `outcome`, `error_class`. Node and tool spans add the attributes in [05](05-tools.md) and above. `/stats` ([08](../hld/08-observability.md#in-the-prototype)) is computed from these names only, so they are a contract: renaming one is an interface change and updates this page.
+The root span (`turn`) carries: `trace_id`, `conversation_id`, `user.id`, `user.role`, `channel`, `router.verdict`, `router.action`, `persona.version`, `profile.snapshot`, `retrieval.gap`, `retrieval.degraded`, `outcome`, `error_class`. Node and tool spans add the attributes in [05](05-tools.md) and above. `Outbound.emit` opens an `outbound` span per message with `kind` and `pii.hits` (types only). `/stats` ([08](../hld/08-observability.md#in-the-prototype)) is computed from these names only, so they are a contract: renaming one is an interface change and updates this page.

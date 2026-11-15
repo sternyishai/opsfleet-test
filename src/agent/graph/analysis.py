@@ -7,6 +7,7 @@ there, for the steps of this turn; the node returns the final answer and ``Resul
 so no row ever enters ``AgentState`` or a checkpoint (LLD 03 § What never enters state).
 """
 
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -63,15 +64,16 @@ class _Turn:
             "get_schema": lambda a: get_schema(GetSchemaInput.model_validate(a), self.ctx),
             "run_sql": self._run_sql,
         }
-        tool = tools.get(call["name"])
-        if tool is None:
-            return tool_result(call["name"], '{"status": "error", "detail": "no such tool"}')
+        name = call["name"]
+        tool = tools.get(name)
+        if tool is None:  # a made-up name never reaches the prompt
+            return tool_result("unknown", json.dumps({"status": "error", "detail": "no such tool"}))
         try:
             out = tool(call["args"])
         except ValidationError as exc:
             detail = exc.errors(include_url=False, include_context=False, include_input=False)
-            return tool_result(call["name"], f'{{"status": "error", "detail": {detail!r}}}')
-        return tool_result(call["name"], out.model_dump_json())
+            return tool_result(name, json.dumps({"status": "error", "detail": detail}, default=str))
+        return tool_result(name, out.model_dump_json())
 
     def _run_sql(self, args: dict[str, Any]) -> BaseModel:
         out, self.budget = run_sql(RunSqlInput.model_validate(args), self.ctx, self.budget)

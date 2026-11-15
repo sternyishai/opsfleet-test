@@ -58,12 +58,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _chat(user_id: str) -> int:
-    from agent.adapters.channel_stdout import StdoutChannel
-    from agent.composition import build_chat_service
+    from agent.composition import build_chat_service, build_cli_channel
     from agent.config import Settings
 
-    print(f"Signed in as {user_id}. Ask a question; /quit or Ctrl-D to leave.\n")
-    run_chat(build_chat_service(Settings()), user_id, StdoutChannel(), input)
+    run_chat(build_chat_service(Settings()), user_id, build_cli_channel(), input)
     return 0
 
 
