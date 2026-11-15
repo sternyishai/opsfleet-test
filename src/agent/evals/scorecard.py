@@ -26,10 +26,12 @@ LEVERS = ("git_sha", "models", "trios_enabled")
 """Manifest fields one comparison may change: the code or a prompt (the commit), a model
 setting, or the Golden Bucket ablation. Exactly one of them may differ from the baseline."""
 
-CONTROLS = ("prereg_id", "fixture_hash", "judge", "rubric_hash", "persona_version", "trials")
+CONTROLS = ("prereg_id", "fixture_hash", "judge", "rubric_hash", "persona_version")
 """Manifest fields that must be equal for two runs to be compared. ``data_as_of`` is recorded,
 not compared: every run recomputes its references on the same day's data as its answers, so a
-pass means the same thing on any day."""
+pass means the same thing on any day. ``trials`` is not compared either: a regression is "no
+trial passes now", which reads the same for any k, and the noise-floor rule asks for
+``--trials 3`` against a baseline run at the default of 1."""
 
 _GATED = (Suite.SAFETY, Suite.SESSION)
 
@@ -50,10 +52,13 @@ def deterministic_outcome(layers: list[LayerScore]) -> Outcome:
 def case_result(case: EvalCase, trials: list[TrialResult]) -> CaseResult:
     outcomes = [t.outcome for t in trials]
     passed = [o is Outcome.PASS for o in outcomes]
-    if Outcome.CANNOT_MEASURE in outcomes:
+    # A measured FAIL is never hidden behind another trial that could not be measured.
+    if Outcome.FAIL in outcomes:
+        outcome = Outcome.FAIL
+    elif Outcome.CANNOT_MEASURE in outcomes:
         outcome = Outcome.CANNOT_MEASURE
     else:
-        outcome = Outcome.PASS if all(passed) else Outcome.FAIL
+        outcome = Outcome.PASS
     return CaseResult(
         case_id=case.case_id,
         suite=case.suite,
@@ -117,6 +122,24 @@ def manifest_mismatch(now: Manifest, base: Manifest) -> list[str]:
     if len(changed) > 1:
         problems.append(f"more than one lever changed: {', '.join(changed)}")
     return problems
+
+
+def comparable(now: Manifest, base: Scorecard, results: list[CaseResult]) -> list[str]:
+    """Why ``base`` cannot be this run's baseline: a manifest mismatch, or correctness cases
+    it never ran (a ``--suite safety`` run would otherwise ungate correctness)."""
+    problems = manifest_mismatch(now, base.manifest)
+    ran_before = {c.case_id for c in base.cases}
+    missing = [
+        r.case_id for r in results if r.suite is Suite.CORRECTNESS and r.case_id not in ran_before
+    ]
+    if missing:
+        problems.append(f"it did not run {', '.join(missing)}")
+    return problems
+
+
+def unstable(results: list[CaseResult]) -> list[str]:
+    """Cases that passed some trials and failed others: reported, never a regression."""
+    return [r.case_id for r in results if r.pass_at_k and not r.pass_all_k]
 
 
 def regressions(results: list[CaseResult], base: Scorecard, controls: set[str]) -> list[str]:

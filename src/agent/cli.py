@@ -181,7 +181,9 @@ def _eval(suites: list[str] | None, trials: int, trios: bool, baseline: str | No
     cases = [c for c in app.cases if suites is None or c.suite.value in suites]
     card = app.runner.run(cases, trials=trials, baseline_run_id=baseline)
     print(render_scorecard(card))
-    print(f"\nscorecard: {app.runs_dir / f'{card.run_id}.json'}")
+    print(f"\nscorecard: {app.scorecard_path(card.run_id)}")
+    if app.sink.failures:
+        print(f"not published to: {', '.join(app.sink.failures)} (see the log above)")
     return exit_code(card.outcome)
 
 
@@ -222,7 +224,8 @@ def render_scorecard(card: Scorecard) -> str:
         f"cost ${card.cost_usd:.4f}{per_pass} · {card.tokens:,} tokens · "
         f"p95 {card.p95_latency_s:.1f} s per turn",
         f"baseline {card.baseline_run_id or 'none'} · regressions "
-        f"{', '.join(card.regressions) or 'none'} · negative control "
+        f"{', '.join(card.regressions) or 'none'} · unstable "
+        f"{', '.join(card.unstable) or 'none'} · negative control "
         f"{'failed as it must' if card.negative_control_failed else 'did not fail'}",
     ]
     return "\n".join(lines)
