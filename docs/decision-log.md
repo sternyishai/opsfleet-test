@@ -447,3 +447,17 @@ Approved deviations from issue #10:
 - **The eval's rate limiter waits up to 180 s** (`llm_max_queue_s`), and its traces go to `traces/eval/`, out of the chat's `/stats`.
 - **`--no-trios` is recorded but changes nothing yet:** the retriever is the Null one until #11, so both arms retrieve nothing. The manifest records the switch so the ablation is comparable once Trios land.
 - **The judge runs on every correctness trial** that reached the agent (one extra `MODEL_JUDGE` call each, inheriting the analyst model). It reports and never gates.
+
+## Slice 7a: Golden Trio retrieval (2026-11-16)
+
+Deviations from issue #11:
+
+- **`trios.*` sit on a `trio_search` span inside `retrieve_trios`**, not on the node's own span: a node has no handle to the span `_traced` opens, and the `Tracer` port has no "current span". The tool records the same names on its `search_golden_trios` span. Both go through one helper, `traced_trio_search`. `trios.degraded` is new, and so is `query` on the tool span (PII-filtered, like `sql.written`); the node records no question text.
+- **`trios.scores` are strings with two decimals:** a list attribute holds `str` or `int` only.
+- **`MODEL_EMBEDDING` defaults to `google_genai:gemini-embedding-001`.** An empty value turns retrieval off (the Null retriever). Embeddings have no `ModelStep` and no fallback, because vectors from two models are not comparable; `CODING_STANDARDS` §5 now names this exception.
+- **Vectors are made on the first search, not at start-up**, so the app starts without the model; they are kept in the app DB. Changing `MODEL_EMBEDDING` needs a fresh app DB.
+- **The table is kept equal to the seed** (in the prototype the seed is the whole Golden Bucket): a changed Trio is rewritten, a new active version supersedes the old one, a deleted file is deleted (Spec review: a version bump crashed start-up on the one-active index).
+- **A Trio tagged with no Brands counts as untagged: Executives only.** `BrandScope.covers` treats an empty set as inside every scope, which would default open (Spec review).
+- **`dropped_below_threshold` counts only the Trios in the User's scope**, so it never hints at Trios the User cannot see. Scores are clamped to [0, 1].
+- **Three analyst prompt rules, from live runs as manager-a.** A Trio's placeholders are filled in (`run_sql` binds none). When a Trio matches, its parameters are applied and its further checks are optional; "follow it when it fits" let both Flash models drop `min_items`, and "step by step" sent `gemini-3.6-flash` through every check until the 8-step cap. The step budget is in the prompt, with "answer as soon as a query answers the question".
+- **`build_ports(settings, trios_enabled=...)`**, so `agent eval --no-trios` builds the Null retriever directly.
