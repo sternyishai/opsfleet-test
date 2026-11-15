@@ -15,13 +15,14 @@ BUNDLED: dict[MessageClass, str] = {
         "or ask again in a few minutes. (ref: {ref})"
     ),
     MessageClass.MODEL_BUSY: "I'm a bit overloaded. Please ask again in a minute. (ref: {ref})",
+    # Executives are not technical (ASSIGNMENT.md): no "query", "scan" or "SQL" in wording.
     MessageClass.SELF_CORRECTION_EXHAUSTED: (
-        "I couldn't build a reliable query for that. Could you rephrase, for example with a "
-        "specific period?"
+        "I couldn't find a reliable answer to that. Could you rephrase it, for example with "
+        "a specific time period?"
     ),
     MessageClass.QUERY_TOO_LARGE: (
-        "That question needs more data than one query may scan. Try a shorter period or a "
-        "specific Brand."
+        "That question covers too much data to answer in one go. Try a shorter time period "
+        "or a single Brand."
     ),
     MessageClass.OUT_OF_SCOPE: (
         "That is outside the Brands you can analyze. Ask about one of your own Brands."

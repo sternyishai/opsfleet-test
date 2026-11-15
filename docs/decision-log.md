@@ -387,3 +387,11 @@ Approved additions in LLD 08 (built with the eval-genius skill's rules):
 - **Real seed data** from `thelook` (queried 2026-11-15): `manager-a` = Calvin Klein, Tommy Hilfiger; `manager-b` = Carhartt, Columbia, The North Face; Brand values kept with their exact case (`adidas`, `PUMA`). Five seed Trios, two tagged with one Manager's Brands each. Twenty cases; every reference query and Trio query ran on BigQuery.
 - **Data is used as it is.** Queries read the table as loaded; answers say "data as of <latest date in the data>". The public dataset holds generated rows dated a few days ahead (latest 2026-11-18 on 2026-11-15); no filter is added for them.
 - Facts from the data that shaped cases: 51% of orders with manager-a's Brands hold another Brand (the `num_of_item` rule); California and Texas spend per Customer differ by about 0.2% (a case whose right answer rejects the premise).
+
+## Slice 3: resilience (2026-11-15)
+
+Approved deviations from issue #7:
+
+- **Circuit breaker per model, not per dependency.** Gemini breakers and rate-limit buckets are keyed by model, so when Flash is down or out of quota, Flash-Lite (its fallback) can still answer. With one breaker for all of Gemini, the fallback would be switched off exactly when it is needed. BigQuery keeps one breaker.
+- **Giving up after the data cap says the question covers too much data** (`QUERY_TOO_LARGE`), not the generic "couldn't find a reliable answer". It tells the User what to change (a shorter period, one Brand); HLD 06's catalog has this message for this case. The trace records which message was used (`sql.gave_up`) and the technical reason (`sql.retry_kind`, the byte count in `error`).
+- **Catalog wording has no technical terms.** The Users are non-technical executives (ASSIGNMENT.md), so "query", "scan" and "SQL" were removed from the bundled messages, and the analyst is told to explain a give-up in plain words.

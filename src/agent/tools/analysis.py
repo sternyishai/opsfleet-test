@@ -118,6 +118,9 @@ def _trace(out: RunSqlOutput, budget: SqlBudget) -> dict[str, AttrValue]:
         "attempt": budget.attempts,
         "sql.status": out.status,
         "sql.retry_kind": out.kind if retry else None,
+        # Which plain message the User got; the technical reason is in sql.retry_kind / error
+        # on the call before.
+        "sql.gave_up": out.message_class.value if isinstance(out, RunSqlGaveUp) else None,
         "error": out.error if retry else None,
         "row_count": out.result.row_count if ok else 0 if isinstance(out, RunSqlEmpty) else None,
         "bytes_billed": out.result.bytes_billed if ok else None,
