@@ -138,6 +138,12 @@ class Settings(BaseSettings):
     checkpoint_db_url: str = "sqlite:///./data/checkpoints.db"
     seed_dir: Path = Path("seed")
     traces_dir: Path = Path("traces")
+    phoenix_full_content: bool = Field(
+        default=False,
+        description="Developer machines only: also send every prompt, model reply and tool "
+        "input and output to Phoenix (OpenInference LangChain instrumentation). Those spans "
+        "hold result rows and unfiltered text, so this breaks the trace rule of HLD 03.",
+    )
     phoenix_endpoint: str | None = Field(
         default="http://127.0.0.1:6006",
         description="Where `uvx arize-phoenix serve` listens. Spans go there only if it "

@@ -86,9 +86,12 @@ def build_ports(settings: Settings) -> Ports:
 
     limits = settings.limits
     endpoint = settings.phoenix_endpoint
-    tracer = JsonlTracer(
-        settings.traces_dir, export=PhoenixExporter.connect(endpoint) if endpoint else None
-    )
+    phoenix = PhoenixExporter.connect(endpoint) if endpoint else None
+    activate = None
+    if phoenix is not None and settings.phoenix_full_content:
+        phoenix.instrument_langchain()
+        activate = phoenix.active
+    tracer = JsonlTracer(settings.traces_dir, export=phoenix, activate=activate)
     app_db = _sqlite_path(settings.app_db_url)
     # The users first: they create the schema and the Authors the reports point at.
     users = SqliteUserDirectory(app_db, seed=settings.seed_dir / "users.yaml")

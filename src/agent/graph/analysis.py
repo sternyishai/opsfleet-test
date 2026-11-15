@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolCall, ToolMessage
+from langchain_core.runnables import RunnableLambda
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, ValidationError
 
@@ -92,6 +93,16 @@ class _Turn:
         """Set when a tool returned a ``ToolError``: the turn ends with that catalog message."""
 
     def call(self, call: ToolCall) -> str:
+        """One tool call, run as a LangChain runnable named after the tool: it changes
+        nothing here, and Phoenix's full-content mode then records the call's input and
+        output like any other LangChain run (LLD 06 § Tracer)."""
+        name = call["name"]
+        run = RunnableLambda[dict[str, Any], str](
+            lambda args: self._dispatch(name, args), name=name
+        )
+        return run.invoke(call["args"])
+
+    def _dispatch(self, name: str, args: dict[str, Any]) -> str:
         tools: dict[str, Callable[[dict[str, Any]], BaseModel]] = {
             "get_schema": lambda a: get_schema(GetSchemaInput.model_validate(a), self.ctx),
             "run_sql": self._run_sql,
@@ -101,12 +112,11 @@ class _Turn:
             ),
             "get_my_report": lambda a: get_my_report(GetReportInput.model_validate(a), self.ctx),
         }
-        name = call["name"]
         tool = tools.get(name)
         if tool is None:  # a made-up name never reaches the prompt
             return tool_result("unknown", json.dumps({"status": "error", "detail": "no such tool"}))
         try:
-            out = tool(call["args"])
+            out = tool(args)
         except ValidationError as exc:
             detail = exc.errors(include_url=False, include_context=False, include_input=False)
             return tool_result(name, json.dumps({"status": "error", "detail": detail}, default=str))

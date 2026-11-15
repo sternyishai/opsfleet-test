@@ -15,6 +15,7 @@ dependencies = [
     "langchain-google-genai>=4.5.0",
     "langgraph>=1.0",
     "langgraph-checkpoint-sqlite>=3.1.3",
+    "openinference-instrumentation-langchain>=0.1.86",
     "opentelemetry-exporter-otlp-proto-http>=1.45.2",
     "opentelemetry-sdk>=1.45.2",
     "pydantic>=2.9",
@@ -68,6 +69,7 @@ select = ["E", "F", "I", "UP", "B", "TID"]
 "sqlglot".msg = "Import provider SDKs only in agent.adapters.*"
 "yaml".msg = "Import provider SDKs only in agent.adapters.*"
 "opentelemetry".msg = "Import provider SDKs only in agent.adapters.*"
+"openinference".msg = "Import provider SDKs only in agent.adapters.*"
 "agent.adapters".msg = "Only agent.composition names concrete adapters; take a port instead"
 
 [tool.ruff.lint.per-file-ignores]
