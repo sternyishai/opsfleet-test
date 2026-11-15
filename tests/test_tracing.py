@@ -519,7 +519,9 @@ class RecordedTracer:
 def week_of_spans() -> list[SpanRecord]:
     return [
         # t1: answered first try, 1 row; 1,000 tokens; 2 s
-        turn("t1", "ceo", "answered", 2000),
+        turn("t1", "ceo", "answered", 2000, **{"router.action": "analysis"}),
+        span("t1", "input_guard", {}, ms=300),
+        span("t1", "analysis", {}, ms=1500),
         span(
             "t1",
             "llm",
@@ -539,7 +541,15 @@ def week_of_spans() -> list[SpanRecord]:
         span("t1", "query_guard", {"guard.decision": "allowed", "guard.reason": None}),
         span("t1", "outbound", {"kind": "reply", "pii.hits": []}),
         # t2: retried once after a guard rejection (out-of-scope Brand), then ok; fallback; 4 s
-        turn("t2", "manager-a", "answered", 4000, **{"retrieval.gap": True}),
+        turn(
+            "t2",
+            "manager-a",
+            "answered",
+            4000,
+            **{"retrieval.gap": True, "router.action": "analysis"},
+        ),  # noqa: E501
+        span("t2", "input_guard", {}, ms=500),
+        span("t2", "analysis", {}, ms=3000),
         span(
             "t2",
             "llm",
@@ -572,8 +582,17 @@ def week_of_spans() -> list[SpanRecord]:
         span("t2", "outbound", {"kind": "reply", "pii.hits": ["email"]}),
         # t3: input guard blocked as off-topic; 1 s
         turn("t3", "manager-a", "refused", 1000, message_class="off_topic"),
-        # t4: failed, unclassified; 3 s
-        turn("t4", "ceo", "error", 3000, error_class="unclassified"),
+        # t4: BigQuery down, after a model call where no model answered; 3 s
+        turn(
+            "t4",
+            "ceo",
+            "error",
+            3000,
+            error_class="transient",
+            message_class="data_source_down",
+            **{"router.action": "analysis"},
+        ),  # noqa: E501
+        span("t4", "llm", {"llm.model": None, "llm.errors": ["flash: GoogleRateLimitError"]}),
         # t5: a deletion, partially confirmed; plan of 3; 1.5 s
         turn("t5", "ceo", "answered", 1500, **{"router.action": "delete_reports"}),
         span("t5", "plan_deletion", {"plan_id": "p1", "plan.size": 3}),
@@ -619,12 +638,26 @@ def test_stats_prints_the_metric_families_from_the_trace_attributes() -> None:
     assert f["cost"]["tokens_per_turn"] == 500
     assert f["cost"]["bigquery_bytes_per_turn"] == pytest.approx(4_000_000 / 6)
     assert f["cost"]["usd_per_successful_answer"] == pytest.approx((0.00074 + 0.00035) / 4)
+    assert f["cost"]["usd_per_question"] == pytest.approx((0.00074 + 0.00035) / 6)
     # reliability: durations 500, 1000, 1500, 2000, 3000, 4000 ms
     assert f["reliability"]["p50_s"] == pytest.approx(1.5)
     assert f["reliability"]["p95_s"] == pytest.approx(4.0)
     assert f["reliability"]["fallbacks"] == 1
     assert f["reliability"]["circuit_opens"] == 1
-    assert f["reliability"]["unclassified"] == 1
+    assert f["reliability"]["unclassified"] == 0
+    assert f["reliability"]["llm_error_rate"] == pytest.approx(1 / 3)  # 1 of 3 model calls
+    assert f["reliability"]["bigquery_error_rate"] == pytest.approx(1 / 6)  # t4 of 6 turns
+    # by node: analysis took 1.5 s and 3.0 s, input_guard 0.3 s and 0.5 s
+    assert f["by_node"]["analysis.calls"] == 2
+    assert f["by_node"]["analysis.p50_s"] == pytest.approx(1.5)
+    assert f["by_node"]["analysis.p95_s"] == pytest.approx(3.0)
+    assert f["by_node"]["input_guard.p95_s"] == pytest.approx(0.5)
+    assert "llm.calls" not in f["by_node"]  # a model call is not a node
+    # by intent: analysis in t1, t2, t4 (t4 failed); delete_reports in t5, t6
+    assert f["by_intent"]["analysis.turns"] == 3
+    assert f["by_intent"]["analysis.task_success_rate"] == pytest.approx(2 / 3)
+    assert f["by_intent"]["delete_reports.turns"] == 2
+    assert f["by_intent"]["delete_reports.task_success_rate"] == pytest.approx(1.0)
     # knowledge: SQL ran in 2 turns, one of them with a retrieval gap
     assert f["knowledge"]["retrieval_health_rate"] == pytest.approx(1 / 2)
     # deletion
@@ -637,6 +670,9 @@ def test_stats_prints_the_metric_families_from_the_trace_attributes() -> None:
     assert text.splitlines()[0] == "last 7 days · 6 turns · 2 Users"
     assert "task success 80%" in text
     assert "p95 4.0 s" in text
+    assert "analysis p95 3.0 s (p50 1.5 s, 2 calls)" in text
+    assert "analysis 3 turns, success 67%" in text
+    assert "LLM errors 33%" in text
 
 
 def test_stats_without_prices_shows_no_dollar_figure() -> None:
