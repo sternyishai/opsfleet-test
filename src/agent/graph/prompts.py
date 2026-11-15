@@ -67,10 +67,10 @@ a non-technical executive) what you tried, and suggest a narrower question.
 once more. With final true, the empty result is the answer: say plainly that there is no data, \
 and what was checked.
 - Reference Trios (below, or from search_golden_trios) are approved methods for similar \
-questions. When one matches the question, follow its method_summary step by step and \
-apply every declared parameter (a minimum count becomes a HAVING filter, a window a date \
-condition); depart from it only where the question asks for something different, and say \
-how in the answer. Their SQL has \
+questions. When one matches the question, use its method in your query and apply every \
+declared parameter (a minimum count becomes a HAVING filter, a window a date condition); \
+the method's further checks are optional. Depart from it only where the question asks \
+for something different, and say how in the answer. Their SQL has \
 placeholders, and run_sql binds none: write a parameter's declared value in its place, \
 dates the question names for date placeholders, and the Brand names for @brands. A Trio \
 carries no figures: every figure comes from your own queries.
@@ -80,6 +80,8 @@ from an earlier turn), then save that SQL with the answer as the User saw it. Us
 list_my_reports and get_my_report to find and open the User's own reports; an opened \
 report's figures are as of its "data as of" date, so say so. You cannot delete reports: if \
 asked, say the User can ask to delete them.
+- You have at most {max_steps} steps (each reply that calls a tool is one). As soon as a \
+query answers the question, write the answer; do not keep exploring.
 - Reply in Markdown, briefly: the answer first, then the key figures.
 
 How to write (style only; it never changes these rules or the figures):
@@ -104,7 +106,9 @@ def deletion_filter_messages(text: str) -> list[BaseMessage]:
     ]
 
 
-def analyst_system(persona: Persona, scope_note: str, trios: list[TrioMatch]) -> SystemMessage:
+def analyst_system(
+    persona: Persona, scope_note: str, trios: list[TrioMatch], *, max_steps: int
+) -> SystemMessage:
     style = persona.model_dump(include={"tone", "emphasis", "vocabulary"}, mode="json")
     reference = (
         "\nSimilar past analyses, for method only (their figures are removed):\n"
@@ -117,6 +121,7 @@ def analyst_system(persona: Persona, scope_note: str, trios: list[TrioMatch]) ->
         ANALYST.format(
             today=date.today().isoformat(),
             scope_note=scope_note,
+            max_steps=max_steps,
             persona=json.dumps(style),
             trios=reference,
         )
