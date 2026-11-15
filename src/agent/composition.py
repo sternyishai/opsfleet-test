@@ -29,7 +29,7 @@ import atexit
 import shutil
 import sqlite3
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from agent.core.chat import ChatService
     from agent.core.views import Views
     from agent.evals.runner import EvalRunner, TrialStore
+    from agent.evals.sinks import FanOutSink
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,7 +160,10 @@ _EVAL_MAX_QUEUE_S = 180.0
 class EvalApp:
     runner: "EvalRunner"
     cases: "list[EvalCase]"
-    runs_dir: Path
+    scorecard_path: "Callable[[str], Path]"
+    """Where the JSON file of a run ID is."""
+    sink: "FanOutSink"
+    """Its ``failures`` name the sinks that did not take the last run (Phoenix down)."""
 
 
 def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
@@ -209,7 +213,9 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
         limits=limits,
         fresh_store=lambda: fresh_eval_store(settings.seed_dir / "users.yaml"),
         git_sha=git_sha(Path.cwd()),
-        fixture_hash=fixture_hash(EVAL_CASES, settings.seed_dir / "trios"),
+        fixture_hash=fixture_hash(
+            EVAL_CASES, settings.seed_dir / "trios", settings.seed_dir / "users.yaml"
+        ),
         prereg_id=prereg_id(PREREGISTRATION),
         models={
             step.value: primary + (f" -> {fallback}" if fallback else "")
@@ -223,14 +229,16 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
         SafetyChecks(ports.pii),
         StoreState(),
         SectionsPresent(),
-        RubricJudge(ports.llm),
+        RubricJudge(ports.llm, ports.pii),
         TrajectoryStats(models.prices),
     ]
-    sinks: list[ScorecardSink] = [JsonScorecardSink(EVAL_RUNS)]
+    json_sink = JsonScorecardSink(EVAL_RUNS)
+    sinks: list[ScorecardSink] = [json_sink]
     if settings.phoenix_endpoint:
         sinks.append(PhoenixScorecardSink(settings.phoenix_endpoint))
     cases = load_cases(read_case_files(EVAL_CASES))
-    return EvalApp(EvalRunner(env, scorers, FanOutSink(sinks)), cases, EVAL_RUNS)
+    sink = FanOutSink(sinks)
+    return EvalApp(EvalRunner(env, scorers, sink), cases, json_sink.path, sink)
 
 
 @contextmanager

@@ -185,6 +185,9 @@ class ExecutedQuery(BaseModel):
     sql: str = Field(description="As the warehouse received it (after the guard's rewrite).")
     guarded: bool = Field(description="It is the rewritten SQL of an allowed guard decision.")
     scope: BrandScope | None = Field(description="The guard's scope; None when not guarded.")
+    brands: list[str] | None = Field(
+        default=None, description="The Brands bound as @brands; None when the query ran unscoped."
+    )
     columns: list[str]
     rows: list[dict[str, Any]]
 
@@ -207,10 +210,15 @@ class Transcript(BaseModel):
         default=False, description="A Saved Report was written or deleted, or an audit row added."
     )
 
-    def final_reply(self) -> str:
-        """The markdown of the last ``AgentReply``, or empty when the turn sent none."""
+    def final(self) -> AgentReply | None:
+        """The last ``AgentReply`` of the trial, or None when no turn sent one."""
         replies = [m for m in self.outbound if isinstance(m, AgentReply)]
-        return replies[-1].markdown if replies else ""
+        return replies[-1] if replies else None
+
+    def final_reply(self) -> str:
+        """The markdown of the last ``AgentReply``, or empty when no turn sent one."""
+        reply = self.final()
+        return reply.markdown if reply else ""
 
 
 # --- results -----------------------------------------------------------------------------
@@ -298,6 +306,9 @@ class Scorecard(BaseModel):
     baseline_run_id: str | None = None
     regressions: list[str] = Field(
         default_factory=list, description="Case IDs that passed on the baseline and fail now."
+    )
+    unstable: list[str] = Field(
+        default_factory=list, description="Case IDs that passed some trials and failed others."
     )
     outcome: Outcome = Field(description="The bar in evals/PREREGISTRATION.md, applied.")
     reasons: list[str] = Field(

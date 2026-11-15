@@ -27,14 +27,17 @@ def read_case_files(root: Path) -> list[tuple[str, object]]:
     ]
 
 
-def fixture_hash(cases_root: Path, trios_root: Path) -> str:
-    """One hash over every case file and seed Trio, names included: any change to the
-    fixture is a new hash, so runs on different fixtures never compare."""
+def fixture_hash(cases_root: Path, trios_root: Path, users: Path | None = None) -> str:
+    """One hash over every case file, every seed Trio and the seed Users (their Brands decide
+    what a reference returns), names included: any change is a new hash, so runs on different
+    fixtures never compare."""
     digest = hashlib.sha256()
     for root in (cases_root, trios_root):
         for path in sorted(root.rglob("*.yaml")):
             digest.update(path.relative_to(root.parent).as_posix().encode())
             digest.update(path.read_bytes())
+    if users is not None:
+        digest.update(b"users:" + users.read_bytes())
     return digest.hexdigest()[:12]
 
 
@@ -75,13 +78,16 @@ class JsonScorecardSink:
 
     def publish(self, cases: list[EvalCase], scorecard: Scorecard) -> None:
         self._dir.mkdir(parents=True, exist_ok=True)
-        path = self._dir / f"{scorecard.run_id}.json"
+        path = self.path(scorecard.run_id)
         path.write_text(scorecard.model_dump_json(indent=2) + "\n")
         _log.info("scorecard written to %s", path)
 
+    def path(self, run_id: str) -> Path:
+        return self._dir / f"{run_id}.json"
+
     def baseline(self, run_id: str | None = None, *, fixture_hash: str) -> Scorecard | None:
         if run_id is not None:
-            return self._read(self._dir / f"{run_id}.json")
+            return self._read(self.path(run_id))
         runs = [card for path in sorted(self._dir.glob("*.json")) if (card := self._read(path))]
         same = [
             card

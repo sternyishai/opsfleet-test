@@ -47,7 +47,7 @@ from agent.domain.query import DryRunResult, GuardAllowed, GuardDecision, QueryR
 from agent.domain.reports import EntityType, ReportEntity, SavedReport, normalize_entity
 from agent.errors import MessageClass
 from agent.evals import scorecard as bar
-from agent.evals.scorers import Scorer, rubric_hash
+from agent.evals.scorers import Scorer, is_turn, rubric_hash
 from agent.graph.build import build_graph
 from agent.graph.state import CHECKPOINT_TYPES
 from agent.ports.query import QueryGuard, QueryRunner
@@ -172,12 +172,21 @@ class EvalRunner:
             results.append(bar.case_result(case, case_trials))
         baseline = self._sink.baseline(baseline_run_id, fixture_hash=manifest.fixture_hash)
         mismatch: list[str] = []
+        notes: list[str] = []
         found: list[str] = []
         if baseline_run_id is not None and baseline is None:
             mismatch = [f"baseline {baseline_run_id} not found"]
         elif baseline is not None:
-            mismatch = bar.manifest_mismatch(manifest, baseline.manifest)
-            found = [] if mismatch else bar.regressions(results, baseline, controls)
+            problems = bar.comparable(manifest, baseline, results)
+            if problems and baseline_run_id is not None:
+                mismatch = problems  # asked for by name: refuse the comparison
+            elif problems:
+                # Found automatically: say why it was not used, and gate as if there were no
+                # baseline, so a Persona or judge change cannot lock every run out.
+                notes = [f"latest baseline {baseline.run_id} not comparable: {'; '.join(problems)}"]
+                baseline = None
+            else:
+                found = bar.regressions(results, baseline, controls)
         outcome, reasons = bar.apply_bar(
             results,
             controls,
@@ -186,7 +195,7 @@ class EvalRunner:
             found_regressions=found,
         )
         card = self._card(run_id, started, manifest, results, controls, baseline, found, latencies)
-        card = card.model_copy(update={"outcome": outcome, "reasons": reasons})
+        card = card.model_copy(update={"outcome": outcome, "reasons": [*reasons, *notes]})
         return self._publish(cases, card)
 
     # --- one trial ------------------------------------------------------------------------
@@ -196,19 +205,22 @@ class EvalRunner:
         try:
             transcript = self._transcript(case, n)
         except Exception as exc:
-            _log.warning("case %s trial %d: harness error %s", case.case_id, n, exc)
-            error = f"{type(exc).__name__}: {exc}"
+            # The class only: an exception's text can quote a value from the data (HLD 03).
+            error = type(exc).__name__
+            _log.warning("case %s trial %d: harness error %s", case.case_id, n, error)
             return TrialResult(
                 trial=n, trace_ids=[], layers=[], outcome=Outcome.CANNOT_MEASURE, error=error
             ), []
         trace_ids = list(dict.fromkeys(m.trace_id for m in transcript.outbound))
         spans = [s for s in self._env.ports.tracer.read(since) if s.trace_id in trace_ids]
         transcript = transcript.model_copy(update={"traces": spans})
-        turn_seconds = [s.duration_ms / 1000 for s in spans if s.name == "turn" and not s.parent_id]
+        turn_seconds = [s.duration_ms / 1000 for s in spans if is_turn(s)]
         infrastructure = _infrastructure_error(transcript.outbound, len(case.turns))
         # A turn that ended on the infrastructure is graded on nothing: only the trajectory
         # (what it cost) is kept, and the judge is not asked.
-        scorers = [s for s in self._scorers if infrastructure is None or s.name == "trajectory"]
+        scorers = [
+            s for s in self._scorers if infrastructure is None or s.layer is Layer.TRAJECTORY
+        ]
         scores = [self._score(scorer, case, transcript) for scorer in scorers]
         layers = [s for s in scores if s is not None]
         if infrastructure is not None:
@@ -299,7 +311,7 @@ class EvalRunner:
                     for uid in [c.run_as, *(r.author_id for r in c.setup_reports)]
                 }
         except Exception as exc:
-            return [*problems, f"the app store did not open: {type(exc).__name__}: {exc}"]
+            return [*problems, f"the app store did not open: {type(exc).__name__}"]
         problems += [f"seeded User {uid!r} does not load" for uid, u in users.items() if u is None]
         for c in cases:
             user = users.get(c.run_as)
@@ -323,7 +335,7 @@ class EvalRunner:
 
     def _manifest(self, today: date, trials: int) -> Manifest:
         env = self._env
-        judged = any(s.name == "judge" for s in self._scorers)
+        judged = any(s.layer is Layer.JUDGED for s in self._scorers)
         return Manifest(
             git_sha=env.git_sha,
             fixture_hash=env.fixture_hash,
@@ -349,7 +361,7 @@ class EvalRunner:
         latencies: list[float],
     ) -> Scorecard:
         trajectory = [
-            s for r in results for t in r.trials for s in t.layers if s.scorer == "trajectory"
+            s for r in results for t in r.trials for s in t.layers if s.layer is Layer.TRAJECTORY
         ]
         return Scorecard(
             run_id=run_id,
@@ -363,6 +375,7 @@ class EvalRunner:
             p95_latency_s=bar.p95(latencies),
             baseline_run_id=baseline.run_id if baseline else None,
             regressions=found,
+            unstable=bar.unstable(results),
             outcome=Outcome.CANNOT_MEASURE,  # set by the caller once the bar is applied
         )
 
@@ -440,11 +453,13 @@ class _RecordingWarehouse:
     ) -> QueryResult:
         result = self._inner.execute(sql, params, max_bytes=max_bytes, max_rows=max_rows)
         scope = self._recorder.allowed.get(sql)
+        brands = params.get("brands")
         self._recorder.executed.append(
             ExecutedQuery(
                 sql=sql,
                 guarded=scope is not None,
                 scope=scope,
+                brands=list(brands) if brands is not None else None,
                 columns=result.columns,
                 rows=result.rows,
             )

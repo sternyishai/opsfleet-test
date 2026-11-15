@@ -12,6 +12,7 @@ flowchart TB
     grp[graph<br/>state, node map] --> tools[tools<br/>6 analysis tools, 5 branch functions]
     grp --> core[core<br/>ChatService, Views, Outbound,<br/>parse_reply, PersonaQualityGate]
     evals[evals<br/>runner, scorers] --> core
+    evals --> graph
     tools --> ports
     core --> ports
     grp --> ports
@@ -32,7 +33,7 @@ flowchart TB
 | [`core/`](../../src/agent/core/) | Deep modules with no dependency of their own: `ChatService` (the inbound entry point), `Views` (model-free commands), `Outbound` (single exit), `parse_reply` (confirmation), `PersonaQualityGate` | `ports`; `Views` also calls the report tools in `tools/`, so the agent and every channel share one implementation ([07](07-web.md)) |
 | [`tools/`](../../src/agent/tools/) | The eleven tool functions and `TurnContext` | `ports`, `contracts` |
 | [`graph/`](../../src/agent/graph/) | `AgentState`, the `Node` map, `build_graph` | all of the above |
-| [`evals/`](../../src/agent/evals/) | Eval runner and scorers ([08](08-eval.md)) | `core`, `contracts`, `ports` |
+| [`evals/`](../../src/agent/evals/) | Eval runner, scorers, the bar and the fan-out sink ([08](08-eval.md)) | `core`, `contracts`, `ports`, `graph` (a trial builds its own graph over its fresh store) |
 | [`adapters/`](../../src/agent/adapters/) | Concrete adapters, added slice by slice | `ports`, provider SDKs |
 | [`composition`](../../src/agent/composition.py) | `Ports` bundle and `build_ports(settings)` | everything |
 | [`config`](../../src/agent/config.py) | `Settings`, `ModelSettings`, `Limits` from `.env` | `pydantic-settings` |
