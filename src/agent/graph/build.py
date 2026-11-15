@@ -36,11 +36,13 @@ from agent.contracts.router import Action, RouterDecision, Verdict
 from agent.core.catalog import render
 from agent.core.confirmation import looks_like_reply
 from agent.core.input_rules import screen
+from agent.domain.identity import UserId
 from agent.domain.profile import (
     PreferenceField,
     PreferenceScope,
     PreferenceStatement,
     UserProfile,
+    is_option,
     merged,
 )
 from agent.errors import AgentError, ErrorClass, MessageClass
@@ -271,7 +273,8 @@ _FIELD_WORDS: dict[PreferenceField, str] = {
 
 def _acknowledgement(statements: list[PreferenceStatement]) -> str:
     """What a preference-only turn says: what was understood, and for how long. Written
-    from the statements, not by a model, so it cannot promise what was not saved."""
+    from the screened statements, not by a model, so it names nothing that was not applied.
+    It runs beside the save and cannot see it fail; a failed save is on the trace."""
     lines = []
     for s in statements:
         what = (
@@ -313,7 +316,7 @@ class _Nodes:
             update["access_version_seen"] = user.access_version
         return update
 
-    def _stored_profile(self, user_id: str) -> UserProfile:
+    def _stored_profile(self, user_id: UserId) -> UserProfile:
         """A profile only shapes presentation, so a store that cannot be read means an empty
         one for this turn, traced on its own span, never a failed turn."""
         profiles = self._ports.profiles
@@ -409,10 +412,13 @@ class _Nodes:
         return {"messages": [AIMessage(content=_acknowledgement(statements))]}
 
     def _safe(self, statements: list[PreferenceStatement]) -> list[PreferenceStatement]:
-        """The input guard's rules again, on each value the router extracted: the model wrote
-        it, so it is checked before it is applied or saved (HLD 05 § What is stored)."""
+        """The statements that may be applied, saved and acknowledged: the input guard's rules
+        again on each value (the model wrote it; HLD 05 § What is stored), and only values
+        that are one of the field's options, so the acknowledgement names nothing the merge
+        would skip."""
+        max_chars = self._limits.input_max_chars
         return [
-            s for s in statements if screen(s.value, max_chars=self._limits.input_max_chars) is None
+            s for s in statements if is_option(s) and screen(s.value, max_chars=max_chars) is None
         ]
 
     def retrieve_trios(self, state: AgentState) -> dict[str, Any]:
