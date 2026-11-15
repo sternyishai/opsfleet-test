@@ -205,7 +205,7 @@ def render_stats(view: StatsView) -> str:
         for key, n in safety.items()
         if key.startswith("query_guard.")
     )
-    usd = cost["usd_per_successful_answer"]
+    usd, usd_q = cost["usd_per_successful_answer"], cost["usd_per_question"]
     rows = [
         (
             "quality",
@@ -248,6 +248,7 @@ def render_stats(view: StatsView) -> str:
                 f"${usd:.4f} per successful answer"
                 if isinstance(usd, float)
                 else "$ n/a (set MODEL_PRICES)",
+                *([f"${usd_q:.4f} per question"] if isinstance(usd_q, float) else []),
             ],
         ),
         (
@@ -259,6 +260,13 @@ def render_stats(view: StatsView) -> str:
                 f"circuit opens {reliability['circuit_opens']}",
                 f"model failures {reliability['model_failures']}",
                 f"unclassified {reliability['unclassified']}",
+            ],
+        ),
+        (
+            "",
+            [
+                f"LLM errors {_pct(reliability['llm_error_rate'])}",
+                f"BigQuery errors {_pct(reliability['bigquery_error_rate'])}",
             ],
         ),
         (
@@ -284,8 +292,41 @@ def render_stats(view: StatsView) -> str:
     turns = "turn" if view.turns == 1 else "turns"
     users = "User" if view.users == 1 else "Users"
     lines = [f"{_window(view.since)} · {view.turns} {turns} · {view.users} {users}"]
-    lines += [f"{family:<12} {'   '.join(items)}" for family, items in rows]
+    rows += [("by node", _slowest_nodes(families["by_node"])), ("by intent", _intents(families))]
+    lines += [f"{family:<12} {'   '.join(items)}" for family, items in rows if items]
     return "\n".join(lines)
+
+
+_SLOWEST_SHOWN = 3
+
+
+def _slowest_nodes(by_node: dict[str, float | int | str]) -> list[str]:
+    """The nodes with the highest p95, slowest first: where to look when turns are slow."""
+    names = {key.rsplit(".", 1)[0] for key in by_node}
+    ranked = sorted(names, key=lambda n: _sortable(by_node[f"{n}.p95_s"]), reverse=True)
+    return [
+        f"{n} p95 {_num(by_node[f'{n}.p95_s'], 1)} s "
+        f"(p50 {_num(by_node[f'{n}.p50_s'], 1)} s, {_count(by_node[f'{n}.calls'], 'call')})"
+        for n in ranked[:_SLOWEST_SHOWN]
+    ]
+
+
+def _intents(families: dict[str, dict[str, float | int | str]]) -> list[str]:
+    by_intent = families["by_intent"]
+    actions = sorted({key.rsplit(".", 1)[0] for key in by_intent})
+    return [
+        f"{a} {_count(by_intent[f'{a}.turns'], 'turn')}, "
+        f"success {_pct(by_intent[f'{a}.task_success_rate'])}"
+        for a in actions
+    ]
+
+
+def _count(n: float | int | str, noun: str) -> str:
+    return f"{n} {noun}{'' if n == 1 else 's'}"
+
+
+def _sortable(value: float | int | str) -> float:
+    return float(value) if isinstance(value, float | int) else -1.0
 
 
 def _window(since: datetime) -> str:

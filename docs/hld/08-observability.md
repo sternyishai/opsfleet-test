@@ -138,8 +138,13 @@ safety       input guard blocked 11 (off-topic 7, PII 3, injection 1)
              PII-filter hits 0   Persona changes 2 (1 rejected: figures changed)
 cost         4,900 tokens/turn   38 MB BigQuery/turn   $0.004 per successful answer
 reliability  p50 9.8 s  p95 24.1 s   fallbacks 2   circuit opens 0   unclassified 1
+             LLM errors 2%   BigQuery errors 1%
 deletion     plans 6   confirmed 4   partial 1   cancelled 1
+by node      analysis p95 18.2 s (p50 7.9 s, 131 calls)   input_guard p95 2.1 s (p50 0.9 s, 142 calls)
+by intent    analysis 131 turns, success 90%   delete_reports 9 turns, success 100%
 ```
+
+  The "by node" line shows the three nodes with the highest p95; the full set is in `Views.stats`.
 
   Every number is computed from the trace fields in [What one trace holds](#what-one-trace-holds), so any line can be opened with `/trace <id>`. Cost uses the per-token prices in configuration. The north-star trusted-answer rate needs feedback signals the CLI does not collect, so `/stats` shows task success instead.
 

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from agent.contracts.views import SpanNode, StatsView, TraceView
 from agent.domain.traces import AttrValue, SpanRecord
+from agent.graph.build import Node
 
 type Prices = Mapping[str, tuple[float, float]]
 """USD per million tokens (input, output) by model ID."""
@@ -21,6 +22,10 @@ _SQL_RAN = ("ok", "empty")
 """``sql.status`` of a statement the warehouse executed."""
 
 _INPUT_GUARD = ("off_topic", "pii_request", "injection")
+
+_NODES = frozenset(n.value for n in Node)
+"""Span names of graph nodes. ``plan_deletion`` and ``execute_deletion`` are also tool spans,
+so a node span is told apart by having the turn as its parent."""
 
 
 # --- /trace ---------------------------------------------------------------------------------
@@ -177,6 +182,8 @@ def compute_stats(spans: Iterable[SpanRecord], since: datetime, prices: Prices) 
             "reliability": _reliability(turns, in_window),
             "knowledge": _knowledge(turns),
             "deletion": _deletion(in_window),
+            "by_node": _by_node(turns),
+            "by_intent": _by_intent(turns),
         },
     )
 
@@ -192,13 +199,12 @@ class _Turn:
 
 
 def _quality(turns: list[_Turn]) -> dict[str, float | int | str]:
-    tasks = [t for t in turns if t.attr("outcome") not in ("refused", "confirmation")]
     with_sql = [t for t in turns if t.sql]
     corrected = [t for t in with_sql if any(_status(s) == "retry" for s in t.sql)]
     executed = [s for t in with_sql for s in t.sql if _status(s) in _SQL_RAN]
     retries = sum(_status(s) == "retry" for t in with_sql for s in t.sql)
     return {
-        "task_success_rate": _rate(sum(t.attr("outcome") == "answered" for t in tasks), len(tasks)),
+        "task_success_rate": _task_success(turns),
         "first_try_sql_rate": _rate(
             sum(_status(t.sql[0]) in _SQL_RAN for t in with_sql), len(with_sql)
         ),
@@ -207,6 +213,13 @@ def _quality(turns: list[_Turn]) -> dict[str, float | int | str]:
         "empty_result_rate": _rate(sum(_status(s) == "empty" for s in executed), len(executed)),
         "retries_per_question": _rate(retries, len(with_sql)),
     }
+
+
+def _task_success(turns: list[_Turn]) -> float | str:
+    """Answered, of the turns that were tasks: a refusal is the safety family's number, and
+    a turn paused at a Deletion Plan has not ended yet."""
+    tasks = [t for t in turns if t.attr("outcome") not in ("refused", "confirmation")]
+    return _rate(sum(t.attr("outcome") == "answered" for t in tasks), len(tasks))
 
 
 def _safety(turns: list[_Turn], spans: list[SpanRecord]) -> dict[str, float | int | str]:
@@ -235,16 +248,16 @@ def _cost(
 ) -> dict[str, float | int | str]:
     llm = [s for s in spans if s.name == "llm"]
     answered = sum(t.attr("outcome") == "answered" for t in turns)
-    usd: float | str = "n/a"
-    if prices and answered:
-        usd = sum(_usd(s, prices) for s in llm) / answered
+    spent = sum(_usd(s, prices) for s in llm)
     return {
         "tokens_per_turn": _rate(sum(_tokens(s) for s in llm), len(turns)),
         "bigquery_bytes_per_turn": _rate(
             sum(_int(s.attributes.get("bytes_billed")) for s in spans if s.name == "run_sql"),
             len(turns),
         ),
-        "usd_per_successful_answer": usd,
+        # Per successful answer, so saving tokens by failing more never looks like a saving.
+        "usd_per_successful_answer": spent / answered if prices and answered else "n/a",
+        "usd_per_question": spent / len(turns) if prices and turns else "n/a",
     }
 
 
@@ -260,7 +273,43 @@ def _reliability(turns: list[_Turn], spans: list[SpanRecord]) -> dict[str, float
             "llm.model" in s.attributes and s.attributes["llm.model"] is None for s in llm
         ),
         "unclassified": sum(t.attr("error_class") == "unclassified" for t in turns),
+        "llm_error_rate": _rate(
+            sum("llm.model" in s.attributes and s.attributes["llm.model"] is None for s in llm),
+            len(llm),
+        ),
+        "bigquery_error_rate": _rate(
+            sum(t.attr("message_class") == "data_source_down" for t in turns), len(turns)
+        ),
     }
+
+
+def _by_node(turns: list[_Turn]) -> dict[str, float | int | str]:
+    """p50 and p95 per graph node, so a slow turn points at the step that was slow."""
+    seconds: dict[str, list[float]] = defaultdict(list)
+    for t in turns:
+        for s in t.spans:
+            if s.name in _NODES and s.parent_id == t.root.span_id:
+                seconds[s.name].append(s.duration_ms / 1000)
+    out: dict[str, float | int | str] = {}
+    for name, values in sorted(seconds.items()):
+        values.sort()
+        out[f"{name}.calls"] = len(values)
+        out[f"{name}.p50_s"] = _percentile(values, 50)
+        out[f"{name}.p95_s"] = _percentile(values, 95)
+    return out
+
+
+def _by_intent(turns: list[_Turn]) -> dict[str, float | int | str]:
+    """Turns and task success per router action, so a regression points at one intent."""
+    by_action: dict[str, list[_Turn]] = defaultdict(list)
+    for t in turns:
+        if action := t.attr("router.action"):
+            by_action[str(action)].append(t)
+    out: dict[str, float | int | str] = {}
+    for action, group in sorted(by_action.items()):
+        out[f"{action}.turns"] = len(group)
+        out[f"{action}.task_success_rate"] = _task_success(group)
+    return out
 
 
 def _knowledge(turns: list[_Turn]) -> dict[str, float | int | str]:
