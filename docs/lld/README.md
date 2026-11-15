@@ -17,7 +17,7 @@ The schemas and interfaces are **code-first**: Pydantic models, Python `Protocol
 | [08-eval](08-eval.md) | Which area gets which check, eval cases, scorers, the scorecard and bar, Phoenix, seed Trios | [`contracts/eval.py`](../../src/agent/contracts/eval.py), [`evals/`](../../src/agent/evals/), [`evals/cases/`](../../evals/cases/), [`seed/trios/`](../../seed/trios/) |
 | [07-web](07-web.md) | One core for the CLI and the optional web UI: `ChatService`, `Views`, the feature map, SSE, identity, generated types ([ADR 0010](../adr/0010-ui-is-a-plain-folder-with-generated-types.md)) | [`core/chat.py`](../../src/agent/core/chat.py), [`core/views.py`](../../src/agent/core/views.py), [`contracts/web.py`](../../src/agent/contracts/web.py) |
 
-Everything in `src/` is a stub: schemas, Protocols and signatures, with bodies that raise `NotImplementedError`. `uv run pytest` checks that every module imports, that both DDL files agree, and the validators that encode the rules (scope, router shape, deletion filter, gate result, no identity in tool inputs).
+`src/` started as stubs (schemas, Protocols and signatures, with bodies that raise `NotImplementedError`); each slice in the [work plan](../work-plan.md) replaces some with real code, and `docs/progress.md` records which. `uv run pytest` also checks that every module imports, that both DDL files agree, and the validators that encode the rules (scope, router shape, deletion filter, gate result, no identity in tool inputs).
 
 ## Scope
 
