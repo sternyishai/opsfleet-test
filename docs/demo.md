@@ -23,6 +23,7 @@ How to show a slice working against real Gemini and BigQuery: what to run, what 
 | 3 resilience | `ceo` | How many orders came from Customers in state 'CA' in 2025? | the empty result is diagnosed (the data stores "California") and the answer follows |
 | 4 reports | `manager-a` | Which 3 Calvin Klein products sold most in 2025? Save that as a report. → delete my Calvin Klein reports → `yes` (or `yes except 2` with two or more) | the plan lists the reports; only the confirmed ones are deleted |
 | 5 observability | any | `/trace`, then `/stats` (as `ceo`) | the step tree of the last turn; the metric families. In Phoenix: Tracing → the newest `turn` |
+| 6 eval | (no chat) | `make eval` in the second terminal (about 10 min; `ARGS="--suite safety"` for 3 min) | the scorecard: verdict and reasons, rates per category, one line per case, cost, and the path of `evals/runs/<run_id>.json`; exit 0/1/2 for PASS/FAIL/CANNOT MEASURE. In Phoenix: Datasets → `retail-eval-<hash>` → Experiments → the run ID |
 
 ## When something fails
 
