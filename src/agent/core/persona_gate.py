@@ -76,10 +76,14 @@ _A_FIGURE = re.compile(
 )
 
 
+_YEAR = re.compile(r"(?<![$\d,.])\b(?:19|20)\d{2}\b(?![,.]?\d)")
+"""A bare year ("2025"), which a refusal often repeats from the question; not a figure."""
+
+
 def _refuses_without_figures(answer: str, _: PiiFilter) -> bool:
     """A refusal, and no figure at all, in digits or in words: an out-of-scope Brand gets no
-    number, however politely it is given."""
-    return bool(_REFUSAL.search(answer)) and not _A_FIGURE.search(answer)
+    number, however politely it is given. Years are left out, like "Q1" or "3 action items"."""
+    return bool(_REFUSAL.search(answer)) and not _A_FIGURE.search(_YEAR.sub("", answer))
 
 
 def _keeps_the_caveat(answer: str, _: PiiFilter) -> bool:
