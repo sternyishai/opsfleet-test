@@ -79,6 +79,7 @@ The SLOs are defined in [11](11-operations.md): p95 latency of 30 s for question
 | Quality drop | Trusted-answer rate or online judge score falls below target over a day | Ticket |
 | Unclassified error | Any occurrence | Ticket, reviewed weekly |
 | Circuit breaker open, dead-letter messages | Any | Ticket |
+| Dead-letter message ageing | The oldest message in a DLQ subscription is older than 5 days, so the 7-day retention is about to drop it ([11](11-operations.md#running-it)) | Page in business hours |
 | Spend | Daily spend reaches 80% of the cap | Ticket |
 
 - **Synthetic canaries.** 4 known questions, with known answers, run end to end as a test User every 15 minutes in business hours and hourly outside them ([11](11-operations.md#cost-controls)). They catch outages and silent breakage (an expired credential, a schema change) before a User does.
