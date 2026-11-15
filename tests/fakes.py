@@ -89,10 +89,41 @@ class FakeLLMFactory:
         raise AssertionError("no embeddings in slice 1")
 
 
-class FakeQueryRunner:
-    """Returns ``result`` for every query, or raises ``error``. Records what it was given."""
+type Outcome = QueryResult | Exception
 
-    def __init__(self, result: QueryResult | None = None, error: Exception | None = None) -> None:
+
+def rows(*records: dict[str, Any]) -> QueryResult:
+    """A result holding ``records``; their keys are the columns."""
+    columns = list(records[0]) if records else ["value"]
+    return QueryResult(
+        columns=columns,
+        rows=list(records),
+        row_count=len(records),
+        truncated=False,
+        bytes_billed=10,
+    )
+
+
+class FakeQueryRunner:
+    """A scripted warehouse. Records every dry run and execute it was given.
+
+    - ``result`` / ``error``: the outcome of every execute (the slice 1 form).
+    - ``outcomes``: execute outcomes in order, one per non-probe query; the last one repeats.
+    - ``dry_runs``: dry-run outcomes in order (a ``DryRunResult`` or an exception); the last
+      repeats. Default: a free, under-cap dry run.
+    - ``probes``: answers the empty-result probe queries, ``sql -> outcome``. A query is a
+      probe when ``probes`` claims it (returns non-None).
+    """
+
+    def __init__(
+        self,
+        result: QueryResult | None = None,
+        error: Exception | None = None,
+        *,
+        outcomes: list[Outcome] | None = None,
+        dry_runs: list[DryRunResult | Exception] | None = None,
+        probes: Any = None,
+    ) -> None:
         self.result = result or QueryResult(
             columns=["revenue"],
             rows=[{"revenue": 1.5}],
@@ -101,18 +132,34 @@ class FakeQueryRunner:
             bytes_billed=10,
         )
         self.error = error
+        self.outcomes = list(outcomes or [])
+        self.dry_runs = list(dry_runs or [])
+        self.probes = probes
         self.executed: list[tuple[str, dict[str, Any], int, int]] = []
+        self.dry_ran: list[str] = []
 
     def dry_run(self, sql: str, params: dict[str, Any], *, max_bytes: int) -> DryRunResult:
-        return DryRunResult(bytes_processed=0, over_cap=False)
+        self.dry_ran.append(sql)
+        outcome = _next(self.dry_runs) if self.dry_runs else None
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome or DryRunResult(bytes_processed=0, over_cap=False)
 
     def execute(
         self, sql: str, params: dict[str, Any], *, max_bytes: int, max_rows: int
     ) -> QueryResult:
         self.executed.append((sql, params, max_bytes, max_rows))
-        if self.error is not None:
-            raise self.error
-        return self.result
+        outcome: Outcome | None = self.probes(sql) if self.probes else None
+        if outcome is None:
+            outcome = _next(self.outcomes) if self.outcomes else (self.error or self.result)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+def _next[T](script: list[T]) -> T:
+    """The next scripted outcome; the last one repeats."""
+    return script.pop(0) if len(script) > 1 else script[0]
 
 
 class FakeUsers:

@@ -9,9 +9,9 @@ Prototype wiring (built slice by slice in Phase 4):
 Port                Prototype adapter                                     Slice
 ==================  ====================================================  =========
 LLMFactory          ``langchain-google-genai`` (AI Studio), tenacity,     1, 3
-                    token bucket, in-process breaker
+                    token bucket and breaker per model, fallback chain
 QueryGuard          ``sqlglot`` (BigQuery dialect), full scope rewrite    1, 2
-QueryRunner         ``google-cloud-bigquery`` with ADC                    1
+QueryRunner         ``google-cloud-bigquery`` with ADC, tenacity, breaker 1, 3
 PiiFilter           regex detectors                                       2
 UserDirectory       ``seed/users.yaml`` loaded into SQLite                1
 ReportRepository    SQLite + FTS5                                         4
@@ -82,13 +82,12 @@ def build_ports(settings: Settings) -> Ports:
     from agent.adapters.users_sqlite import SqliteUserDirectory
 
     limits = settings.limits
+    tracer = JsonlTracer(settings.traces_dir)
     return Ports(
-        llm=GeminiLLMFactory(settings.models, limits, settings.google_api_key),
+        llm=GeminiLLMFactory(settings.models, limits, settings.google_api_key, tracer=tracer),
         guard=SqlglotQueryGuard(dialect="bigquery"),
         warehouse=BigQueryRunner(
-            project=settings.bigquery_project,
-            dataset=settings.bigquery_dataset,
-            timeout_s=limits.timeout_bigquery_s,
+            project=settings.bigquery_project, dataset=settings.bigquery_dataset, limits=limits
         ),
         pii=RegexPiiFilter(),
         users=SqliteUserDirectory(
@@ -96,7 +95,7 @@ def build_ports(settings: Settings) -> Ports:
         ),
         trios=NullTrioRetriever(),
         personas=FilePersonaStore(settings.seed_dir / "persona.yaml"),
-        tracer=JsonlTracer(settings.traces_dir),
+        tracer=tracer,
     )
 
 

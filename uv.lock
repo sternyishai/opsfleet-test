@@ -20,6 +20,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pyyaml" },
     { name = "sqlglot" },
+    { name = "tenacity" },
 ]
 
 [package.optional-dependencies]
@@ -48,6 +49,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sqlglot", specifier = ">=30.31.0" },
+    { name = "tenacity", specifier = ">=9.1" },
     { name = "uvicorn", marker = "extra == 'web'", specifier = ">=0.32" },
 ]
 provides-extras = ["web"]

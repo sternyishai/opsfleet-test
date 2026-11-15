@@ -72,6 +72,10 @@ class Limits(BaseSettings):
     # run_sql (HLD 06)
     sql_max_retries: int = Field(default=2, ge=0)
     empty_result_diagnoses: int = Field(default=1, ge=0)
+    probe_max_columns: int = Field(default=3, ge=1, description="LLD default: probes per empty.")
+    probe_values: int = Field(
+        default=500, ge=1, description="LLD default: distinct values a probe reads."
+    )
     sql_row_limit: int = Field(default=1000, ge=1, description="Forced outer LIMIT.")
     sql_rows_to_model: int = Field(default=200, ge=1, description="LLD default.")
     max_bytes_billed: int = Field(default=2 * 1024**3, ge=1, description="LLD default: 2 GiB.")
@@ -97,10 +101,21 @@ class Limits(BaseSettings):
     timeout_bigquery_s: float = 60.0
     timeout_app_db_s: float = 5.0
     # retries and breaker (HLD 06)
-    retry_attempts: int = 3
+    retry_attempts: int = Field(default=3, ge=1, description="Tries per model, first included.")
+    retry_max_wait_s: float = Field(
+        default=10.0, description="LLD default: the longest backoff or Retry-After honoured."
+    )
     breaker_failures: int = 5
     breaker_window_s: float = 30.0
     breaker_cooldown_s: float = Field(default=30.0, description="LLD default.")
+    # rate limiter, per model (HLD 06): sized for the Gemini free tier
+    llm_requests_per_minute: float = Field(
+        default=10.0, gt=0, description="LLD default: the AI Studio free tier for Flash."
+    )
+    llm_burst: int = Field(default=2, ge=1, description="LLD default.")
+    llm_max_queue_s: float = Field(
+        default=20.0, description="LLD default: a longer wait is MODEL_BUSY, not a hang."
+    )
     # Persona (HLD 09)
     persona_cache_s: float = 60.0
 

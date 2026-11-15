@@ -14,7 +14,7 @@ from sqlglot import exp
 
 from agent.adapters.query_guard import SqlglotQueryGuard
 from agent.domain.identity import BrandScope
-from agent.domain.query import GuardAllowed, GuardRejected, RejectReason
+from agent.domain.query import FilterLiteral, GuardAllowed, GuardRejected, RejectReason
 
 GUARD = SqlglotQueryGuard(dialect="bigquery")
 EXECUTIVE = BrandScope(all_brands=True)
@@ -470,3 +470,48 @@ def _seed_trio_sql() -> list[tuple[str, str]]:
 def test_every_seed_trio_passes_for_both_roles(trio: str, sql: str) -> None:
     allowed(sql, EXECUTIVE)
     allowed(sql, MANAGER)
+
+
+# --- filter literals for the empty-result probe (slice 3, HLD 06 § SQL self-correction) -------
+
+
+def test_an_equality_filter_is_read_with_its_table() -> None:
+    sql = "SELECT COUNT(*) FROM users WHERE state = 'California'"
+
+    assert allowed(sql).filters == [
+        FilterLiteral(table="users", column="state", operator="=", value="California")
+    ]
+
+
+def test_aliases_resolve_and_in_lists_give_one_literal_per_value() -> None:
+    sql = (
+        "SELECT SUM(oi.sale_price) FROM order_items AS oi JOIN products AS p "
+        "ON oi.product_id = p.id WHERE p.category IN ('Jeans', 'Tops') AND oi.status = 'Complete'"
+    )
+
+    assert allowed(sql, EXECUTIVE).filters == [
+        FilterLiteral(table="products", column="category", operator="IN", value="Jeans"),
+        FilterLiteral(table="products", column="category", operator="IN", value="Tops"),
+        FilterLiteral(table="order_items", column="status", operator="=", value="Complete"),
+    ]
+
+
+def test_date_bounds_are_read_through_date_wrappers() -> None:
+    sql = (
+        "SELECT COUNT(*) FROM orders WHERE DATE(created_at) >= '2025-01-01' "
+        "AND created_at < TIMESTAMP('2026-01-01')"
+    )
+
+    assert allowed(sql, EXECUTIVE).filters == [
+        FilterLiteral(table="orders", column="created_at", operator=">=", value="2025-01-01"),
+        FilterLiteral(table="orders", column="created_at", operator="<", value="2026-01-01"),
+    ]
+
+
+def test_a_column_two_tables_share_is_skipped_when_unqualified() -> None:
+    sql = (
+        "SELECT COUNT(*) FROM orders AS o JOIN order_items AS oi ON o.order_id = oi.order_id "
+        "WHERE status = 'Returned'"
+    )
+
+    assert allowed(sql, EXECUTIVE).filters == []

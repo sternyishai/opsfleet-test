@@ -30,8 +30,14 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `pr
 - **Depends on:** nothing else; it is the bottom of every model call.
 - **Safety:** none of its own. Safety steps that use it (guard, router) **fail closed** when it raises.
 - **Failures:** retries 429, 5xx and timeouts (≤ 3, `Retry-After`), then the step's fallback model, then `TransientError(MODEL_BUSY)`. A 400 or a permission error is never retried.
-- **Trace:** `llm.step`, `llm.model`, `llm.provider`, `llm.fallback_used`, `llm.tokens.prompt`, `llm.tokens.completion`, `llm.cost_usd`, `llm.latency_ms`, `breaker.state`.
-- **Tests** · slice 3 · `tests/test_resilience.py`: a 429 burst then success; primary down → fallback; all down → `MODEL_BUSY`; a 400 is not retried; the breaker opens after 5 failures in 30 s.
+- **How it is built** (slice 3, [`llm_resilient.py`](../../src/agent/adapters/llm_resilient.py), [`resilience.py`](../../src/agent/adapters/resilience.py)): `chat(step)` returns a `ResilientChatModel` over the step's chain (primary, then fallback; a fallback equal to the primary is dropped). For each model in turn:
+  1. **Circuit breaker**, one per *model*, shared by every step that uses it: open after `breaker_failures` (5) retryable failures within `breaker_window_s` (30 s); fail fast for `breaker_cooldown_s`; then one probe call. Per model, not per provider, so a Flash outage leaves Flash-Lite, the fallback, callable.
+  2. **Token bucket**, one per model: `llm_requests_per_minute` (10, the AI Studio free tier for Flash) with `llm_burst` (2). A call waits for its token; a wait over `llm_max_queue_s` (20 s) skips the model instead of hanging.
+  3. **tenacity**, up to `retry_attempts` (3) tries on retryable errors only: exponential backoff with jitter, capped at `retry_max_wait_s` (10 s). The provider's delay replaces the backoff (an HTTP `Retry-After`, or the `RetryInfo.retryDelay` in Gemini's 429 body); a delay longer than the cap stops the retries and moves to the fallback.
+
+  Retryable is LangChain's own tag (`ModelError.is_retryable`: 429, 5xx, connection, timeout), plus raw `httpx` transport errors and SDK `ServerError`. A known non-retryable error (400, 401, 403, 404) raises `PermanentError` at once, **without fallback**: another model would get the same bad request. Anything else raises an unclassified `AgentError`. `bind_tools` and `with_structured_output` are applied to every model in the chain, so a bound or structured call keeps the same fallback.
+- **Trace:** an `llm` span per call: `llm.step`, `llm.model` (None when every model failed), `llm.fallback_used`, `llm.attempts`, `llm.errors` (`model: ErrorType` per model that failed, so a `MODEL_BUSY` turn says why), `breaker.state`, `llm.tokens.prompt`, `llm.tokens.completion`, `llm.latency_ms`. Not yet: `llm.provider` (one provider in the prototype) and `llm.cost_usd` (slice 5).
+- **Tests** · slice 3 · `tests/test_resilience.py`: a 429 burst then success; `Retry-After` honoured; primary down → fallback; all down → `MODEL_BUSY`; a 400 is not retried and does not fall back; bound and structured calls fall back too; the breaker opens after 5 failures in 30 s, not when they are spread out, and closes after a successful probe; the rate limiter waits, and a wait over the queue limit is `MODEL_BUSY`; an unknown exception never crosses the port.
 - **Gemini adapter notes** (`langchain-google-genai` 4.x, learned in slice 1; none of this shows in config):
   - `retries` counts attempts: `1` is one try, and `0` silently means the SDK default of 5 retries.
   - Pydantic schemas with nested models emit `$defs`, which the adapter ignores unless structured output uses `with_structured_output(..., method="json_schema")` and tools are bound as `convert_to_openai_tool(...)` specs (they inline `$defs`).
@@ -50,7 +56,7 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `pr
   4. columns by name, case ignored: the seven PII columns plus `city` and `user_geom` (`COLUMN_NOT_ALLOWED`), and `num_of_item` for a Manager (`ORDER_LEVEL_FIELD`, hint: `COUNT(*)` per `order_id` on `order_items`). Other unknown names are left to the dry run: the scoped subqueries project only the allowlist, so they cannot resolve;
   5. Brand literals compared with a `brand` column (`=`, `!=`, `IS [NOT] DISTINCT FROM`, `IN (...)`, `IN UNNEST([...])`, `'x' IN (brand)`, `LIKE`, `STARTS_WITH`, `REGEXP_CONTAINS`, also under `LOWER`/`UPPER`/`TRIM`/`CAST`), case ignored except for a regex: one that can select no Brand in scope is `BRAND_OUT_OF_SCOPE` with the literals; `run_sql` adds the scope note as the hint. A comparison it cannot read (a computed literal such as `CONCAT('Pu', 'ma')`, a CTE column of another name) is still scoped by the rewrite, so it can only come back empty;
   6. the rewrite: each warehouse table becomes `(SELECT <allowlist> FROM t [WHERE <HLD 03 filter>]) AS <alias>`, the filters built from constant templates over `@brands`; `params = {"brands": sorted(scope)}` for a Manager, `{}` for an Executive. Then the outer `LIMIT`.
-- **Not yet:** `GuardAllowed.filters` is empty until the empty-result probe (slice 3).
+- **Filters** (slice 3): `GuardAllowed.filters` lists each `column <op> literal` of the SQL as the model wrote it (before the scope rewrite), in source order, through `DATE()`, `LOWER()`, `CAST` and the like; a column is kept only when its table is certain. Input to the empty-result probe ([05](05-tools.md#run_sql)).
 - **Trace:** `guard.decision`, `guard.reason`, `guard.rewritten`, `guard.tables`, `guard.scope_brands` (count for Managers, `"all"` for Executives), on the `query_guard` span that `run_sql` opens around the call (the guard itself is pure).
 - **sqlglot notes** (30.x, learned in slice 2; none of this shows in config):
   - Type nodes as `exp.Expr`: pyright reports `exp.Expression` as a private import.
@@ -63,9 +69,10 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `pr
 - **Schema:** `DryRunResult(bytes_processed, over_cap)`, `QueryResult(columns, rows, row_count, truncated, bytes_billed)`.
 - **Depends on:** nothing; called only by `run_sql` and its probe, with guarded SQL.
 - **Safety:** read-only identity; `maximum_bytes_billed` on every job; job timeout.
-- **Failures:** `SelfCorrectableError` for syntax, schema and runtime errors; `TransientError(DATA_SOURCE_DOWN)` after retries and the breaker.
-- **Trace:** `bq.dry_run.bytes`, `bq.bytes_billed`, `bq.job_id`, `bq.row_count`, `bq.latency_ms`.
-- **Tests** · slices 1, 3 · `tests/test_run_sql.py` with a fake runner: syntax error, runtime error, 0 rows, outage.
+- **Failures:** `SelfCorrectableError` for syntax, schema and runtime errors (`BadRequest`, first message cleaned of the dataset path; never retried); `TransientError(DATA_SOURCE_DOWN)` after retries and the breaker; `PermanentError(DATA_SOURCE_DOWN)` for a permission or not-found error (a setup problem, not retried).
+- **Resilience** (slice 3): each whole call (submit and wait) goes through the same `Retry` and `CircuitBreaker` as the model factory ([`resilience.py`](../../src/agent/adapters/resilience.py)), one breaker for BigQuery. Retryable: 429, 5xx, `DeadlineExceeded`, timeouts, and the 403 `rateLimitExceeded` BigQuery uses for its own rate limits. The client's own retries are off (`retry=None`, `job_retry=None`): its default job retry waits up to 40 minutes.
+- **Trace:** the adapter adds none in the prototype; `run_sql` records `dry_run.bytes`, `bytes_billed` and `row_count` on its span ([05](05-tools.md#run_sql)).
+- **Tests** · slices 1, 3 · `tests/test_run_sql.py` with a fake runner (syntax error, runtime error, 0 rows, outage); `tests/test_resilience.py` with a fake client (backend error retried, down → `DATA_SOURCE_DOWN` then the breaker fails fast, `BadRequest` not retried, permission error permanent).
 
 ### `PiiFilter`
 

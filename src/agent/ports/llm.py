@@ -56,8 +56,10 @@ class LLMFactory(Protocol):
 
     - ``chat(step)`` returns a LangChain chat model for that step, already wrapped with the
       step's timeout, retryable-error backoff (429, 5xx, timeout; honours ``Retry-After``; at
-      most 3 attempts), the per-model token-bucket rate limiter, the per-provider circuit
+      most 3 attempts), the per-model token-bucket rate limiter, the per-model circuit
       breaker, and the step's fallback chain (Flash -> Flash-Lite in the prototype).
+    - A non-retryable error (400, permission) raises ``PermanentError`` at once, without
+      fallback; anything unrecognised raises an unclassified ``AgentError``.
     - The model for a step is resolved from its own setting, else ``INHERITS_FROM``.
     - Callers never see a provider exception. When every option fails, the model raises
       ``TransientError(dependency="gemini", message_class=MODEL_BUSY)``.
