@@ -191,10 +191,12 @@ def _request(plan: DeletionPlan, deferred: str | None, *, recount: bool) -> dict
             f'To delete them all, reply "yes, delete all {plan.total}"; or reply '
             '"yes except 2,3" or "no". You can also ask again more narrowly.'
         )
+    elif plan.total == 1:  # nothing could be kept, so "yes except" is no answer here
+        text = "I found 1 report to delete. Delete it? Reply yes or no."
     else:
         text = (
             f"I found {_reports(plan.total)} to delete. "
-            'Delete them? Reply yes, no, or "yes except 2".'
+            f'Delete them? Reply yes, no, or "yes except {plan.total}" to keep one.'
         )
     if deferred and not recount:
         text += f' After that, I\'ll answer: "{deferred}".'
