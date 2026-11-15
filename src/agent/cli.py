@@ -61,6 +61,13 @@ def _chat(user_id: str) -> int:
     from agent.composition import build_chat_service, build_cli_channel
     from agent.config import Settings
 
+    try:
+        # Importing readline is what gives input() arrow keys and history; without it, a
+        # stray arrow press reaches the model as a raw escape code (^[[C).
+        import readline  # noqa: F401
+    except ImportError:  # Windows has no readline; input() still works, just unedited.
+        pass
+
     run_chat(build_chat_service(Settings()), user_id, build_cli_channel(), input)
     return 0
 
