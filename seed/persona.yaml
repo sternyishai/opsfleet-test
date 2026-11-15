@@ -1,0 +1,13 @@
+# Persona version 1 (HLD 09 § Seed): the cold-start default. Shapes how the agent speaks, never
+# what it says. Catalog classes not listed under `messages` use the bundled wording
+# (src/agent/core/catalog.py).
+version: 1
+tone:
+  preset: direct
+  notes: Confident and brief. Lead with the decision, then the evidence.
+report_sections: [Summary, Key insights, Risks, Action items]
+emphasis: Relate results to margin, not just revenue.
+vocabulary:
+  prefer: { users: Customers }
+messages:
+  data_source_down: "The sales data is unavailable right now. You can still open your saved reports. (ref: {ref})"

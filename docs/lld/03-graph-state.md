@@ -19,7 +19,7 @@ The LangGraph state is [`AgentState`](../../src/agent/graph/state.py): one per C
 
 | Group | Fields | Notes |
 |---|---|---|
-| Identity and trace | `turn_id`, `trace_id`, `user` | `user` is a frozen `UserContext`; nothing downstream can change it |
+| Identity and trace | `turn_id`, `trace_id`, `user` | `user` is a frozen `UserContext`; nothing downstream can change it. `None` for an unknown or inactive User, whose turn goes straight to `refuse` with `NO_ROLE` (as does a known User with no role) |
 | Presentation | `persona`, `profile` | `profile` is the stored profile with this turn's preferences merged in |
 | Routing | `router` | the `RouterDecision` |
 | Analysis | `trios`, `retrieval_degraded`, `analysis_steps`, `sql_attempts`, `sql_retries`, `empty_diagnoses`, `ran_sql`, `last_query_scope`, `result_summaries`, `saved_report_ids` | the retry counters are the `SqlBudget` that `run_sql` reads and returns; `ran_sql` with `trios == []` marks a retrieval gap |
@@ -29,9 +29,15 @@ The LangGraph state is [`AgentState`](../../src/agent/graph/state.py): one per C
 
 The HLD's scope list asks for "this turn's preference statements": they are `router.preferences`, and their effect is `profile`. Nothing stores them twice.
 
+## What travels beside state
+
+- **`TurnRuntime`** ([`state.py`](../../src/agent/graph/state.py)) is LangGraph's run `context`: the `user_id` the channel resolved and the turn's `Outbound`. `ChatService.handle` passes it to `invoke`; nodes read it from `Runtime`. It is never checkpointed.
+- **The catch-all** is `ChatService.handle`, around `invoke`: an exception from any node ends the turn as its catalog message (`AgentError`) or `UNCLASSIFIED` with the reference ID. Nodes do not wrap themselves.
+- **The checkpointer allowlist.** `CHECKPOINT_TYPES` lists every one of our types reachable from `AgentState`, derived from its annotations. The serializer is built with it, and tests run with `LANGGRAPH_STRICT_MSGPACK=true`, so a new state type that the checkpointer would refuse fails a test.
+
 ## What never enters state
 
-- **Result rows.** `run_sql` returns rows to the model for one step only. State and the checkpoint keep a `ResultSummary` (columns, row count, key figures), so prompts stay small and checkpoints hold no bulk data ([01](../hld/01-architecture.md#conversation-state)).
+- **Result rows.** `run_sql` returns rows to the model for one step only. State and the checkpoint keep a `ResultSummary` (columns, row count, key figures), so prompts stay small and checkpoints hold no bulk data ([01](../hld/01-architecture.md#conversation-state)). The `analysis` node keeps the ReAct loop's tool calls and results in its own message list and returns only the final answer and `ResultSummary.of(result)` (key figures for a one-row result, the shape otherwise).
 - **Unfiltered outbound text.** The `output_filter` node writes the filtered reply into `messages`, so checkpoints hold what the User saw.
 - **Ports and settings.** They reach tools through `TurnContext`, never through state, so they are not serialized.
 

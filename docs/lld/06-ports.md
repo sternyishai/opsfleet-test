@@ -20,6 +20,8 @@ ADR 0006 lists ten ports. The LLD adds three: **`UserDirectory`**, the seam betw
 | [`ScorecardSink`](../../src/agent/ports/scorecards.py) | `publish(cases, scorecard)`, `baseline(...)` | JSON in `evals/runs/`; Phoenix experiments if running | same, or Langfuse / LangSmith datasets |
 | [`Delivery`](../../src/agent/ports/delivery.py) | `render(report)`, `send(author_id, rendered, key)` | not wired | email, Slack, push |
 
+In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `profiles` are `None` until slices 4 and 7 wire them; until then every User has an empty profile. Slice 1 stand-ins: `NullTrioRetriever` and `PassThroughPiiFilter` ([adapters/null.py](../../src/agent/adapters/null.py)), and `FilePersonaStore` serving `seed/persona.yaml` as version 1 (catalog classes it does not word use the bundled wording in [core/catalog.py](../../src/agent/core/catalog.py)).
+
 ## Checklist per port
 
 ### `LLMFactory`

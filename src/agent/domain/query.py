@@ -78,3 +78,12 @@ class ResultSummary(BaseModel):
     columns: list[str]
     row_count: int
     key_figures: dict[str, str] = Field(default_factory=dict, max_length=20)
+
+    @classmethod
+    def of(cls, result: QueryResult) -> "ResultSummary":
+        """A one-row result is a set of figures ("revenue": "1234.5"), kept so a follow-up can
+        refer to them. Larger results keep only their shape."""
+        figures = {}
+        if result.row_count == 1 and result.rows and len(result.columns) <= 20:
+            figures = {k: str(v) for k, v in result.rows[0].items()}
+        return cls(columns=result.columns, row_count=result.row_count, key_figures=figures)
