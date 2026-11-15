@@ -59,9 +59,16 @@ select = ["E", "F", "I", "UP", "B", "TID"]
 "google.cloud".msg = "Import provider SDKs only in agent.adapters.*"
 "google.genai".msg = "Import provider SDKs only in agent.adapters.*"
 "langchain_google_genai".msg = "Import provider SDKs only in agent.adapters.*"
+"langgraph.checkpoint.sqlite".msg = "Import provider SDKs only in agent.adapters.*"
+"sqlglot".msg = "Import provider SDKs only in agent.adapters.*"
+"yaml".msg = "Import provider SDKs only in agent.adapters.*"
+"agent.adapters".msg = "Only agent.composition names concrete adapters; take a port instead"
 
 [tool.ruff.lint.per-file-ignores]
+# Adapters hold the SDKs; composition wires adapters to ports; tests build both directly.
 "src/agent/adapters/**" = ["TID251"]
+"src/agent/composition.py" = ["TID251"]
+"tests/**" = ["TID251"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
