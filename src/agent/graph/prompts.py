@@ -83,4 +83,6 @@ def analyst_system(persona: Persona, scope_note: str, trios: list[TrioMatch]) ->
 
 
 def tool_result(name: str, payload: str) -> str:
-    return f'<tool_result name="{name}">\n{payload}\n</tool_result>'
+    """``payload`` is JSON. Escaping ``</`` as ``<\\/`` keeps it valid JSON and stops a value
+    (a product name, say) from closing the block early."""
+    return f'<tool_result name="{name}">\n{payload.replace("</", "<\\/")}\n</tool_result>'

@@ -30,7 +30,7 @@ class GeminiLLMFactory:
                 model=model_name(primary),
                 api_key=self._api_key,
                 request_timeout=self._timeout(step),
-                retries=0,
+                retries=1,  # 1 = one attempt; 0 would mean the SDK default of 5
             )
         return self._chats[step]
 

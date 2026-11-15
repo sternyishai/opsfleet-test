@@ -11,7 +11,7 @@ from google.api_core import exceptions as gexc
 from google.cloud import bigquery
 
 from agent.domain.query import DryRunResult, QueryResult
-from agent.errors import MessageClass, SelfCorrectableError, TransientError
+from agent.errors import AgentError, MessageClass, SelfCorrectableError, TransientError
 
 _RETRYABLE = (
     gexc.TooManyRequests,
@@ -81,12 +81,12 @@ def _param(name: str, value: Any) -> bigquery.ScalarQueryParameter | bigquery.Ar
     return bigquery.ScalarQueryParameter(name, kind, value)
 
 
-def _classify(exc: gexc.GoogleAPICallError) -> Exception:
+def _classify(exc: gexc.GoogleAPICallError) -> AgentError:
     if isinstance(exc, gexc.BadRequest):  # syntax, schema, runtime, bytes cap
         return SelfCorrectableError(_clean(exc))
     if isinstance(exc, _RETRYABLE):
         return _down(exc)
-    return exc  # permission and the like: unclassified until slice 3 names them
+    return AgentError(_clean(exc))  # permission and the like: unclassified until slice 3
 
 
 def _down(exc: Exception) -> TransientError:
