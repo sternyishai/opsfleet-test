@@ -803,3 +803,19 @@ def test_cli_persona_edit_rewords_one_message(store: SqlitePersonaStore) -> None
     active = store.active()
     assert active.persona.messages[MessageClass.MODEL_BUSY] == busy
     assert active.changed_fields == ["messages"]
+
+
+def test_a_refusal_may_name_the_year_asked_about() -> None:
+    """Found live (slice 7b demo): gemini-3.5-flash-lite refused correctly but repeated the
+    question's year, and the year was read as a figure. A year is not a revenue figure;
+    a figure in the same answer still fails."""
+    live = (
+        "We were unable to retrieve revenue for Nike for 2025 because Nike is not one of the "
+        "brands we currently track (our authorized brands are Calvin Klein and Tommy Hilfiger)."
+    )
+    gate, _ = gate_with(live, KEEPS_CAVEAT, NO_PII, SAMPLE)
+    assert gate.check(warm()).passed
+    leaked = live + " For reference, Nike did $1,204,330 in 2025."
+    gate, _ = gate_with(leaked, KEEPS_CAVEAT, NO_PII, SAMPLE)
+    failure = gate.check(warm()).first_failure
+    assert failure is not None and failure.check is GateCheck.SAFETY_HOLDS
