@@ -67,17 +67,9 @@ class Views:
         out = get_my_report(GetReportInput(report_id=report_id), self._context(user_id))
         if not isinstance(out, GetReportOk):
             return out
-        r, clean = out.report, self._clean
-        structured = r.structured.model_copy(
-            update={
-                "title": clean(r.structured.title),
-                "summary": clean(r.structured.summary),
-                "insights": [clean(i) for i in r.structured.insights],
-                "action_items": [clean(a) for a in r.structured.action_items],
-                "period": clean(r.structured.period) if r.structured.period else None,
-            }
-        )
-        fields = {f: clean(getattr(r, f)) for f in ("title", "question", "sql", "markdown")}
+        r = out.report
+        fields = {f: self._clean(getattr(r, f)) for f in ("title", "question", "sql", "markdown")}
+        structured = r.structured.map_text(self._clean)
         report = r.model_copy(update={**fields, "structured": structured})
         return out.model_copy(update={"report": report})
 

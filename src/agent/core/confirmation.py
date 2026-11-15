@@ -52,7 +52,8 @@ def parse_reply(reply: str | ConfirmationResponse, plan: DeletionPlan) -> Confir
     - A ``ConfirmationResponse`` for another ``request_id`` or User -> ``NotAnAnswer``
       (expired). Its ``selected_indices`` become the excluded rest; ``None`` means all.
     - Case, surrounding whitespace and one trailing full stop are ignored; nothing else is
-      guessed ("y", "sure" and "yes please" are not answers).
+      guessed: "y", "sure" and "yes please" are not answers, and numbers are plain ASCII
+      digits without leading zeros, separated by spaces, commas or "and", each listed once.
     """
     if isinstance(reply, ConfirmationResponse):
         return _parse_button(reply, plan)
@@ -64,7 +65,7 @@ def parse_reply(reply: str | ConfirmationResponse, plan: DeletionPlan) -> Confir
     if match := _DELETE_ALL.fullmatch(text):
         return ConfirmAll() if int(match["count"]) == plan.total else NotAnAnswer()
     if match := _EXCEPT.fullmatch(text):
-        return _except({int(n) for n in re.findall(r"\d+", match["indices"])}, plan)
+        return _except([int(n) for n in re.findall(r"[0-9]+", match["indices"])], plan)
     return NotAnAnswer()
 
 
@@ -79,13 +80,22 @@ def _normalized(text: str) -> str:
     return text.strip().lower().removesuffix(".").strip()
 
 
-_DELETE_ALL = re.compile(r"yes,?\s+delete\s+all\s+(?P<count>\d+)")
-_EXCEPT = re.compile(r"yes,?\s+except\s+(?P<indices>\d+(?:\s*(?:,|\band\b|\s)\s*\d+)*)")
+_NUMBER = "[1-9][0-9]*"
+_DELETE_ALL = re.compile(rf"yes,? +delete +all +(?P<count>{_NUMBER})", re.ASCII)
+_EXCEPT = re.compile(
+    rf"yes,? +except +(?P<indices>{_NUMBER}(?:(?: *, *| +and +| +){_NUMBER})*)", re.ASCII
+)
+"""Spaces only, not ``\\s``: a reply split over lines is not an answer."""
 
 
-def _except(excluded: set[int], plan: DeletionPlan) -> ConfirmationDecision:
-    """Every index must be in the plan, and at least one item must be left to delete."""
-    if not excluded <= set(range(1, plan.total + 1)) or len(excluded) == plan.total:
+def _except(listed: list[int], plan: DeletionPlan) -> ConfirmationDecision:
+    """Each index once and in the plan, and at least one item left to delete."""
+    excluded = set(listed)
+    if (
+        len(excluded) != len(listed)
+        or not excluded <= set(range(1, plan.total + 1))
+        or len(excluded) == plan.total
+    ):
         return NotAnAnswer()
     return ConfirmExcept(excluded=sorted(excluded))
 
@@ -101,6 +111,6 @@ def _parse_button(response: ConfirmationResponse, plan: DeletionPlan) -> Confirm
     everything = set(range(1, plan.total + 1))
     if not selected or not selected <= everything:
         return NotAnAnswer()
-    if selected == everything:
-        return ConfirmAll()
-    return _except(everything - selected, plan)
+    if selected == everything:  # every box ticked is a bare "yes": a large plan needs the count
+        return NeedsCount() if plan.is_large else ConfirmAll()
+    return _except(sorted(everything - selected), plan)

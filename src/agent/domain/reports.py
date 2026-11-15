@@ -1,6 +1,7 @@
 """Saved Reports, Deletion Plans and the deletion audit (HLD 04)."""
 
 import re
+from collections.abc import Callable
 from datetime import date, datetime
 from enum import StrEnum
 from typing import ClassVar, Self
@@ -25,6 +26,16 @@ class ReportStructured(BaseModel):
     insights: list[str] = Field(default_factory=list, max_length=20)
     action_items: list[str] = Field(default_factory=list, max_length=20)
     period: str | None = Field(default=None, description='Free text, e.g. "Q1 2026".')
+
+    def map_text(self, fn: Callable[[str], str]) -> "ReportStructured":
+        """Every text field passed through ``fn``: the PII filter on write and on view."""
+        return ReportStructured(
+            title=fn(self.title),
+            summary=fn(self.summary),
+            insights=[fn(i) for i in self.insights],
+            action_items=[fn(a) for a in self.action_items],
+            period=fn(self.period) if self.period else None,
+        )
 
 
 class SavedReport(BaseModel):
@@ -135,6 +146,11 @@ class DeletionFilter(BaseModel):
 
     @model_validator(mode="after")
     def _one_kind(self) -> Self:
+        # A term with no letter or digit would be dropped by the full-text match, widening
+        # the filter to every report; refuse it instead.
+        for term in [*self.entities, *([self.topic] if self.topic is not None else [])]:
+            if not any(ch.isalnum() for ch in term):
+                raise ValueError(f"{term!r} has no words to match")
         content = bool(self.entities or self.topic or self.created)
         if self.all_reports and (self.this_conversation or content):
             raise ValueError("all_reports cannot be combined with other criteria")

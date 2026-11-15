@@ -150,8 +150,8 @@ class SqliteReportRepository:
         with self._connect() as db:
             done = db.execute(
                 "SELECT audit_id, plan_id, author_id, deleted_at, report_ids, titles "
-                "FROM deletion_audit WHERE plan_id = ?",
-                (str(plan_id),),
+                "FROM deletion_audit WHERE plan_id = ? AND author_id = ?",
+                (str(plan_id), author_id),
             ).fetchone()
             if done:
                 return DeletionReceipt(audit=_audit(done), already_gone=[], replayed=True)
@@ -236,7 +236,10 @@ def _matching(
     if c.created and c.created.end:
         where.append("substr(r.created_at, 1, 10) <= ?")
         params.append(c.created.end.isoformat())
-    if c.text and (words := _fts_words(c.text)):
+    if c.text:
+        words = _fts_words(c.text)
+        if not words:  # nothing to match on: match nothing, never everything
+            return []
         where.append(_IN_FTS)
         params.append(words)
     rows = db.execute(

@@ -426,7 +426,7 @@ class InMemoryReportRepository:
         titles: dict[UUID, str],
         filter: DeletionFilter,
     ) -> DeletionReceipt:
-        if plan_id in self.audits:
+        if plan_id in self.audits and self.audits[plan_id].author_id == author_id:
             return DeletionReceipt(audit=self.audits[plan_id], already_gone=[], replayed=True)
         own = {r.report_id for r in self._own(author_id)}
         deleted = [i for i in report_ids if i in own]
@@ -461,7 +461,7 @@ class InMemoryReportRepository:
         hits = [e for e in f.entities if normalize_entity(e) in keys or _phrase_in(e, words)]
         if f.entities and not hits:
             return ""
-        if f.topic and not set(_words(f.topic)) <= set(words):
+        if f.topic and not (_words(f.topic) and set(_words(f.topic)) <= set(words)):
             return ""
         if f.created:
             day = report.created_at.astimezone(UTC).date()

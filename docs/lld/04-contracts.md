@@ -47,9 +47,9 @@ The three outbound messages share `conversation_id`, `trace_id` (the reference I
 | `yes except 2,3` | any | `ConfirmExcept([2, 3])`; indices outside the plan, or excluding every item → `NotAnAnswer` |
 | `no` | any | `Decline` |
 | anything else, or a button for another `request_id` or User | any | `NotAnAnswer` |
-| a button with `selected_indices` | any | the unselected rest is excluded, by the same rules as `yes except`; `None` is a bare `yes` |
+| a button with `selected_indices` | any | the unselected rest is excluded, by the same rules as `yes except`; `None`, or every box ticked, is a bare `yes` (so a large plan still needs the count) |
 
-Case, surrounding whitespace and one trailing full stop are ignored; `y`, `sure` and `yes please` are not answers.
+Case, surrounding whitespace and one trailing full stop are ignored; `y`, `sure` and `yes please` are not answers. Numbers are plain ASCII digits with no leading zero, each index listed once, separated by spaces, commas or "and"; a reply split over lines is not an answer.
 
 ## Persona Quality Gate: `PersonaGateResult`
 

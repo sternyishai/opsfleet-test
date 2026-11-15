@@ -20,7 +20,7 @@ The package map and dependency rule are in [docs/lld/01-modules.md](docs/lld/01-
 From [HLD 03](docs/hld/03-safety-and-pii.md) and [ADR 0003](docs/adr/0003-layered-data-access-enforcement.md).
 
 - User, Author, role and Brand scope come from `TurnContext.user`, never from a tool input or model output.
-- Every message to a User leaves through `Outbound.emit`. Nothing writes to stdout, a socket or a queue around it.
+- Every message to a User leaves through `Outbound.emit`. Nothing writes to stdout, a socket or a queue around it. The one other way out is a `Views` result, which runs the PII filter on every text field before a channel renders it ([LLD 07](docs/lld/07-web.md)).
 - No SQL reaches `QueryRunner` without `QueryGuard.check` first, probes included. Brands are bound as parameters, never formatted into SQL.
 - Result rows never enter `AgentState`, a trace or a log; only `ResultSummary` does ([LLD 03](docs/lld/03-graph-state.md#what-never-enters-state)).
 - Only the router opens a branch. A tool result never decides routing.
