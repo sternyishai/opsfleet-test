@@ -25,6 +25,7 @@ From [HLD 03](docs/hld/03-safety-and-pii.md) and [ADR 0003](docs/adr/0003-layere
 - Result rows never enter `AgentState`, a trace or a log; only `ResultSummary` does ([LLD 03](docs/lld/03-graph-state.md#what-never-enters-state)).
 - Only the router opens a branch. A tool result never decides routing.
 - A safety step that cannot run fails closed (refuse), never open.
+- A trace is a way out too. A change to what a span records (a new attribute, an error kept on a span, text from the User or the warehouse) is reviewed by attacking it like the guard below: a warehouse error or a filter can quote a Customer's email. `tests/conftest.py` fails any test that puts PII on a span; the review looks for the paths no test drives. In slice 5 this found a dry-run error carrying an email into the JSONL.
 - A change to the query guard, the PII filter or the input rules is reviewed by attacking it: the Spec review runs hostile inputs against the real adapter (other Brands' literals in every comparison form, PII under other names, deep nesting), not only the diff. In slice 2 this found two holes the tests had missed.
 
 ## 3. Errors and outcomes
@@ -33,7 +34,8 @@ From [LLD 04 · Error model](docs/lld/04-contracts.md#error-model).
 
 - Expected outcomes (rejected SQL, an empty result, nothing matched) are values in a discriminated union on `status`, not exceptions.
 - Only the exceptions in `errors.py` cross a port. An adapter catches its provider's exceptions and classifies them.
-- User-facing failure text comes from the message catalog (`MessageClass`), never from an exception message.
+- User-facing failure text comes from the message catalog (`MessageClass`), never from an exception message. A view's plain empty state ("You have no saved reports yet.") is output, not a failure, and may live in the channel's renderer.
+- Text a User reads is written for non-technical executives: plain words, a next step, no warehouse or engineering terms (`tests/test_wording.py` checks the catalog). An example in a prompt or message comes from what is on the User's screen (an item number that exists in the plan shown), never a fixed sample: in slice 4 a one-report plan suggested "yes except 2".
 
 ## 4. Names
 

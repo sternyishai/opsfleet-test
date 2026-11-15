@@ -14,7 +14,7 @@ Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/d
 
 ### Building a slice
 
-Branch `feat/<issue>-<slug>` (e.g. `feat/7-resilience`). Start from the issue's **Implements** table: it names the files. Then read the matching `docs/lld/` section (index: `docs/lld/README.md`) and only the HLD sections it links, not whole packages or whole docs.
+One issue per session: branch `feat/<issue>-<slug>` (e.g. `feat/7-resilience`) from an up-to-date `main`, and stop after its PR merges; the next issue starts in a fresh session. Start from the issue's **Implements** table: it names the files. Then read the matching `docs/lld/` section (index: `docs/lld/README.md`) and only the HLD sections it links, not whole packages or whole docs. The live demo the user runs for the PR: `docs/demo.md`.
 
 ### Commits
 
