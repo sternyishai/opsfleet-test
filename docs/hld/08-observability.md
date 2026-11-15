@@ -40,7 +40,7 @@ A trace is one turn. Traces of the same Conversation are grouped by `conversatio
 |---|---|
 | **Turn** (root span) | trace ID (= the reference ID shown to the User), `conversation_id`, internal User ID (never a name or email), role, channel, action from the router, Persona version, User Profile snapshot, retrieval gap flag (set when the turn ran SQL with no Trio above the threshold), outcome, error class |
 | **Model call** | step (`router`, `analyst`, …), model and provider, fallback used, prompt and completion tokens, cost, latency |
-| **`run_sql`** | the SQL the model wrote, the SQL after the guard's rewrite, guard decision and reason, dry-run bytes, bytes billed, row count, attempt number, error, empty-result probe findings |
+| **`run_sql`** | dry-run bytes, bytes billed, row count, attempt number, error, empty-result probe findings; inside it, one `query_guard` span per statement (probes included) with the SQL the model wrote, the SQL after the guard's rewrite, and the guard decision and reason |
 | **Trio retrieval** (`retrieve_trios` node, `search_golden_trios` tool) | which one ran, the search question or query, returned `trio_id@version` and scores, matches dropped by the threshold |
 | **Deletion** | filter produced, plan ID and size, outcome (confirmed, partial, cancelled, expired) |
 | **Persona change** | path (chat or direct edit), permission result, gate result per check, version before and after, or rollback target |
