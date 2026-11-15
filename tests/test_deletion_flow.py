@@ -254,3 +254,27 @@ def test_a_button_without_an_open_plan_has_expired() -> None:
     [reply] = press(svc, fake, "manager-a")
 
     assert isinstance(reply, AgentReply) and reply.message_class is MessageClass.PLAN_EXPIRED
+
+
+def test_a_one_report_plan_offers_only_yes_or_no() -> None:
+    reports = InMemoryReportRepository()
+    save(reports, "Q1 sales", mentions=("Calvin Klein",))
+    svc, _ = service(reports, [DELETE])
+
+    [prompt] = say(svc, "delete all reports mentioning Calvin Klein")
+
+    assert isinstance(prompt, ConfirmationRequest)
+    assert "except" not in prompt.text
+    assert "yes or no" in prompt.text
+
+
+def test_the_except_example_names_an_item_in_the_plan() -> None:
+    reports = InMemoryReportRepository()
+    for title in ("Q1 sales", "Q2 sales"):
+        save(reports, title, mentions=("Calvin Klein",))
+    svc, _ = service(reports, [DELETE])
+
+    [prompt] = say(svc, "delete all reports mentioning Calvin Klein")
+
+    assert isinstance(prompt, ConfirmationRequest)
+    assert '"yes except 2"' in prompt.text
