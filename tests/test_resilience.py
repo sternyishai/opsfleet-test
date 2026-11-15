@@ -13,10 +13,12 @@ import pytest
 import requests
 from google.api_core import exceptions as gexc
 from google.genai.errors import ClientError
+from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_google_genai._common import GoogleGenerativeAIError
 from langchain_google_genai.chat_models import (
     GoogleAPIError,
     GoogleInvalidRequestError,
@@ -499,3 +501,69 @@ def test_a_bigquery_transport_failure_is_retried_then_data_source_down() -> None
 
     assert raised.value.message_class is MessageClass.DATA_SOURCE_DOWN
     assert client.calls == 3
+
+
+# --- embeddings (slice 7): same retries and breaker, no fallback model ------------------------
+
+EMBEDDER = "gemini-embedding-001"
+
+
+class FlakyEmbeddings(Embeddings):
+    """Raises the scripted errors in order, then returns one 768-dim vector per text."""
+
+    def __init__(self, script: list[Exception]) -> None:
+        self.script = list(script)
+        self.calls = 0
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.calls += 1
+        if self.script:
+            raise self.script.pop(0)
+        return [[0.5] * 768 for _ in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]
+
+
+def embedding_rate_limited() -> GoogleGenerativeAIError:
+    """A 429 as the embeddings class raises it: its own error, wrapping the SDK's."""
+    error = GoogleGenerativeAIError("Error embedding content: quota")
+    error.__cause__ = ClientError(429, {"error": {"code": 429}})
+    return error
+
+
+def embedding_factory(script: list[Exception]) -> tuple[FlakyEmbeddings, Embeddings, FakeTracer]:
+    flaky = FlakyEmbeddings(script)
+    tracer, clock = FakeTracer(), Clock()
+    llm = GeminiLLMFactory(
+        ModelSettings(_env_file=None, router=FALLBACK, analyst=PRIMARY, embedding=EMBEDDER),  # pyright: ignore[reportCallIssue]
+        Limits(_env_file=None, llm_requests_per_minute=6000, llm_burst=100),  # pyright: ignore[reportCallIssue]
+        api_key=None,
+        tracer=tracer,
+        build=lambda name, _timeout: FlakyChatModel(script=[]),
+        build_embeddings=lambda name: flaky if name == EMBEDDER else FlakyEmbeddings([]),
+        sleep=clock.sleep,
+        clock=clock,
+    )
+    return flaky, llm.embeddings(), tracer
+
+
+def test_an_embedding_429_is_retried_then_the_vectors_come_back() -> None:
+    flaky, embeddings, tracer = embedding_factory([embedding_rate_limited()])
+
+    vectors = embeddings.embed_documents(["a", "b"])
+
+    assert len(vectors) == 2 and len(vectors[0]) == 768
+    assert flaky.calls == 2
+    [span] = llm_spans(tracer)
+    assert span["llm.step"] == "embedding"
+    assert span["llm.model"] == EMBEDDER
+
+
+def test_the_embedding_model_down_is_model_busy() -> None:
+    _, embeddings, _ = embedding_factory([embedding_rate_limited()] * 3)
+
+    with pytest.raises(TransientError) as raised:
+        embeddings.embed_query("revenue")
+
+    assert raised.value.message_class is MessageClass.MODEL_BUSY

@@ -36,8 +36,8 @@ The checklist from the [README](README.md#checklist-for-each-tool-or-port) is fi
 | **Ports** | `TrioRetriever` |
 | **Safety** | Scope from `ctx.user.scope`; only `active` Trios fully inside the scope; figure-stripped content ([ADR 0005](../adr/0005-golden-trios-teach-method-not-figures.md)) |
 | **Failures** | `TransientError` → empty matches; the step continues |
-| **Trace** | `query`, returned `trio_id@version` and scores, `dropped_below_threshold` |
-| **Tests** · slice 7 · `tests/test_trios.py` | Manager never gets an out-of-scope or all-Brand Trio; below-threshold dropped; retriever down → empty, no error |
+| **Trace** | a `search_golden_trios` span: `query` (PII-filtered, like `sql.written`), `trios.refs` (`trio_id@version`, best first), `trios.scores` (two decimals, as strings: a list attribute holds `str` or `int`), `trios.dropped` (`dropped_below_threshold`), `trios.degraded` (the retriever was down). The `retrieve_trios` node records the same `trios.*` names on a `trio_search` span inside it, without `query` (`search_trios` in [`tools/analysis.py`](../../src/agent/tools/analysis.py), shared by both) |
+| **Tests** · slice 7 · `tests/test_trios.py` | Manager never gets an out-of-scope or all-Brand Trio; below-threshold dropped; retriever down → empty, no error; the query is PII-filtered on the span; the analyst re-searches through a whole turn |
 
 ### `run_sql`
 

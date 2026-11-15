@@ -20,7 +20,7 @@ ADR 0006 lists ten ports. The LLD adds three: **`UserDirectory`**, the seam betw
 | [`ScorecardSink`](../../src/agent/ports/scorecards.py) | `publish(cases, scorecard)`, `baseline(...)` | JSON in `evals/runs/`; Phoenix experiments if running | same, or Langfuse / LangSmith datasets |
 | [`Delivery`](../../src/agent/ports/delivery.py) | `render(report)`, `send(author_id, rendered, key)` | not wired | email, Slack, push |
 
-In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `None` until slice 7 wires it; until then every User has an empty profile. `reports` is the SQLite store, in the same file as the users (a report's Author is a foreign key into `users`). Stand-ins: `NullTrioRetriever` ([adapters/null.py](../../src/agent/adapters/null.py)), and `FilePersonaStore` serving `seed/persona.yaml` as version 1 (catalog classes it does not word use the bundled wording in [core/catalog.py](../../src/agent/core/catalog.py)).
+In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `None` until slice 7 wires it; until then every User has an empty profile. `reports` is the SQLite store, in the same file as the users (a report's Author is a foreign key into `users`). `trios` is `SqliteTrioRetriever` over the seed Trios (slice 7), in the same file again; `NullTrioRetriever` ([adapters/null.py](../../src/agent/adapters/null.py)) stands in when `MODEL_EMBEDDING` is empty and for `agent eval --no-trios`. Other stand-in: `FilePersonaStore` serving `seed/persona.yaml` as version 1 (catalog classes it does not word use the bundled wording in [core/catalog.py](../../src/agent/core/catalog.py)).
 
 ## Checklist per port
 
@@ -110,8 +110,14 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `No
 - **Depends on:** `LLMFactory.embeddings` inside the adapter.
 - **Safety:** Brand filter as defense in depth; `active` only.
 - **Failures:** `TransientError`; callers continue without Trios and flag the turn degraded.
-- **Trace:** `trios.refs`, `trios.scores`, `trios.dropped`.
-- **Tests** · slices 1, 7 · `tests/test_trios.py`: Null adapter returns nothing and the graph is unchanged; scope filter; threshold.
+- **How it is built** (slice 7, [`trios_sqlite.py`](../../src/agent/adapters/trios_sqlite.py)):
+  1. On construction, each `seed/trios/*.yaml` is validated as a `Trio` and synced into `golden_trios`: inserted, left alone if unchanged, or rewritten if its content changed (the cascade drops its old vectors). No network call, so start-up never waits for the model.
+  2. The first search embeds every Trio that has no vectors yet, question and paraphrases in one `embed_documents` call, into `trio_embeddings` (768 float32, little-endian). They stay in the file: a restart embeds only queries. Changing `MODEL_EMBEDDING` needs a fresh app DB, since vectors of two models are not comparable.
+  3. A search embeds the query (`embed_query`), keeps `active` Trios with `scope.covers(trio.scope)` (an `all_brands` Trio only for an all-Brands scope), scores each Trio by its **best** cosine over its question and paraphrases (clamped to [0, 1]), drops those under `trio_min_score` (0.75), and returns the best `limit`. `dropped_below_threshold` counts the Trios in scope that scored under the threshold; out-of-scope Trios are not counted.
+  4. Any failure (the embedding model, the app DB) raises `TransientError(dependency="trios")`.
+- **Embeddings** (`LLMFactory.embeddings()`, slice 7): `GoogleGenerativeAIEmbeddings` with `output_dimensionality=768`, behind the same breaker, token bucket and retries as a chat step, with an `llm` span whose `llm.step` is `embedding`, and no fallback. The embeddings class wraps every SDK error in its own `GoogleGenerativeAIError`, so retryability is read from the error it wraps.
+- **Trace:** `trios.refs`, `trios.scores`, `trios.dropped`, `trios.degraded`, on the span of the caller (`trio_search` inside `retrieve_trios`, or `search_golden_trios`; [05](05-tools.md#search_golden_trios)). The root span's `retrieval.degraded` is true when `retrieve_trios` found the retriever down.
+- **Tests** · slices 1, 7 · `tests/test_trios.py`: Null adapter returns nothing and the graph is unchanged; each Manager gets only their own Trio, never an `all_brands` one; the CEO gets the three `all_brands` Trios; below-threshold dropped and counted; best paraphrase wins, once per Trio; the seed is embedded once; an embedding outage is `TransientError("trios")`, and a turn then answers with `retrieval.degraded`. `tests/test_resilience.py`: an embedding 429 is retried; the embedding model down is `MODEL_BUSY`.
 
 ### `ProfileStore`
 

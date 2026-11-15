@@ -83,6 +83,33 @@ def analysis_decision(question: str = "total revenue in 2025") -> RouterDecision
     return RouterDecision(verdict=Verdict.ALLOWED, action=Action.ANALYSIS, search_question=question)
 
 
+DIM = 768
+
+
+def unit(axis: int, *, dim: int = DIM) -> list[float]:
+    return [1.0 if i == axis else 0.0 for i in range(dim)]
+
+
+class FakeEmbeddings(Embeddings):
+    """Deterministic vectors: ``vectors`` by exact text, anything else the last axis (so it
+    scores 0 against the other axes). ``fail`` makes every call raise it. ``calls`` counts the
+    texts embedded per call."""
+
+    def __init__(self, vectors: dict[str, list[float]], fail: Exception | None = None) -> None:
+        self.vectors = vectors
+        self.fail = fail
+        self.calls: list[int] = []
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(len(texts))
+        if self.fail is not None:
+            raise self.fail
+        return [self.vectors.get(t, unit(DIM - 1)) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]
+
+
 class FakeLLMFactory:
     """The router returns ``decision`` (a list: one per turn, the last repeats); the analyst
     replies with ``analyst`` in order. ``structured`` gives other structured-output steps
@@ -97,7 +124,9 @@ class FakeLLMFactory:
         fail: Exception | None = None,
         router_fail: Exception | None = None,
         structured: dict[ModelStep, Any] | None = None,
+        embeddings: Embeddings | None = None,
     ) -> None:
+        self._embeddings = embeddings
         self.analyst = ScriptedChatModel(messages=iter(analyst or []), seen=[])
         self.router = ScriptedChatModel(
             messages=iter([]), structured=decision or analysis_decision(), seen=[]
@@ -125,7 +154,8 @@ class FakeLLMFactory:
         return self.analyst
 
     def embeddings(self) -> Embeddings:
-        raise AssertionError("no embeddings in slice 1")
+        assert self._embeddings is not None, "no embeddings scripted"
+        return self._embeddings
 
 
 type Outcome = QueryResult | Exception

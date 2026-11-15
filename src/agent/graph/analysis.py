@@ -27,6 +27,7 @@ from agent.contracts.tools import (
     RunSqlOk,
     SaveReportInput,
     SaveReportOk,
+    SearchTriosInput,
     ToolError,
 )
 from agent.core.catalog import render
@@ -42,6 +43,7 @@ from agent.tools.analysis import (
     run_sql,
     save_report,
     scope_note,
+    search_golden_trios,
 )
 from agent.tools.context import SqlBudget, TurnContext
 
@@ -61,6 +63,12 @@ BOUND_TOOLS = [
         GetSchemaInput,
     ),
     _spec(
+        "search_golden_trios",
+        "Find approved analyses (question, method, SQL) close to a question in your own words. "
+        "Use it for a part of the question the reference Trios do not cover.",
+        SearchTriosInput,
+    ),
+    _spec(
         "run_sql",
         "Run one BigQuery SELECT and get the rows back. A LIMIT is added for you.",
         RunSqlInput,
@@ -78,7 +86,7 @@ BOUND_TOOLS = [
     ),
     _spec("get_my_report", "Open one of the User's own Saved Reports by ID.", GetReportInput),
 ]
-"""Five of the six ``ANALYSIS_TOOLS``; ``search_golden_trios`` is bound with slice 7."""
+"""The six ``ANALYSIS_TOOLS``, as the model sees them."""
 
 
 class _Turn:
@@ -105,6 +113,9 @@ class _Turn:
     def _dispatch(self, name: str, args: dict[str, Any]) -> str:
         tools: dict[str, Callable[[dict[str, Any]], BaseModel]] = {
             "get_schema": lambda a: get_schema(GetSchemaInput.model_validate(a), self.ctx),
+            "search_golden_trios": lambda a: search_golden_trios(
+                SearchTriosInput.model_validate(a), self.ctx
+            ),
             "run_sql": self._run_sql,
             "save_report": self._save_report,
             "list_my_reports": lambda a: list_my_reports(

@@ -19,18 +19,23 @@ import httpx
 from google.genai import errors as genai_errors
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.runnables import RunnableLambda
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_google_genai._common import GoogleGenerativeAIError
 from pydantic import SecretStr
 
 from agent.adapters.llm_resilient import (
     LlmPolicy,
     ModelOption,
     ResilientChatModel,
+    ResilientEmbeddings,
     ResilientRunnable,
     is_retryable,
 )
 from agent.adapters.resilience import CircuitBreaker, Clock, Retry, Sleep, TokenBucket
 from agent.config import Limits, ModelSettings
+from agent.db import EMBEDDING_DIMENSIONS
+from agent.errors import PermanentError
 from agent.ports.llm import ModelStep
 from agent.ports.tracer import Tracer
 
@@ -38,6 +43,9 @@ _PROVIDERS = {"google_genai", "gemini", "google"}
 
 type BuildModel = Callable[[str, float], BaseChatModel]
 """``(model name, timeout seconds) -> chat model``; tests pass scripted models."""
+
+type BuildEmbeddings = Callable[[str], Embeddings]
+"""``model name -> embeddings``; tests pass scripted ones."""
 
 
 class GeminiLLMFactory:
@@ -49,6 +57,7 @@ class GeminiLLMFactory:
         *,
         tracer: Tracer,
         build: BuildModel | None = None,
+        build_embeddings: BuildEmbeddings | None = None,
         sleep: Sleep = time.sleep,
         clock: Clock = time.monotonic,
     ) -> None:
@@ -56,6 +65,8 @@ class GeminiLLMFactory:
         self._limits = limits
         self._api_key = api_key
         self._build = build or self._gemini
+        self._build_embeddings = build_embeddings or self._gemini_embeddings
+        self._embeddings: Embeddings | None = None
         self._clock = clock
         self._chats: dict[ModelStep, BaseChatModel] = {}
         self._breakers: dict[str, CircuitBreaker] = {}
@@ -95,7 +106,32 @@ class GeminiLLMFactory:
         return self._chats[step]
 
     def embeddings(self) -> Embeddings:
-        raise NotImplementedError("embeddings arrive with the Trio slice (7)")
+        if self._embeddings is None:
+            if self._models.embedding is None:
+                raise PermanentError("MODEL_EMBEDDING is not set")
+            name = model_name(self._models.embedding)
+            base = self._build_embeddings(name)
+
+            def embed(request: str | list[str]) -> list[float] | list[list[float]]:
+                if isinstance(request, str):
+                    return base.embed_query(request)
+                return base.embed_documents(request)
+
+            option = ModelOption(
+                name=name,
+                runnable=RunnableLambda(embed),
+                breaker=self._breaker(name),
+                limiter=self._bucket(name),
+            )
+            self._embeddings = ResilientEmbeddings("embedding", option, self._policy)
+        return self._embeddings
+
+    def _gemini_embeddings(self, name: str) -> Embeddings:
+        return GoogleGenerativeAIEmbeddings(
+            model=name,
+            api_key=self._api_key,
+            output_dimensionality=EMBEDDING_DIMENSIONS,
+        )
 
     def _gemini(self, name: str, timeout: float) -> BaseChatModel:
         return ChatGoogleGenerativeAI(
@@ -145,6 +181,8 @@ def gemini_retryable(exc: BaseException) -> bool:
     ``ServerError`` / 429 ``ClientError``."""
     if is_retryable(exc):
         return True
+    if isinstance(exc, GoogleGenerativeAIError) and exc.__cause__ is not None:
+        return gemini_retryable(exc.__cause__)  # the embeddings class wraps every SDK error
     if isinstance(exc, httpx.TimeoutException | httpx.TransportError | genai_errors.ServerError):
         return True
     return isinstance(exc, genai_errors.ClientError) and exc.code == 429
