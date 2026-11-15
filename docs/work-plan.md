@@ -130,7 +130,23 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 
 `implement` reads the issue, builds it test-first with the `tdd` skill at the seams listed in the issue, runs `/code-review` (Standards against `CODING_STANDARDS.md`, Spec against the issue) and commits. Keep `docs/lld/` in sync with any interface change.
 
-**Loop:** `/mattpocock-skills:implement #N` → PR (closes #N) → merge → `/clear`. After the first issue (#5), run `/mattpocock-skills:retro` once in that session, before clearing.
+**Loop:** `/mattpocock-skills:implement #N` → PR (closes #N) → merge → retro *if the table below says so* → `/clear`.
+
+**When to run a retro.** Run it in the slice's own session, after the merge and before `/clear`, while the session still holds what went wrong. Only some slices get one. A retro is worth its cost when the slice does one of two things. It sets a pattern that later slices reuse, so a lesson would otherwise be learned again. Or it carries a guarantee where a missed gap is a leak, not a bug. Every other slice still ends with the usual `docs/progress.md` handoff.
+
+| Slice | Issue | Retro | Why |
+|---|---|---|---|
+| 1 walking skeleton | #5 | ✅ done | First slice: tunes the process itself (context use, SDK gotchas, guardrails) |
+| 2 safety | #6 | **yes** | The core guarantee; the spec review found guard holes the tests missed. Its PII filter and Brand scope are reused by #8 and #11 |
+| 3 resilience | #7 | **yes** | Sets the error, retry and fallback patterns every later slice follows; first slice tuned against real model behaviour |
+| 4 Saved Reports + Deletion Plan | #8 | **yes** | First SQLite store and first pause and resume (`interrupt()`); #12 and #13 reuse both |
+| 5 observability | #9 | no | Adds to the tracer the earlier slices already call |
+| 6 eval | #10 | **yes** | First run against the real model: its scorecard sets the limits to tune and which stretch slices are worth doing |
+| 7a–7c stretch | #11–#13 | no | Built on patterns already reviewed |
+| 8 web UI (optional) | #14 | no | A separate front end over `ChatService`; nothing later builds on it |
+| end of Phase 4 | none | **yes** | One last retro over the whole build before Phase 5, while the problems are still fresh |
+
+**How to run one:** `/mattpocock-skills:retro`. If that skill is not installed, do it by hand. Write down what cost the most time or context and what a review caught that the tests did not. Then put each fix where the next session will meet it: a tool rule (`pyproject.toml`, hooks), a gotcha in the matching `docs/lld/` page, a pointer in `CLAUDE.md`, or a line in `docs/progress.md`. Commit it as `docs: record the slice N retro`.
 
 **Done when:**
 - [ ] slices 1–6 are merged (7 if time allows)

@@ -40,6 +40,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 > /mattpocock-skills:implement #7
 
+Before `/clear`: slice 2 is due a retro (see [work-plan.md](work-plan.md#phase-4-build-one-slice-per-session-4-5-h-total) § When to run a retro).
+
 Notes from slice 2 for what comes next:
 
 - `GuardAllowed.filters` is still `[]`; the empty-result probe (slice 3) needs it filled from the AST.
