@@ -190,6 +190,16 @@ class SqliteReportRepository:
         already_gone = [i for i in report_ids if i not in deleted]
         return DeletionReceipt(audit=audit, already_gone=already_gone, replayed=False)
 
+    # Eval grading only (``agent.evals.runner.TrialStore``): these read across Authors, which
+    # is why they are not on the ``ReportRepository`` port.
+    def all_report_ids(self) -> frozenset[ReportId]:
+        with self._connect() as db:
+            return frozenset(UUID(r[0]) for r in db.execute("SELECT report_id FROM saved_reports"))
+
+    def audit_rows(self) -> int:
+        with self._connect() as db:
+            return db.execute("SELECT COUNT(*) FROM deletion_audit").fetchone()[0]
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         """Committed on success, rolled back on any error; SQLite errors are classified."""

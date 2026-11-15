@@ -21,6 +21,7 @@ from typing import Protocol
 from uuid import UUID
 
 from agent.contracts.channel import Channel, InboundMessage
+from agent.contracts.eval import Layer, LayerScore, Outcome, Scorecard
 from agent.contracts.tools import ListReportsInput, ListReportsOutput
 from agent.contracts.views import SpanNode, StatsView, TraceView
 from agent.core.catalog import BUNDLED
@@ -51,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument(
         "--suite", action="append", choices=["correctness", "safety", "session", "step"]
     )
-    ev.add_argument("--trials", type=int, default=1)
+    ev.add_argument("--trials", type=int, default=1, choices=range(1, 11), metavar="K")
     ev.add_argument("--no-trios", action="store_true", help="the Golden Bucket ablation")
     ev.add_argument("--baseline", help="run ID to compare against")
     web = sub.add_parser("web", help="serve the HTTP API for the web UI")
@@ -62,6 +63,8 @@ def main(argv: list[str] | None = None) -> int:
         return _chat(args.user_id)
     if args.command == "stats":
         return _stats_command(args.user_id, args.since)
+    if args.command == "eval":
+        return _eval(args.suite, args.trials, not args.no_trios, args.baseline)
     raise NotImplementedError(f"`agent {args.command}` is built in a later slice")
 
 
@@ -166,6 +169,84 @@ def _stats_command(user_id: str, since: str) -> int:
         print(BUNDLED[exc.message_class].replace("{ref}", "none"))
         return 1
     return 0
+
+
+def _eval(suites: list[str] | None, trials: int, trios: bool, baseline: str | None) -> int:
+    from agent.composition import build_eval
+    from agent.config import Settings
+    from agent.evals.runner import exit_code
+
+    logging.getLogger("agent.evals").setLevel(logging.INFO)  # one line per case and trial
+    app = build_eval(Settings(), trios_enabled=trios)
+    cases = [c for c in app.cases if suites is None or c.suite.value in suites]
+    card = app.runner.run(cases, trials=trials, baseline_run_id=baseline)
+    print(render_scorecard(card))
+    print(f"\nscorecard: {app.runs_dir / f'{card.run_id}.json'}")
+    return exit_code(card.outcome)
+
+
+def render_scorecard(card: Scorecard) -> str:
+    """The scorecard as text: the verdict and why, the rates per suite and category, one line
+    per case (deterministic outcome first; judge and trajectory after it, never blended)."""
+    m = card.manifest
+    lines = [
+        f"eval {card.run_id}  {card.outcome.value.upper()}",
+        *(f"  {r}" for r in card.reasons),
+        f"git {m.git_sha} · fixture {m.fixture_hash} · {m.prereg_id} · Persona v"
+        f"{m.persona_version} · Trios {'on' if m.trios_enabled else 'off'} · data as of "
+        f"{m.data_as_of} · trials {m.trials}",
+        f"analyst {m.models.get('analyst', '?')} · router {m.models.get('router', '?')} · "
+        f"judge {m.judge or 'off'}",
+    ]
+    for suite in card.suites:
+        rates = "   ".join(
+            f"{category.value} {r.passed}/{r.total} [{r.low:.0%}–{r.high:.0%}]"
+            for category, r in suite.by_category.items()
+        )
+        unmeasured = f"   cannot measure {suite.cannot_measure}" if suite.cannot_measure else ""
+        lines.append(f"{suite.suite.value:<12} {rates}{unmeasured}")
+    lines.append("")
+    for case in card.cases:
+        trials = " ".join(_TRIAL_MARK[t.outcome] for t in case.trials)
+        k = f"pass@k {'y' if case.pass_at_k else 'n'} pass^k {'y' if case.pass_all_k else 'n'}"
+        lines.append(f"{case.outcome.value:<15}{case.case_id:<36}{trials:<8}{k}")
+        for t in case.trials:
+            detail = [t.error] if t.error else []
+            detail += [_layer(s) for s in t.layers if _layer(s)]
+            if detail:
+                lines.append(f"{'':15}  trial {t.trial}: {'; '.join(detail)}")
+    passing = sum(c.outcome is Outcome.PASS for c in card.cases)
+    per_pass = f" (${card.cost_usd / passing:.4f} per passing case)" if passing else ""
+    lines += [
+        "",
+        f"cost ${card.cost_usd:.4f}{per_pass} · {card.tokens:,} tokens · "
+        f"p95 {card.p95_latency_s:.1f} s per turn",
+        f"baseline {card.baseline_run_id or 'none'} · regressions "
+        f"{', '.join(card.regressions) or 'none'} · negative control "
+        f"{'failed as it must' if card.negative_control_failed else 'did not fail'}",
+    ]
+    return "\n".join(lines)
+
+
+_TRIAL_MARK = {Outcome.PASS: "P", Outcome.FAIL: "F", Outcome.CANNOT_MEASURE: "?"}
+
+
+def _layer(score: LayerScore) -> str:
+    """A layer's line in the per-trial detail: failures, the judge's scores, the trajectory."""
+    if score.layer is Layer.TRAJECTORY:
+        v = score.values
+        return (
+            f"trajectory {v.get('sql_attempts', 0):.0f} sql, {v.get('model_calls', 0):.0f} "
+            f"calls, {v.get('tokens', 0):,.0f} tokens"
+        )
+    if score.layer is Layer.JUDGED:
+        if score.outcome is Outcome.CANNOT_MEASURE:
+            return f"judge (reported) {score.reason}"
+        scores = " ".join(f"{d} {v:.0f}" for d, v in score.values.items())
+        return f"judge (reported) {scores}"
+    if score.outcome is Outcome.PASS:
+        return ""
+    return f"{score.scorer}: {score.reason or score.outcome.value}"
 
 
 def render_trace(view: TraceView) -> str:
