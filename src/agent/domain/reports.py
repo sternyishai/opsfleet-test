@@ -1,5 +1,6 @@
 """Saved Reports, Deletion Plans and the deletion audit (HLD 04)."""
 
+import re
 from datetime import date, datetime
 from enum import StrEnum
 from typing import ClassVar, Self
@@ -55,6 +56,24 @@ class EntityType(StrEnum):
     CUSTOMER = "customer"  # a user_id, never a name
 
 
+ENTITY_ALIASES: dict[str, str] = {
+    "ck": "calvin klein",
+    "tommy": "tommy hilfiger",
+    "tnf": "the north face",
+    "north face": "the north face",
+    "levi strauss": "levis",
+}
+"""Other names for the same entity, already normalized. Small and hand-kept in the prototype."""
+
+
+def normalize_entity(value: str) -> str:
+    """The match key for an entity: case-folded, apostrophes dropped, other punctuation and
+    runs of whitespace as one space, then aliases resolved ("Levi's" and "LEVIS" -> "levis")."""
+    folded = re.sub(r"['’]", "", value.casefold())
+    key = " ".join(re.sub(r"[^\w]+", " ", folded).split())
+    return ENTITY_ALIASES.get(key, key)
+
+
 class ReportEntity(BaseModel):
     """One entity named in a report, extracted at save time (prototype) or by a job (production)."""
 
@@ -73,6 +92,11 @@ class ReportListItem(BaseModel):
     conversation_id: ConversationId
     accessible: bool = Field(
         description="False when the report covers a Brand the User no longer has (HLD 04)."
+    )
+    scope: BrandScope = Field(
+        exclude=True,
+        description="The report's scope, for the access check. Never serialized, so an "
+        "inaccessible report shows its title only.",
     )
 
 
@@ -117,6 +141,29 @@ class DeletionFilter(BaseModel):
         if not (self.all_reports or self.this_conversation or content):
             raise ValueError("an empty filter matches nothing; ask the User to be specific")
         return self
+
+
+def match_reason(filter: DeletionFilter, entity_hits: list[str]) -> str:
+    """Why a report matched, in the User's words: ``entity_hits`` are the filter entities it
+    mentions. One wording for every ``ReportRepository`` adapter."""
+    if filter.all_reports:
+        return "all your reports"
+    parts: list[str] = []
+    if filter.this_conversation:
+        parts.append("made in this conversation")
+    if entity_hits:
+        parts.append(f"mentions: {', '.join(entity_hits)}")
+    if filter.topic:
+        parts.append(f'about "{filter.topic}"')
+    if filter.created:
+        start, end = filter.created.start, filter.created.end
+        if start and end:
+            parts.append(f"made {start.isoformat()} to {end.isoformat()}")
+        elif start:
+            parts.append(f"made on or after {start.isoformat()}")
+        elif end:
+            parts.append(f"made on or before {end.isoformat()}")
+    return "; ".join(parts)
 
 
 class DeletionPlanItem(BaseModel):
@@ -175,3 +222,11 @@ class DeletionAuditRecord(BaseModel):
     @property
     def count(self) -> int:
         return len(self.report_ids)
+
+
+class DeletionReceipt(BaseModel):
+    """What ``ReportRepository.delete_with_audit`` did."""
+
+    audit: DeletionAuditRecord | None = Field(description="None when nothing was left to delete.")
+    already_gone: list[ReportId] = Field(description="Confirmed, but no longer the Author's.")
+    replayed: bool = Field(description="True: this plan was executed before; nothing changed.")

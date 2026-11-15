@@ -14,7 +14,7 @@ QueryGuard          ``sqlglot`` (BigQuery dialect), full scope rewrite    1, 2
 QueryRunner         ``google-cloud-bigquery`` with ADC, tenacity, breaker 1, 3
 PiiFilter           regex detectors                                       2
 UserDirectory       ``seed/users.yaml`` loaded into SQLite                1
-ReportRepository    SQLite + FTS5                                         4
+ReportRepository    SQLite + FTS5, same file as the users                 4
 TrioRetriever       ``NullTrioRetriever``; SQLite + cosine (stretch)      1, 7
 ProfileStore        SQLite notes (stretch)                                7
 PersonaStore        bundled ``persona.yaml``; SQLite versions (stretch)   1, 7
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 
     from agent.adapters.channel_stdout import StdoutChannel
     from agent.core.chat import ChatService
+    from agent.core.views import Views
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,8 +66,7 @@ class Ports:
     trios: TrioRetriever
     personas: PersonaStore
     tracer: Tracer
-    reports: ReportRepository | None = None
-    """None until slice 4 wires the SQLite store."""
+    reports: ReportRepository
     profiles: ProfileStore | None = None
     """None until slice 7: every User then has an empty profile."""
 
@@ -78,11 +78,15 @@ def build_ports(settings: Settings) -> Ports:
     from agent.adapters.persona_file import FilePersonaStore
     from agent.adapters.pii_regex import RegexPiiFilter
     from agent.adapters.query_guard import SqlglotQueryGuard
+    from agent.adapters.reports_sqlite import SqliteReportRepository
     from agent.adapters.tracer_jsonl import JsonlTracer
     from agent.adapters.users_sqlite import SqliteUserDirectory
 
     limits = settings.limits
     tracer = JsonlTracer(settings.traces_dir)
+    app_db = _sqlite_path(settings.app_db_url)
+    # The users first: they create the schema and the Authors the reports point at.
+    users = SqliteUserDirectory(app_db, seed=settings.seed_dir / "users.yaml")
     return Ports(
         llm=GeminiLLMFactory(settings.models, limits, settings.google_api_key, tracer=tracer),
         guard=SqlglotQueryGuard(dialect="bigquery"),
@@ -90,12 +94,11 @@ def build_ports(settings: Settings) -> Ports:
             project=settings.bigquery_project, dataset=settings.bigquery_dataset, limits=limits
         ),
         pii=RegexPiiFilter(),
-        users=SqliteUserDirectory(
-            _sqlite_path(settings.app_db_url), seed=settings.seed_dir / "users.yaml"
-        ),
+        users=users,
         trios=NullTrioRetriever(),
         personas=FilePersonaStore(settings.seed_dir / "persona.yaml"),
         tracer=tracer,
+        reports=SqliteReportRepository(app_db),
     )
 
 
@@ -113,13 +116,15 @@ def build_checkpointer(settings: Settings) -> "SqliteSaver":
     )
 
 
-def build_chat_service(settings: Settings) -> "ChatService":
+def build_app(settings: Settings) -> tuple["ChatService", "Views"]:
+    """The two shared entry points every channel calls, over one set of ports (LLD 07)."""
     from agent.core.chat import ChatService
+    from agent.core.views import Views
     from agent.graph.build import build_graph
 
     ports = build_ports(settings)
     graph = build_graph(ports, settings.limits, build_checkpointer(settings))
-    return ChatService(ports, graph)
+    return ChatService(ports, graph), Views(ports, settings.limits)
 
 
 def build_cli_channel() -> "StdoutChannel":

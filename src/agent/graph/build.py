@@ -6,16 +6,18 @@
 The edges are the reference diagram in docs/hld/01-architecture.md § Agent graph. Node names
 here are the span names in traces.
 
-Slice 1 wires the analysis path only: ``load_context`` -> ``input_guard`` -> ``router`` ->
+Wired so far: the analysis path ``load_context`` -> ``input_guard`` -> ``router`` ->
 ``retrieve_trios`` -> ``analysis`` -> ``after`` -> ``output_filter`` -> ``respond``, with
-``refuse`` for a missing role or a blocked verdict. The other nodes join with their slice.
+``refuse`` for a missing role or a blocked verdict; and the deletion branch ``router`` ->
+``plan_deletion`` -> ``confirm_deletion`` (paused) -> ``execute_deletion`` -> ``after``, where
+a deferred request goes back to ``retrieve_trios``. The other nodes join with their slice.
 """
 
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
@@ -23,12 +25,14 @@ from langgraph.runtime import Runtime
 from agent.composition import Ports
 from agent.config import Limits
 from agent.contracts.channel import AgentReply
-from agent.contracts.router import RouterDecision, Verdict
+from agent.contracts.router import Action, RouterDecision, Verdict
 from agent.core.catalog import render
+from agent.core.confirmation import looks_like_reply
 from agent.core.input_rules import screen
 from agent.domain.profile import UserProfile
 from agent.errors import ErrorClass, MessageClass, TransientError
 from agent.graph.analysis import analysis
+from agent.graph.deletion import DeletionNodes
 from agent.graph.prompts import router_messages
 from agent.graph.state import TURN_KEYS, AgentGraph, AgentState, TurnRuntime
 from agent.ports.llm import ModelStep
@@ -86,20 +90,32 @@ def build_graph(ports: Ports, limits: Limits, checkpointer: BaseCheckpointSaver)
         return analysis(state, ports, limits)
 
     g.add_node(Node.ANALYSIS, run_analysis)
+    deletion = DeletionNodes(
+        ports,
+        limits,
+        execute=Node.EXECUTE_DELETION,
+        after=Node.AFTER,
+        restart=Node.LOAD_CONTEXT,
+    )
+    g.add_node(Node.PLAN_DELETION, deletion.plan_deletion)
+    g.add_node(Node.CONFIRM_DELETION, deletion.confirm_deletion, destinations=deletion.confirm_to)
+    g.add_node(Node.EXECUTE_DELETION, deletion.execute_deletion)
     g.add_node(Node.REFUSE, nodes.refuse)
-    g.add_node(Node.AFTER, _passthrough)
+    g.add_node(Node.AFTER, nodes.after)
     g.add_node(Node.OUTPUT_FILTER, nodes.output_filter)
     g.add_node(Node.RESPOND, nodes.respond)
 
     g.add_edge(START, Node.LOAD_CONTEXT)
     g.add_conditional_edges(Node.LOAD_CONTEXT, _refused_or(Node.INPUT_GUARD))
     g.add_conditional_edges(Node.INPUT_GUARD, _refused_or(Node.ROUTER))
-    # Every allowed action is analysis until the delete (4) and Persona (7) branches exist.
-    g.add_edge(Node.ROUTER, Node.RETRIEVE_TRIOS)
+    # Persona and preference-only actions are analysis until their branches exist (slice 7).
+    g.add_conditional_edges(Node.ROUTER, _by_action)
     g.add_edge(Node.RETRIEVE_TRIOS, Node.ANALYSIS)
     g.add_edge(Node.ANALYSIS, Node.AFTER)
+    g.add_conditional_edges(Node.PLAN_DELETION, _planned)
+    g.add_edge(Node.EXECUTE_DELETION, Node.AFTER)
     g.add_edge(Node.REFUSE, Node.AFTER)
-    g.add_edge(Node.AFTER, Node.OUTPUT_FILTER)
+    g.add_conditional_edges(Node.AFTER, _deferred)
     g.add_edge(Node.OUTPUT_FILTER, Node.RESPOND)
     g.add_edge(Node.RESPOND, END)
     return g.compile(checkpointer=checkpointer)
@@ -128,6 +144,25 @@ _TURN_DEFAULTS: dict[str, Any] = {
 
 def _passthrough(state: AgentState) -> dict[str, Any]:
     return {}
+
+
+def _by_action(state: AgentState) -> str:
+    router = state["router"]
+    deleting = router is not None and router.action is Action.DELETE_REPORTS
+    return Node.PLAN_DELETION if deleting else Node.RETRIEVE_TRIOS
+
+
+def _planned(state: AgentState) -> str:
+    return Node.CONFIRM_DELETION if state.get("open_plan") else Node.AFTER
+
+
+def _deferred(state: AgentState) -> str:
+    """``after`` turned a deferred request into this turn's next question."""
+    return (
+        Node.RETRIEVE_TRIOS
+        if isinstance(state["messages"][-1], HumanMessage)
+        else Node.OUTPUT_FILTER
+    )
 
 
 def _refused_or(next_node: Node):
@@ -167,6 +202,9 @@ class _Nodes:
         classifier. Fails closed: if the call raises, the turn ends at the catch-all and no
         analysis runs."""
         messages = state["messages"]
+        if state.get("last_plan_id") and looks_like_reply(_last_text(state)):
+            # No plan is open (a paused one would have been resumed): never guess which.
+            return {"error_class": ErrorClass.PERMANENT, "message_class": MessageClass.PLAN_EXPIRED}
         if verdict := screen(_last_text(state), max_chars=self._limits.input_max_chars):
             return {"error_class": ErrorClass.PERMANENT, "message_class": _BLOCKED[verdict]}
         # json_schema: Gemini's native schema mode resolves the nested $defs of RouterDecision.
@@ -177,7 +215,7 @@ class _Nodes:
             router_messages(messages[:-1], _last_text(state), turns=self._limits.verbatim_turns)
         )
         assert isinstance(decision, RouterDecision)
-        update: dict[str, Any] = {"router": decision}
+        update: dict[str, Any] = {"router": decision, "deferred_request": decision.deferred_request}
         if decision.verdict in _BLOCKED:
             update |= {
                 "error_class": ErrorClass.PERMANENT,
@@ -202,6 +240,16 @@ class _Nodes:
         text = render(message_class, state["persona"].persona, ref=state["trace_id"])
         return {"messages": [AIMessage(content=text)]}
 
+    def after(self, state: AgentState, runtime: Runtime[TurnRuntime]) -> dict[str, Any]:
+        """A deferred request runs once the delete is answered: the branch's reply is sent
+        now, and the request becomes the next question (``_deferred`` routes it to
+        ``retrieve_trios``). It runs at most once: it is cleared here."""
+        deferred = state.get("deferred_request")
+        if not deferred:
+            return {}
+        runtime.context.outbound.emit(self._reply(state))
+        return {"deferred_request": None, "messages": [HumanMessage(content=deferred)]}
+
     def output_filter(self, state: AgentState) -> dict[str, Any]:
         """Filter the reply before it is checkpointed, so history holds what the User saw."""
         last = state["messages"][-1]
@@ -209,13 +257,14 @@ class _Nodes:
         return {"messages": [AIMessage(content=scanned.text, id=last.id)]}
 
     def respond(self, state: AgentState, runtime: Runtime[TurnRuntime]) -> dict[str, Any]:
-        runtime.context.outbound.emit(
-            AgentReply(
-                conversation_id=state["conversation_id"],
-                trace_id=state["trace_id"],
-                sent_at=datetime.now(UTC),
-                markdown=_last_text(state),
-                message_class=state.get("message_class"),
-            )
-        )
+        runtime.context.outbound.emit(self._reply(state))
         return {}
+
+    def _reply(self, state: AgentState) -> AgentReply:
+        return AgentReply(
+            conversation_id=state["conversation_id"],
+            trace_id=state["trace_id"],
+            sent_at=datetime.now(UTC),
+            markdown=_last_text(state),
+            message_class=state.get("message_class"),
+        )

@@ -395,3 +395,16 @@ Approved deviations from issue #7:
 - **Circuit breaker per model, not per dependency.** Gemini breakers and rate-limit buckets are keyed by model, so when Flash is down or out of quota, Flash-Lite (its fallback) can still answer. With one breaker for all of Gemini, the fallback would be switched off exactly when it is needed. BigQuery keeps one breaker.
 - **Giving up after the data cap says the question covers too much data** (`QUERY_TOO_LARGE`), not the generic "couldn't find a reliable answer". It tells the User what to change (a shorter period, one Brand); HLD 06's catalog has this message for this case. The trace records which message was used (`sql.gave_up`) and the technical reason (`sql.retry_kind`, the byte count in `error`).
 - **Catalog wording has no technical terms.** The Users are non-technical executives (ASSIGNMENT.md), so "query", "scan" and "SQL" were removed from the bundled messages, and the analyst is told to explain a give-up in plain words.
+
+## Slice 4: Saved Reports and deletion (2026-11-15)
+
+Approved deviations from issue #8:
+
+- **`save_report` without a query this turn is `needs_query`, not a `ToolError`.** A `ToolError` ends the turn, and "save this" right after an answer is the common case. The model is told to run the query behind the report in this turn, so the scope still comes from the guard, never from the model.
+- **Entities in a filter match a report that mentions any of them**, and the reason names which ("mentions: Calvin Klein, Tommy Hilfiger"). Entities, topic, dates and "this conversation" still combine with AND. Entity matching uses a small alias table (`CK`, `TNF`, `Levi Strauss`) next to case and punctuation folding.
+- **A reply shaped like an answer (`yes`, `no`, `yes except 2`) with no plan open is `PLAN_EXPIRED`**, if the Conversation has shown a plan before. This is the issue's "a later `yes` → `PLAN_EXPIRED`". It never reaches the router, so a stale "yes" is never guessed at.
+- **A non-answer re-enters at `load_context`**, just before the input guard, so the new message gets fresh turn keys and a freshly loaded User. A second bare `yes` to a large plan cancels it like any other non-answer. Cancelling drops the deferred request that came with the delete: the User has moved on.
+- **Only the plan's User can resume it.** `ChatService` answers anyone else with `PLAN_EXPIRED` without resuming, so another User can neither confirm nor cancel the plan.
+- **A deferred request is sent as its own reply** after the branch's reply. The turn then delivers two `AgentReply`s: the deletion outcome, then the answer.
+- **Port changes:** `save` takes the `channel` (the first save records the Conversation that the `saved_reports` foreign key needs); `delete_with_audit` takes the filter (the `deletion_audit.filter` column) and returns a `DeletionReceipt` with `replayed`. `TurnContext` gains `channel`; `Views` takes `limits`.
+- **The `REPORT_OUT_OF_SCOPE` wording** no longer promises a title it does not show: "…so I can't show what's in it. You can still delete it."

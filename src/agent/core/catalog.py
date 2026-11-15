@@ -68,7 +68,8 @@ BUNDLED: dict[MessageClass, str] = {
         "I couldn't find that report. Ask to list your reports to see what you have."
     ),
     MessageClass.REPORT_OUT_OF_SCOPE: (
-        "That report covers Brands you can no longer analyze, so I can only show its title."
+        "That report covers Brands you can no longer analyze, so I can't show what's in it. "
+        "You can still delete it."
     ),
 }
 

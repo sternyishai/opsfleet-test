@@ -1,6 +1,7 @@
 """The six analysis tools bound to the ReAct sub-agent (docs/lld/05-tools.md).
 
-``get_schema`` and ``run_sql`` (happy path) are built; the rest are stubs until their slice.
+``get_schema`` and ``run_sql`` live here; the Saved Report tools live in
+``agent.tools.reports`` and are re-exported, so this module names all six.
 
 Each is a plain function ``(input, ctx[, state]) -> output`` so tests call it directly with fake
 ports. The graph wraps each one as a LangChain tool whose schema is only the ``*Input`` model;
@@ -13,19 +14,13 @@ from typing import Literal
 
 from agent.contracts.tools import (
     ColumnSchema,
-    GetReportInput,
-    GetReportOutput,
     GetSchemaInput,
-    ListReportsInput,
-    ListReportsOutput,
     RunSqlEmpty,
     RunSqlGaveUp,
     RunSqlInput,
     RunSqlOk,
     RunSqlOutput,
     RunSqlRetry,
-    SaveReportInput,
-    SaveReportOutput,
     SchemaOutput,
     SearchTriosInput,
     SearchTriosOutput,
@@ -47,6 +42,16 @@ from agent.errors import MessageClass, SelfCorrectableError
 from agent.ports.tracer import AttrValue, Span
 from agent.tools.context import SqlBudget, TurnContext
 from agent.tools.probe import diagnose
+from agent.tools.reports import get_my_report, list_my_reports, save_report
+
+__all__ = [
+    "get_my_report",
+    "get_schema",
+    "list_my_reports",
+    "run_sql",
+    "save_report",
+    "search_golden_trios",
+]
 
 _NARROW_HINT = "Narrow the date range or aggregate earlier."
 
@@ -264,22 +269,3 @@ def _retry(
         retries_left=retries_left,
     )
     return out, budget
-
-
-def save_report(args: SaveReportInput, ctx: TurnContext, budget: SqlBudget) -> SaveReportOutput:
-    """Run the output PII filter on every text field, then ``ReportRepository.save`` with
-    ``author_id = ctx.user.user_id`` and ``scope = budget.last_scope``. Entities are extracted
-    at save time in the prototype (``ModelStep.ENTITY_EXTRACTION``). Refuses without a prior
-    successful ``run_sql`` in the turn."""
-    raise NotImplementedError
-
-
-def list_my_reports(args: ListReportsInput, ctx: TurnContext) -> ListReportsOutput:
-    """``ReportRepository.find`` for the session User; ``accessible`` set from
-    ``ctx.user.scope.covers(report.scope)``."""
-    raise NotImplementedError
-
-
-def get_my_report(args: GetReportInput, ctx: TurnContext) -> GetReportOutput:
-    """``ReportRepository.get`` for the session User; content withheld when out of scope."""
-    raise NotImplementedError

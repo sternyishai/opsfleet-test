@@ -29,6 +29,7 @@ from agent.domain.reports import (
     DeletionFilter,
     DeletionOutcome,
     DeletionPlan,
+    EntityType,
     ReportListItem,
     ReportQuery,
     ReportStructured,
@@ -157,7 +158,28 @@ class SaveReportOk(BaseModel):
     redactions: int = Field(ge=0, description="PII-filter hits removed before writing.")
 
 
-type SaveReportOutput = Annotated[SaveReportOk | ToolError, Field(discriminator="status")]
+class SaveReportNeedsQuery(BaseModel):
+    """No ``run_sql`` succeeded this turn, so there is no guard scope to record. The model can
+    fix it: run the query that answers the report in this turn, then save again."""
+
+    status: Literal["needs_query"] = "needs_query"
+    hint: str = "Run the query that answers this report with run_sql in this turn, then save."
+
+
+type SaveReportOutput = Annotated[
+    SaveReportOk | SaveReportNeedsQuery | ToolError, Field(discriminator="status")
+]
+
+
+class EntityMention(BaseModel):
+    entity_type: EntityType
+    value: str = Field(max_length=200, description="As written in the report.")
+
+
+class ExtractedEntities(BaseModel):
+    """Structured output of ``ModelStep.ENTITY_EXTRACTION`` at save time."""
+
+    entities: list[EntityMention] = Field(default_factory=list, max_length=50)
 
 
 # --- list_my_reports / get_my_report ---------------------------------------------------------

@@ -63,12 +63,12 @@ Numbers and `LIKE` patterns are not probed. The probe SQL is built from allowlis
 
 | | |
 |---|---|
-| **Schema** | `SaveReportInput(title, question, sql, markdown, structured)` → `SaveReportOk(report_id, created, redactions)` \| `ToolError` |
+| **Schema** | `SaveReportInput(title, question, sql, markdown, structured)` → `SaveReportOk(report_id, created, redactions)` \| `SaveReportNeedsQuery(hint)` \| `ToolError`. Extraction output: `ExtractedEntities(entities: [EntityMention(entity_type, value)])` |
 | **Ports** | `PiiFilter`, `ReportRepository`, `LLMFactory` (`ENTITY_EXTRACTION`, at save time in the prototype) |
 | **Safety** | Author = `ctx.user.user_id`; scope = `SqlBudget.last_scope` from the guard, never from the model; every text field passes the PII filter before writing; only on the User's explicit request (prompt contract) |
-| **Failures** | no successful `run_sql` this turn → `ToolError`; app DB down → `TransientError` (`UNAVAILABLE`); entity extraction fails → saved without entities (full-text fallback covers matching) |
-| **Trace** | `report_id`, `created`, `redactions` (count and types), `entities` count |
-| **Tests** · slice 4 · `tests/test_reports.py` | idempotent on (Conversation, turn); scope copied from the guard; PII in markdown is redacted before the write |
+| **Failures** | no successful `run_sql` this turn → `needs_query`, nothing saved, and the model runs the query and saves again (a `ToolError` would end the turn, and "save this" after an answer is the common case); app DB down → `TransientError` (`UNAVAILABLE`); entity extraction fails or answers malformed → saved without entities (full-text fallback covers matching); a Customer entity that is not a numeric ID is dropped |
+| **Trace** | `report_id`, `created`, `redactions`, `redactions.types`, `entities` count |
+| **Tests** · slice 4 · `tests/test_reports.py` | idempotent on (Conversation, turn); scope copied from the guard; no query → `needs_query`; PII in markdown and structured fields redacted before the write; extraction with its own step; extraction failure still saves; saved through a whole turn |
 
 ### `list_my_reports`
 
@@ -90,7 +90,7 @@ Numbers and `LIKE` patterns are not probed. The probe SQL is built from allowlis
 | **Safety** | Another Author's report is `REPORT_NOT_FOUND`, never "forbidden", so existence is not revealed; content withheld when out of scope; labelled "data as of <date>" |
 | **Failures** | as above; app DB down → `TransientError` |
 | **Trace** | `report_id`, `found`, `accessible` |
-| **Tests** · slice 4 · `tests/test_reports.py` | foreign ID → not found; out-of-scope → title only; label present |
+| **Tests** · slice 4 · `tests/test_reports.py` | foreign ID → not found, same as a missing one; out-of-scope → `REPORT_OUT_OF_SCOPE`, no content; label present |
 
 ### `plan_deletion` (branch)
 
@@ -101,7 +101,7 @@ Numbers and `LIKE` patterns are not probed. The probe SQL is built from allowlis
 | **Safety** | Author and Conversation injected; the model produces only the filter, code picks the reports; the plan stores IDs, not the filter, so later reports are never included; a new plan replaces `open_plan` |
 | **Failures** | 0 matches → `nothing_matched` (`NOTHING_MATCHED`, no prompt); app DB down → `TransientError` |
 | **Trace** | `filter`, `plan_id`, `plan.size` |
-| **Tests** · slice 4 · `tests/test_deletion.py` | exact Conversation filter; entity match (case and alias); full-text fallback; Author isolation; zero matches |
+| **Tests** · slice 4 · `tests/test_deletion.py`, `tests/test_deletion_flow.py` | exact Conversation filter; entity match (case and alias); full-text fallback; any-of entities with the reason naming them; AND of criteria; FTS operators are plain words; Author isolation; zero matches; through the graph: plan shown, nothing deleted, filter model called once across the pause |
 
 ### `execute_deletion` (branch)
 
@@ -112,7 +112,7 @@ Numbers and `LIKE` patterns are not probed. The probe SQL is built from allowlis
 | **Safety** | Only for the `open_plan` of this User and Conversation; every confirmed ID must be in the plan; ownership re-checked inside the transaction; delete + entity cascade + audit in one transaction |
 | **Failures** | stale, cancelled or foreign plan → `PLAN_EXPIRED`; replay → `replayed = true`, nothing deleted; report already gone → listed in `already_gone`; app DB down → `TransientError`, nothing deleted |
 | **Trace** | `plan_id`, `outcome` (`confirmed`, `partial`, `cancelled`, `expired`), `deleted`, `kept`, `already_gone` counts |
-| **Tests** · slice 4 · `tests/test_deletion.py` | partial confirmation; idempotent replay; expired plan; already-gone report; audit row has no content |
+| **Tests** · slice 4 · `tests/test_deletion.py`, `tests/test_deletion_flow.py` | partial confirmation; reports saved after planning kept; idempotent replay (also at the repository with other IDs); expired, replaced and foreign plan; already-gone report; ownership re-checked; audit row has no content; through the graph: `yes except`, `no`, large plan and count, a new question cancels, buttons, another User's button |
 
 ### `draft_persona` (branch)
 

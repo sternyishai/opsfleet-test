@@ -20,7 +20,7 @@ ADR 0006 lists ten ports. The LLD adds three: **`UserDirectory`**, the seam betw
 | [`ScorecardSink`](../../src/agent/ports/scorecards.py) | `publish(cases, scorecard)`, `baseline(...)` | JSON in `evals/runs/`; Phoenix experiments if running | same, or Langfuse / LangSmith datasets |
 | [`Delivery`](../../src/agent/ports/delivery.py) | `render(report)`, `send(author_id, rendered, key)` | not wired | email, Slack, push |
 
-In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `profiles` are `None` until slices 4 and 7 wire them; until then every User has an empty profile. Stand-ins: `NullTrioRetriever` ([adapters/null.py](../../src/agent/adapters/null.py)), and `FilePersonaStore` serving `seed/persona.yaml` as version 1 (catalog classes it does not word use the bundled wording in [core/catalog.py](../../src/agent/core/catalog.py)).
+In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `None` until slice 7 wires it; until then every User has an empty profile. `reports` is the SQLite store, in the same file as the users (a report's Author is a foreign key into `users`). Stand-ins: `NullTrioRetriever` ([adapters/null.py](../../src/agent/adapters/null.py)), and `FilePersonaStore` serving `seed/persona.yaml` as version 1 (catalog classes it does not word use the bundled wording in [core/catalog.py](../../src/agent/core/catalog.py)).
 
 ## Checklist per port
 
@@ -96,10 +96,11 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `pr
 
 ### `ReportRepository`
 
-- **Schema:** see the Protocol; records in [domain/reports.py](../../src/agent/domain/reports.py).
+- **Schema:** see the Protocol; records in [domain/reports.py](../../src/agent/domain/reports.py). `save(report, entities, *, channel)` also records the Conversation the first time (the `conversations` row the reports' foreign key needs). `delete_with_audit(author_id, plan_id, report_ids, titles, filter)` returns a `DeletionReceipt(audit, already_gone, replayed)`.
+- **Matching** (`find` and `match` share it): `this_conversation` is the exact `conversation_id`; a text or topic needs every word in the full-text index (each word quoted, so FTS5 operators in User text are plain words); each entity matches on `normalize_entity` (case-folded, punctuation dropped, a small alias table: `CK` → `calvin klein`) in `report_entities`, or as a full-text phrase as the fallback; a list of entities matches a report that mentions **any** of them; `created` is an inclusive range on the UTC date. Criteria combine with AND. Plan items are oldest first; the reason wording is `match_reason`, one for every adapter.
 - **Depends on:** nothing.
-- **Safety:** every method is restricted to `author_id`; `delete_with_audit` re-checks ownership in the transaction.
-- **Failures:** `TransientError(UNAVAILABLE)`. Idempotency comes from `UNIQUE` constraints ([02](02-data.md#decisions-made-in-the-ddl)).
+- **Safety:** every method is restricted to `author_id`; `delete_with_audit` re-checks ownership in the transaction. `ReportListItem.scope` is excluded from serialization, so an inaccessible report never shows the Brands it covers.
+- **Failures:** `TransientError(UNAVAILABLE)` for a locked or unreachable file; a broken constraint is an unclassified `AgentError` (a bug, not an outage). Idempotency comes from `UNIQUE` constraints ([02](02-data.md#decisions-made-in-the-ddl)); a replayed `plan_id` is read back before anything is deleted.
 - **Trace:** set by the calling tool.
 - **Tests** · slice 4 · `tests/test_reports.py`, `tests/test_deletion.py`, run against both the SQLite adapter and an in-memory fake, so the fake stays honest.
 

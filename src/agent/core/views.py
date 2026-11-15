@@ -1,4 +1,5 @@
-"""Views: the model-free commands, in one place for every channel. Stub.
+"""Views: the model-free commands, in one place for every channel. Reports are built; the
+other views arrive with their slice.
 
 Rule: **a channel only translates.** The CLI turns ``/reports`` into ``Views.reports``; the web
 adapter turns ``GET /api/reports`` into the same call. No channel reads a store itself, so
@@ -11,7 +12,11 @@ everything that does not.
 from uuid import UUID
 
 from agent.composition import Ports
+from agent.config import Limits
+from agent.contracts.channel import Channel
 from agent.contracts.tools import (
+    GetReportInput,
+    GetReportOk,
     GetReportOutput,
     ListReportsInput,
     ListReportsOutput,
@@ -22,6 +27,12 @@ from agent.contracts.views import StatsView, TraceView
 from agent.domain.identity import UserId
 from agent.domain.persona import Persona, PersonaVersion
 from agent.domain.profile import UserProfile
+from agent.errors import MessageClass, PermanentError
+from agent.tools.context import TurnContext
+from agent.tools.reports import get_my_report, list_my_reports
+
+_NO_CONVERSATION = UUID(int=0)
+"""A view runs outside any Conversation, so ``this_conversation`` matches nothing."""
 
 
 class Views:
@@ -42,15 +53,51 @@ class Views:
     - Raises only classified errors (``agent.errors``); adapters render their catalog message.
     """
 
-    def __init__(self, ports: Ports) -> None:
+    def __init__(self, ports: Ports, limits: Limits) -> None:
         self._ports = ports
+        self._limits = limits
 
     # reports: /reports, GET /api/reports, GET /api/reports/{id}
     def reports(self, user_id: UserId, query: ListReportsInput) -> ListReportsOutput:
-        raise NotImplementedError
+        out = list_my_reports(query, self._context(user_id))
+        reports = [r.model_copy(update={"title": self._clean(r.title)}) for r in out.reports]
+        return out.model_copy(update={"reports": reports})
 
     def report(self, user_id: UserId, report_id: UUID) -> GetReportOutput:
-        raise NotImplementedError
+        out = get_my_report(GetReportInput(report_id=report_id), self._context(user_id))
+        if not isinstance(out, GetReportOk):
+            return out
+        r, clean = out.report, self._clean
+        structured = r.structured.model_copy(
+            update={
+                "title": clean(r.structured.title),
+                "summary": clean(r.structured.summary),
+                "insights": [clean(i) for i in r.structured.insights],
+                "action_items": [clean(a) for a in r.structured.action_items],
+                "period": clean(r.structured.period) if r.structured.period else None,
+            }
+        )
+        fields = {f: clean(getattr(r, f)) for f in ("title", "question", "sql", "markdown")}
+        report = r.model_copy(update={**fields, "structured": structured})
+        return out.model_copy(update={"report": report})
+
+    def _context(self, user_id: UserId) -> TurnContext:
+        """The same context a tool gets, for the User the channel resolved."""
+        user = self._ports.users.load(user_id)
+        if user is None or user.role is None:
+            raise PermanentError(f"no role for {user_id!r}", message_class=MessageClass.NO_ROLE)
+        return TurnContext(
+            user=user,
+            conversation_id=_NO_CONVERSATION,
+            turn_id="view",
+            channel=Channel.CLI,
+            ports=self._ports,
+            limits=self._limits,
+        )
+
+    def _clean(self, text: str) -> str:
+        """The second check on the way out; stored content was filtered on write."""
+        return self._ports.pii.scan(text).text
 
     # profile: /profile, GET|DELETE /api/profile
     def profile(self, user_id: UserId) -> UserProfile:

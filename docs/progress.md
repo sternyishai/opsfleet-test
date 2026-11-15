@@ -4,8 +4,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-15)
 
-**Phase:** 4. Slices 1 (#5), 2 (#6) and 3 (#7) built. Next: slice 4.
-**Branch:** `main`
+**Phase:** 4. Slices 1 (#5), 2 (#6), 3 (#7) and 4 (#8) built. Next: the slice 4 manual CLI demo (screenshot for the PR), then slice 5.
+**Branch:** `feat/8-saved-reports`
 
 | Step | Status |
 |---|---|
@@ -26,6 +26,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Slice 2 retro | ✅ never-raises test over hostile input; `CODING_STANDARDS` §2: safety changes get an adversarial Spec review; ruff skips `ASSIGNMENT.md`; sqlglot notes in LLD 06; branch name in `CLAUDE.md` |
 | Slice 3: resilience (#7, branch `feat/7-resilience`) | ✅ `run_sql` guard → dry run → execute with one shared budget, `QUERY_TOO_LARGE`/`SELF_CORRECTION_EXHAUSTED` give-up with a plain `tried` list, empty-result probe in code (`tools/probe.py`) from guard filter literals, insisted out-of-scope Brand → `OUT_OF_SCOPE` ends the turn; `adapters/resilience.py` (tenacity retry honouring `Retry-After`, breaker, token bucket) behind both the Gemini factory (fallback chain → `MODEL_BUSY`, `llm` spans) and the BigQuery runner (client retries off); 282 offline tests. Live: CEO 2025 revenue still $2,358,149.49; a free-tier 429 ends as `MODEL_BUSY` with `llm.errors` naming it. Review fixed: half-open breaker stuck after a non-retryable probe, raw transport errors unclassified, filters attributed to the wrong table, `brand` compared with an expression slipping past the refusal |
 
+| Slice 4: Saved Reports + deletion (#8, branch `feat/8-saved-reports`) | ✅ `SqliteReportRepository` (FTS5, same file as the users) + in-memory fake, both under one test suite; `save_report` (PII filter on every field, guard scope, entity extraction with `MODEL_ENTITY_EXTRACTION` failing soft), `list_my_reports`, `get_my_report` bound to the analyst; `parse_reply`; deletion branch `plan_deletion` → `confirm_deletion` (`interrupt()`) → `execute_deletion` → `after` (deferred request); `ChatService` resumes a paused Conversation; `/reports`; 409 offline tests. Deviations in `decision-log.md` § Slice 4. Not yet seen live |
+
 ## Decisions made this session, not yet written elsewhere
 
 - None. Slice 3's approved deviations (breaker per model, `QUERY_TOO_LARGE`, plain catalog wording) are in `decision-log.md` § Slice 3.
@@ -40,10 +42,9 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> /mattpocock-skills:implement #8
+> Run the slice 4 CLI demo (save two reports, delete one by Brand with `yes except`), then /mattpocock-skills:implement for the next ready slice
 
 Notes for what comes next:
 
-- `save_report` (slice 4) should call `ports.pii.scan` on every text field; `RegexPiiFilter` is wired. It reads `SqlBudget.last_scope`, which `run_sql` now also sets on an empty result.
 - The probe was not seen live: the AI Studio free-tier quota for the analyst model ran out during the session. Try "orders from Customers whose state is 'CA'" (thelook stores full state names) when quota allows.
 - No `MODEL_ANALYST_FALLBACK` is set in `.env`, so a 429 on Flash goes straight to `MODEL_BUSY`; setting it to Flash-Lite makes the fallback live.
