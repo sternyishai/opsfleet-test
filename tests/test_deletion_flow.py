@@ -157,7 +157,8 @@ def test_a_second_bare_yes_on_a_large_plan_cancels() -> None:
 
     [reply] = say(svc, "yes")
 
-    assert isinstance(reply, AgentReply) and reply.message_class is MessageClass.PLAN_EXPIRED
+    assert isinstance(reply, AgentReply)
+    assert reply.message_class is MessageClass.PLAN_ANSWER_INVALID
     assert len(titles(reports)) == 21
 
 
@@ -278,3 +279,20 @@ def test_the_except_example_names_an_item_in_the_plan() -> None:
 
     assert isinstance(prompt, ConfirmationRequest)
     assert '"yes except 2"' in prompt.text
+
+
+def test_an_answer_that_does_not_fit_the_plan_says_so() -> None:
+    reports = InMemoryReportRepository()
+    save(reports, "Q1 sales", mentions=("Calvin Klein",))
+    svc, llm = service(reports, [DELETE])
+    say(svc, "delete all reports mentioning Calvin Klein")
+
+    [reply] = say(svc, "yes except 2")  # there is no report 2
+    [later] = say(svc, "yes")
+
+    assert isinstance(reply, AgentReply)
+    assert reply.message_class is MessageClass.PLAN_ANSWER_INVALID
+    assert "nothing was deleted" in reply.markdown
+    assert llm.steps.count(ModelStep.ROUTER) == 1  # answered here, not re-routed
+    assert isinstance(later, AgentReply) and later.message_class is MessageClass.PLAN_EXPIRED
+    assert titles(reports) == ["Q1 sales"]

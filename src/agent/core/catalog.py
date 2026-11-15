@@ -64,6 +64,10 @@ BUNDLED: dict[MessageClass, str] = {
     MessageClass.PLAN_EXPIRED: (
         "That confirmation is no longer open, so nothing was deleted. Ask again to start over."
     ),
+    MessageClass.PLAN_ANSWER_INVALID: (
+        "That answer doesn't fit the list I showed, so nothing was deleted and I've cancelled "
+        "the request. Ask again to start over."
+    ),
     MessageClass.REPORT_NOT_FOUND: (
         "I couldn't find that report. Ask to list your reports to see what you have."
     ),
