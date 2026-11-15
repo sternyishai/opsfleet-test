@@ -47,7 +47,7 @@ The checklist from the [README](README.md#checklist-for-each-tool-or-port) is fi
 | **Ports** | `QueryGuard`, `QueryRunner` |
 | **Safety** | Nothing reaches BigQuery without `QueryGuard.check`; probes pass the same guard; Brands bound as parameters; forced `LIMIT`; dry run then `maximum_bytes_billed` ([03](../hld/03-safety-and-pii.md#query-guard-the-core-guarantee)) |
 | **Failures** | guard rejection, dry-run error, bytes cap, runtime error → `retry` (shared budget of 2) → `gave_up` (`SELF_CORRECTION_EXHAUSTED`). Out-of-scope Brand → `retry` with the Brands the User *can* analyze; if the model insists, the turn ends with `OUT_OF_SCOPE`. 0 rows → `empty` with a probe hint, once; then `final`. BigQuery down → `TransientError` (`DATA_SOURCE_DOWN`). |
-| **Trace** | `sql.model`, `sql.rewritten`, `guard.decision`, `guard.reason`, `dry_run.bytes`, `bytes_billed`, `row_count`, `attempt`, `error`, `probe.findings` |
+| **Trace** | `sql.model`, `sql.rewritten`, `guard.*` on a `query_guard` span ([06](06-ports.md#queryguard)), `dry_run.bytes`, `bytes_billed`, `row_count`, `attempt`, `error`, `probe.findings` |
 | **Tests** · slices 1–3 · `tests/test_query_guard.py`, `tests/test_run_sql.py` | the safety suite (single SELECT, allowlist, PII columns, out-of-scope Brand, `num_of_item`, scope rewrite per role, parameter binding, forced LIMIT); syntax error then fix; wrong literal → probe hint → success; bytes cap; budget exhausted → graceful; BigQuery down |
 
 ### `save_report`

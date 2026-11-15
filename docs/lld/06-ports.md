@@ -20,7 +20,7 @@ ADR 0006 lists ten ports. The LLD adds three: **`UserDirectory`**, the seam betw
 | [`ScorecardSink`](../../src/agent/ports/scorecards.py) | `publish(cases, scorecard)`, `baseline(...)` | JSON in `evals/runs/`; Phoenix experiments if running | same, or Langfuse / LangSmith datasets |
 | [`Delivery`](../../src/agent/ports/delivery.py) | `render(report)`, `send(author_id, rendered, key)` | not wired | email, Slack, push |
 
-In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `profiles` are `None` until slices 4 and 7 wire them; until then every User has an empty profile. Slice 1 stand-ins: `NullTrioRetriever` and `PassThroughPiiFilter` ([adapters/null.py](../../src/agent/adapters/null.py)), and `FilePersonaStore` serving `seed/persona.yaml` as version 1 (catalog classes it does not word use the bundled wording in [core/catalog.py](../../src/agent/core/catalog.py)).
+In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `profiles` are `None` until slices 4 and 7 wire them; until then every User has an empty profile. Stand-ins: `NullTrioRetriever` ([adapters/null.py](../../src/agent/adapters/null.py)), and `FilePersonaStore` serving `seed/persona.yaml` as version 1 (catalog classes it does not word use the bundled wording in [core/catalog.py](../../src/agent/core/catalog.py)).
 
 ## Checklist per port
 
@@ -43,7 +43,15 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `pr
 - **Depends on:** nothing. Pure, which makes it the cheapest module to test exhaustively.
 - **Safety:** the core guarantee of Req 2 in the prototype ([03](../hld/03-safety-and-pii.md#query-guard-the-core-guarantee)).
 - **Failures:** never raises for bad SQL; fails closed to `GuardRejected(UNPARSEABLE)`.
-- **Trace:** `guard.decision`, `guard.reason`, `guard.rewritten`, `guard.tables`, `guard.scope_brands` (count for Managers).
+- **How it checks** ([adapters/query_guard.py](../../src/agent/adapters/query_guard.py)), in this order:
+  1. one `SELECT` or set operation (CTEs allowed), else `NOT_SINGLE_SELECT`;
+  2. an allowlist of node types over the whole tree (ADR 0011), else `UNSUPPORTED_SYNTAX`. Functions sqlglot does not know (`EXTERNAL_QUERY`, `ML.*`, UDFs), session reads (`SESSION_USER`, `CURRENT_USER`, every `CURRENT_*` except the clock) and query parameters (`@x`, `@@x`) are rejected: `run_sql` binds none, so the model inlines a Trio's parameters;
+  3. tables by name, qualified only with `thelook_ecommerce` / `bigquery-public-data`; a CTE may not shadow a warehouse table, so the scoped subqueries' own table names always mean the warehouse (`TABLE_NOT_ALLOWED`);
+  4. columns by name, case ignored: the seven PII columns plus `city` and `user_geom` (`COLUMN_NOT_ALLOWED`), and `num_of_item` for a Manager (`ORDER_LEVEL_FIELD`, hint: `COUNT(*)` per `order_id` on `order_items`). Other unknown names are left to the dry run: the scoped subqueries project only the allowlist, so they cannot resolve;
+  5. Brand literals compared with a `brand` column (`=`, `!=`, `IS [NOT] DISTINCT FROM`, `IN (...)`, `IN UNNEST([...])`, `'x' IN (brand)`, `LIKE`, `STARTS_WITH`, `REGEXP_CONTAINS`, also under `LOWER`/`UPPER`/`TRIM`/`CAST`), case ignored except for a regex: one that can select no Brand in scope is `BRAND_OUT_OF_SCOPE` with the literals; `run_sql` adds the scope note as the hint. A comparison it cannot read (a computed literal such as `CONCAT('Pu', 'ma')`, a CTE column of another name) is still scoped by the rewrite, so it can only come back empty;
+  6. the rewrite: each warehouse table becomes `(SELECT <allowlist> FROM t [WHERE <HLD 03 filter>]) AS <alias>`, the filters built from constant templates over `@brands`; `params = {"brands": sorted(scope)}` for a Manager, `{}` for an Executive. Then the outer `LIMIT`.
+- **Not yet:** `GuardAllowed.filters` is empty until the empty-result probe (slice 3).
+- **Trace:** `guard.decision`, `guard.reason`, `guard.rewritten`, `guard.tables`, `guard.scope_brands` (count for Managers, `"all"` for Executives), on the `query_guard` span that `run_sql` opens around the call (the guard itself is pure).
 - **Tests** · slice 2 · `tests/test_query_guard.py`: the full safety suite (see `run_sql` in [05](05-tools.md#run_sql)). Gated at 100%.
 
 ### `QueryRunner`
@@ -61,6 +69,7 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `pr
 - **Depends on:** nothing. Called by `Outbound.emit` and `save_report` only.
 - **Safety:** ADR 0003 layer 3. Never skipped; falls back to regex.
 - **Failures:** never raises; a managed-detector outage is recorded as `detectors = "regex"`.
+- **Regex detectors** ([adapters/pii_regex.py](../../src/agent/adapters/pii_regex.py)), applied in order email, coordinates, phone, street address, postal code; a hit becomes `[REDACTED:<type>]`. Tuned so an answer's figures are not hits: a bare 5-digit number (a Customer ID) is a postal code only after a label (`ZIP`, `postal code`) or a US state code, or in ZIP+4 form; a bare coordinate pair needs five decimals; a phone needs separators.
 - **Trace:** `pii.hits` (types only), `pii.detectors`, `pii.fallback`.
 - **Tests** · slice 2 · `tests/test_pii.py`: each detector; redaction format; every `OutboundMessage` kind passes `Outbound.emit`; a saved report is filtered before the write.
 

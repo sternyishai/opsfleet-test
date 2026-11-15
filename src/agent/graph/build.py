@@ -25,6 +25,7 @@ from agent.config import Limits
 from agent.contracts.channel import AgentReply
 from agent.contracts.router import RouterDecision, Verdict
 from agent.core.catalog import render
+from agent.core.input_rules import screen
 from agent.domain.profile import UserProfile
 from agent.errors import ErrorClass, MessageClass, TransientError
 from agent.graph.analysis import analysis
@@ -162,9 +163,12 @@ class _Nodes:
         return update
 
     def input_guard(self, state: AgentState) -> dict[str, Any]:
-        """The router call; it is also the guard's classifier. Fails closed: if the call
-        raises, the turn ends at the catch-all and no analysis runs."""
+        """Deterministic rules first, then the router call, which is also the guard's
+        classifier. Fails closed: if the call raises, the turn ends at the catch-all and no
+        analysis runs."""
         messages = state["messages"]
+        if verdict := screen(_last_text(state), max_chars=self._limits.input_max_chars):
+            return {"error_class": ErrorClass.PERMANENT, "message_class": _BLOCKED[verdict]}
         # json_schema: Gemini's native schema mode resolves the nested $defs of RouterDecision.
         model = self._ports.llm.chat(ModelStep.ROUTER).with_structured_output(
             RouterDecision, method="json_schema"

@@ -10,6 +10,12 @@ from pydantic import BaseModel
 
 from agent.domain.query import TableName
 
+PII_COLUMNS: frozenset[str] = frozenset(
+    {"first_name", "last_name", "email", "street_address", "postal_code", "latitude", "longitude"}
+)
+HIDDEN_COLUMNS: frozenset[str] = PII_COLUMNS | {"city", "user_geom"}
+"""Columns of the four tables the guard rejects by name, wherever they appear."""
+
 
 class ColumnSpec(BaseModel):
     name: str

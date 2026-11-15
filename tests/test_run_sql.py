@@ -5,9 +5,15 @@ from agent.domain.identity import Role, UserContext
 from agent.domain.query import QueryResult, RejectReason, ResultSummary
 from agent.tools.analysis import run_sql
 from agent.tools.context import SqlBudget
-from tests.fakes import FakeQueryRunner, fake_ports, turn_context
+from tests.fakes import FakeQueryRunner, FakeTracer, fake_ports, turn_context
 
 CEO = UserContext(user_id="ceo", role=Role.EXECUTIVE, access_version=1)
+MANAGER = UserContext(
+    user_id="manager-a",
+    role=Role.MANAGER,
+    brands=frozenset({"Calvin Klein", "Tommy Hilfiger"}),
+    access_version=1,
+)
 REVENUE = QueryResult(
     columns=["revenue"],
     rows=[{"revenue": 1234567.89}],
@@ -41,7 +47,10 @@ def test_runner_gets_the_guarded_sql_and_the_limits() -> None:
     run_sql(RunSqlInput(sql="SELECT brand FROM products"), ctx, SqlBudget())
 
     [(sql, params, max_bytes, max_rows)] = runner.executed
-    assert sql == "SELECT brand FROM products LIMIT 1000"
+    assert sql == (
+        "SELECT brand FROM (SELECT id, cost, category, name, brand, retail_price, department, "
+        "sku, distribution_center_id FROM products) AS products LIMIT 1000"
+    )
     assert params == {}
     assert max_bytes == 2 * 1024**3
     assert max_rows == 200
@@ -68,3 +77,55 @@ def test_summary_keeps_no_figures_for_multi_row_results() -> None:
     )
 
     assert ResultSummary.of(rows) == ResultSummary(columns=["brand", "revenue"], row_count=2)
+
+
+def test_a_manager_query_binds_their_brands_as_a_parameter() -> None:
+    runner = FakeQueryRunner(REVENUE)
+    ctx = turn_context(MANAGER, fake_ports(MANAGER, warehouse=runner))
+
+    out, budget = run_sql(
+        RunSqlInput(sql="SELECT SUM(sale_price) FROM order_items"), ctx, SqlBudget()
+    )
+
+    assert isinstance(out, RunSqlOk)
+    [(sql, params, _, _)] = runner.executed
+    assert params == {"brands": ["Calvin Klein", "Tommy Hilfiger"]}
+    assert "@brands" in sql and "Calvin" not in sql
+    assert budget.last_scope == MANAGER.scope
+
+
+def test_an_out_of_scope_brand_is_a_retry_naming_the_brands_the_user_can_analyze() -> None:
+    runner = FakeQueryRunner(REVENUE)
+    ctx = turn_context(MANAGER, fake_ports(MANAGER, warehouse=runner))
+
+    out, _ = run_sql(
+        RunSqlInput(sql="SELECT COUNT(*) FROM products WHERE brand = 'Nike'"), ctx, SqlBudget()
+    )
+
+    assert isinstance(out, RunSqlRetry)
+    assert out.reason is RejectReason.BRAND_OUT_OF_SCOPE
+    assert out.hint == "You can analyze Calvin Klein and Tommy Hilfiger."
+    assert "Nike" in out.error
+    assert runner.executed == []
+
+
+def test_guard_decisions_are_trace_attributes() -> None:
+    ports = fake_ports(MANAGER)
+    ctx = turn_context(MANAGER, ports)
+
+    run_sql(RunSqlInput(sql="SELECT COUNT(*) FROM orders"), ctx, SqlBudget())
+    run_sql(RunSqlInput(sql="DROP TABLE orders"), ctx, SqlBudget())
+
+    tracer = ports.tracer
+    assert isinstance(tracer, FakeTracer)
+    allowed, rejected = [s.attributes for s in tracer.spans if s.name == "query_guard"]
+    assert allowed == {
+        "guard.decision": "allowed",
+        "guard.reason": None,
+        "guard.rewritten": True,
+        "guard.tables": ["orders"],
+        "guard.scope_brands": 2,
+    }
+    assert rejected["guard.decision"] == "rejected"
+    assert rejected["guard.reason"] == "not_single_select"
+    assert rejected["guard.tables"] == []

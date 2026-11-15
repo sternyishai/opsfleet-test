@@ -31,7 +31,7 @@ from agent.contracts.tools import (
     TableSchema,
 )
 from agent.domain.identity import BrandScope, Role
-from agent.domain.query import GuardRejected, RejectReason
+from agent.domain.query import GuardAllowed, GuardDecision, GuardRejected, RejectReason
 from agent.domain.warehouse import ALLOWLIST
 from agent.errors import SelfCorrectableError
 from agent.tools.context import SqlBudget, TurnContext
@@ -89,11 +89,12 @@ def run_sql(
     the probe and the plain-language ``tried`` list arrive with slice 3.
     """
     budget = replace(budget, attempts=budget.attempts + 1)
-    decision = ctx.ports.guard.check(args.sql, ctx.user.scope, row_limit=ctx.limits.sql_row_limit)
+    decision = _guarded(args.sql, ctx)
     if isinstance(decision, GuardRejected):
-        return _retry(
-            "guard_rejected", decision.detail, ctx, budget, decision.reason, decision.hint
-        )
+        hint = decision.hint
+        if decision.reason is RejectReason.BRAND_OUT_OF_SCOPE:  # the Brands they *can* analyze
+            hint = scope_note(ctx.user.scope)
+        return _retry("guard_rejected", decision.detail, ctx, budget, decision.reason, hint)
     try:
         result = ctx.ports.warehouse.execute(
             decision.rewritten_sql,
@@ -106,6 +107,24 @@ def run_sql(
     return RunSqlOk(result=result, attempt=budget.attempts), replace(
         budget, last_scope=decision.scope
     )
+
+
+def _guarded(sql: str, ctx: TurnContext) -> GuardDecision:
+    """``QueryGuard.check``, with its decision on a span. The guard itself is pure."""
+    scope = ctx.user.scope
+    with ctx.ports.tracer.span("query_guard") as span:
+        decision = ctx.ports.guard.check(sql, scope, row_limit=ctx.limits.sql_row_limit)
+        allowed = isinstance(decision, GuardAllowed)
+        span.set(
+            **{
+                "guard.decision": decision.decision,
+                "guard.reason": None if allowed else decision.reason.value,
+                "guard.rewritten": allowed and decision.rewritten,
+                "guard.tables": list(decision.tables) if allowed else [],
+                "guard.scope_brands": "all" if scope.all_brands else len(scope.brands),
+            }
+        )
+    return decision
 
 
 def _retry(

@@ -17,7 +17,8 @@ from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-from agent.adapters.null import NullTrioRetriever, PassThroughPiiFilter
+from agent.adapters.null import NullTrioRetriever
+from agent.adapters.pii_regex import RegexPiiFilter
 from agent.adapters.query_guard import SqlglotQueryGuard
 from agent.composition import Ports
 from agent.config import Limits
@@ -58,23 +59,30 @@ def analysis_decision(question: str = "total revenue in 2025") -> RouterDecision
 
 class FakeLLMFactory:
     """The router returns ``decision``; the analyst replies with ``analyst`` in order.
-    ``fail`` makes every ``chat`` call raise it, like a model outage."""
+    ``fail`` makes every ``chat`` call raise it, like a model outage; ``router_fail`` only the
+    router's. ``steps`` records every model asked for."""
 
     def __init__(
         self,
         analyst: list[AIMessage] | None = None,
         decision: RouterDecision | None = None,
         fail: Exception | None = None,
+        router_fail: Exception | None = None,
     ) -> None:
         self.analyst = ScriptedChatModel(messages=iter(analyst or []), seen=[])
         self.router = ScriptedChatModel(
             messages=iter([]), structured=decision or analysis_decision(), seen=[]
         )
         self.fail = fail
+        self.router_fail = router_fail
+        self.steps: list[ModelStep] = []
 
     def chat(self, step: ModelStep) -> BaseChatModel:
+        self.steps.append(step)
         if self.fail is not None:
             raise self.fail
+        if step is ModelStep.ROUTER and self.router_fail is not None:
+            raise self.router_fail
         return self.router if step is ModelStep.ROUTER else self.analyst
 
     def embeddings(self) -> Embeddings:
@@ -195,7 +203,7 @@ def fake_ports(
         llm=llm or FakeLLMFactory(),
         guard=SqlglotQueryGuard(),
         warehouse=warehouse or FakeQueryRunner(),
-        pii=PassThroughPiiFilter(),
+        pii=RegexPiiFilter(),
         users=FakeUsers(*users),
         trios=trios or NullTrioRetriever(),
         personas=FakePersonas(),
