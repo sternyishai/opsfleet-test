@@ -57,7 +57,7 @@ The first node of every turn classifies the message. Allowed messages get one of
 
 ## Query guard: the core guarantee
 
-Every SQL statement the model writes goes through `run_sql`, and `run_sql` always runs the query guard first. It parses the SQL into an AST (with `sqlglot`, BigQuery dialect) and **fails closed**: anything it cannot parse or verify is rejected.
+Every SQL statement the model writes goes through `run_sql`, and `run_sql` always runs the query guard first. It parses the SQL into an AST (with `sqlglot`, BigQuery dialect) and **fails closed**: anything it cannot parse or verify is rejected. sqlglot is lenient by design, so the guard allows only node types it knows, and the BigQuery dry run is the validator ([ADR 0011](../adr/0011-query-guard-parses-with-sqlglot.md)).
 
 1. **One read-only statement.** Exactly one `SELECT` (CTEs allowed). No DML, DDL, scripting, `EXECUTE IMMEDIATE` or multiple statements.
 2. **Allowlist.** Only `orders`, `order_items`, `products` and `users`, and only their non-PII columns. Other `thelook` tables and every PII column are rejected by name.

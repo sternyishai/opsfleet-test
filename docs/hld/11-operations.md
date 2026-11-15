@@ -145,7 +145,7 @@ Every control below is a ceiling, so a bug or a heavy User cannot turn into an o
 
 | Control | Ceiling (starting value) | Where |
 |---|---|---|
-| Bytes per query | `maximum_bytes_billed` (e.g. 20 GB, ~$0.12); over-cap queries are rejected at the free dry run | `run_sql` ([06](06-resilience.md)) |
+| Bytes per query | `maximum_bytes_billed` (e.g. 20 GB, ~$0.12); over-cap queries are rejected at the free dry run, or at execution when queries run as the User under row-level security, where a dry run reports 0 bytes ([ADR 0011](../adr/0011-query-guard-parses-with-sqlglot.md)) | `run_sql` ([06](06-resilience.md)) |
 | Model calls per turn | Analysis-step cap, 2 SQL retries, 1 empty-result probe (code, not a model call), a turn deadline | Graph state ([06](06-resilience.md)) |
 | Prompt size | Last N turns verbatim plus a running summary; result summaries, never rows | Conversation state ([01](01-architecture.md#conversation-state)) |
 | Per-User daily quota | Tokens and BigQuery bytes, about 5× a typical User's day; "daily quota reached" message, resets at midnight | Chat API |

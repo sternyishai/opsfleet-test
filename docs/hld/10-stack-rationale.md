@@ -70,7 +70,7 @@ LangGraph is chosen because the hardest requirements map directly onto its primi
 
 | Library | Used for | Why |
 |---|---|---|
-| **sqlglot** | Query guard: parse, check and rewrite SQL as an AST | Real BigQuery-dialect parser, fails closed, and supports other dialects if the warehouse changes ([03](03-safety-and-pii.md)) |
+| **sqlglot** | Query guard: parse, check and rewrite SQL as an AST | Rewritable syntax tree, official BigQuery dialect, pure Python. Lenient by design, so the BigQuery dry run validates after it ([ADR 0011](../adr/0011-query-guard-parses-with-sqlglot.md)) |
 | **Pydantic** | Tool inputs and outputs, events, domain records | Typed contracts the model and the tests share; the LLD is written as Pydantic schemas |
 | **tenacity** | Backoff with jitter on retryable errors | Small, well-known, declarative ([06](06-resilience.md)) |
 | **OpenTelemetry + OpenInference** | Spans for every node and tool | Vendor-neutral; the backend is a deployment choice ([08](08-observability.md)) |
