@@ -32,7 +32,7 @@ import sqlite3
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -81,7 +81,8 @@ class Ports:
     """None until slice 7: every User then has an empty profile."""
 
 
-def build_ports(settings: Settings) -> Ports:
+def build_ports(settings: Settings, *, trios_enabled: bool = True) -> Ports:
+    """``trios_enabled=False`` (or an empty ``MODEL_EMBEDDING``) is the Null retriever."""
     from agent.adapters.bigquery import BigQueryRunner
     from agent.adapters.llm_gemini import GeminiLLMFactory
     from agent.adapters.null import NullTrioRetriever
@@ -113,7 +114,7 @@ def build_ports(settings: Settings) -> Ports:
             embeddings=llm.embeddings(),
             min_score=limits.trio_min_score,
         )
-        if settings.models.embedding
+        if trios_enabled and settings.models.embedding
         else NullTrioRetriever()
     )
     return Ports(
@@ -192,7 +193,6 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
         prereg_id,
         read_case_files,
     )
-    from agent.adapters.null import NullTrioRetriever
     from agent.adapters.scorecard_phoenix import PhoenixScorecardSink
     from agent.evals.runner import EvalEnvironment, EvalRunner, load_cases
     from agent.evals.scorers import (
@@ -219,9 +219,7 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
             "app_db_url": f"sqlite:///{scratch / 'base.db'}",
         }
     )
-    ports = build_ports(eval_settings)
-    if not trios_enabled:
-        ports = replace(ports, trios=NullTrioRetriever())
+    ports = build_ports(eval_settings, trios_enabled=trios_enabled)
     models = settings.models
     resolved = {step: models.resolve(step) for step in ModelStep}
     env = EvalEnvironment(

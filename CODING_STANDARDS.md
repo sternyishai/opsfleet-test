@@ -45,7 +45,7 @@ From [LLD 04 · Error model](docs/lld/04-contracts.md#error-model).
 
 ## 5. Model calls
 
-- Every separate model call has its own `ModelStep` and its own `MODEL_<STEP>` / `MODEL_<STEP>_FALLBACK` pair ([LLD 06 · LLMFactory](docs/lld/06-ports.md#llmfactory)).
+- Every separate model call has its own `ModelStep` and its own `MODEL_<STEP>` / `MODEL_<STEP>_FALLBACK` pair ([LLD 06 · LLMFactory](docs/lld/06-ports.md#llmfactory)). The one exception is embeddings: `LLMFactory.embeddings()` has the single setting `MODEL_EMBEDDING` and no fallback, because vectors from two models are not comparable.
 - Prompts are data passed to the model, not built by string-joining untrusted text into instructions. Tool results and stored notes go in delimited blocks.
 
 ## 6. Tests

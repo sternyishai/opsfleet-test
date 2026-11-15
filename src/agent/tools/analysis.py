@@ -53,7 +53,7 @@ __all__ = [
     "run_sql",
     "save_report",
     "search_golden_trios",
-    "search_trios",
+    "traced_trio_search",
 ]
 
 _NARROW_HINT = "Narrow the date range or aggregate earlier."
@@ -105,7 +105,7 @@ def scope_note(scope: BrandScope) -> str:
 def search_golden_trios(args: SearchTriosInput, ctx: TurnContext) -> SearchTriosOutput:
     """Re-search for a sub-question, in the User's own scope (never one from the model).
     A ``TransientError`` returns no matches; it never fails the step."""
-    result = search_trios(
+    result = traced_trio_search(
         ctx.ports.trios,
         ctx.ports.tracer,
         args.query,
@@ -118,7 +118,7 @@ def search_golden_trios(args: SearchTriosInput, ctx: TurnContext) -> SearchTrios
     return SearchTriosOutput(matches=result.matches if result else [])
 
 
-def search_trios(
+def traced_trio_search(
     trios: TrioRetriever,
     tracer: Tracer,
     query: str,

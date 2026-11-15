@@ -337,3 +337,62 @@ def test_the_analyst_can_re_search_for_a_sub_question(tmp_path: Path) -> None:
     tool_results = [m for m in llm.analyst.seen[-1] if isinstance(m, ToolMessage)]
     assert '<tool_result name="search_golden_trios">' in str(tool_results[-1].content)
     assert "return-rate-by-category@1" in str(tool_results[-1].content)
+
+
+# --- review fixes: sync and edge cases -------------------------------------------------------
+
+
+def _seed_copy(tmp_path: Path) -> Path:
+    folder = tmp_path / "trios"
+    folder.mkdir()
+    for path in SEED.glob("*.yaml"):
+        (folder / path.name).write_text(path.read_text())
+    return folder
+
+
+def _edit(path: Path, **changes: object) -> None:
+    trio = yaml.safe_load(path.read_text()) | changes
+    path.write_text(yaml.safe_dump(trio))
+
+
+def _retriever_over(folder: Path, tmp_path: Path) -> SqliteTrioRetriever:
+    return SqliteTrioRetriever(
+        tmp_path / "app.db", seed=folder, embeddings=FakeEmbeddings(seed_vectors()), min_score=0.75
+    )
+
+
+def test_a_trio_tagged_with_no_brands_reaches_no_manager(tmp_path: Path) -> None:
+    folder = _seed_copy(tmp_path)
+    _edit(folder / "return-rate-by-category.yaml", scope={"all_brands": False, "brands": []})
+    trios = _retriever_over(folder, tmp_path)
+    no_brands = UserContext(user_id="m", role=Role.MANAGER, access_version=1)
+
+    assert trios.search(RETURNS, MANAGER_A.scope).matches == []
+    assert trios.search(RETURNS, no_brands.scope).matches == []
+
+
+def test_a_new_seed_version_supersedes_the_old_one(tmp_path: Path) -> None:
+    folder = _seed_copy(tmp_path)
+    _retriever_over(folder, tmp_path)
+    _edit(folder / "return-rate-by-category.yaml", version=2)
+
+    trios = _retriever_over(folder, tmp_path)  # a restart after the edit
+
+    assert refs(trios.search(RETURNS, MANAGER_A.scope)) == ["return-rate-by-category@2"]
+
+
+def test_a_deleted_seed_file_is_no_longer_retrieved(tmp_path: Path) -> None:
+    folder = _seed_copy(tmp_path)
+    _retriever_over(folder, tmp_path)
+    (folder / "return-rate-by-category.yaml").unlink()
+
+    trios = _retriever_over(folder, tmp_path)
+
+    assert trios.search(RETURNS, MANAGER_A.scope).matches == []
+
+
+def test_a_query_vector_of_the_wrong_size_is_a_transient_error(tmp_path: Path) -> None:
+    trios = retriever(tmp_path, FakeEmbeddings(seed_vectors() | {"returns?": [1.0, 0.0]}))
+
+    with pytest.raises(TransientError):
+        trios.search("returns?", MANAGER_A.scope)

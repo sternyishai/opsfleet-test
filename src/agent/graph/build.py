@@ -40,7 +40,7 @@ from agent.graph.prompts import router_messages
 from agent.graph.state import TURN_KEYS, AgentGraph, AgentState, TurnRuntime
 from agent.ports.llm import ModelStep
 from agent.ports.tracer import Tracer
-from agent.tools.analysis import search_trios
+from agent.tools.analysis import traced_trio_search
 
 
 class Node(StrEnum):
@@ -259,7 +259,7 @@ class _Nodes:
         assert user is not None
         router = state["router"]
         question = (router.search_question if router else None) or _last_text(state)
-        result = search_trios(
+        result = traced_trio_search(
             self._ports.trios,
             self._ports.tracer,
             question,
