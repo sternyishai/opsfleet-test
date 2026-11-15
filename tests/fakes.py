@@ -3,6 +3,7 @@
 The query guard is never faked: safety tests use the real ``SqlglotQueryGuard``.
 """
 
+import re
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -28,10 +29,23 @@ from agent.core.chat import ChatService
 from agent.domain.identity import UserContext, UserId
 from agent.domain.persona import Persona, PersonaPath, PersonaVersion, Tone, TonePreset
 from agent.domain.query import DryRunResult, QueryResult
-from agent.errors import ErrorClass
+from agent.domain.reports import (
+    DeletionAuditRecord,
+    DeletionFilter,
+    DeletionPlanItem,
+    DeletionReceipt,
+    ReportEntity,
+    ReportListItem,
+    ReportQuery,
+    SavedReport,
+    match_reason,
+    normalize_entity,
+)
+from agent.errors import ErrorClass, TransientError
 from agent.graph.build import build_graph
 from agent.graph.state import CHECKPOINT_TYPES, AgentGraph
 from agent.ports.llm import ModelStep
+from agent.ports.reports import ReportRepository
 from agent.tools.context import TurnContext
 
 
@@ -46,7 +60,18 @@ class ScriptedChatModel(GenericFakeChatModel):
         return self
 
     def with_structured_output(self, schema: Any, **kwargs: Any) -> Runnable:  # type: ignore[override]
-        return RunnableLambda(lambda _: self.structured)
+        """``structured`` is the value, an exception to raise, or a list of either, used in
+        order (the last one repeats)."""
+
+        def answer(_: Any) -> Any:
+            value = self.structured
+            if isinstance(value, list):
+                value = _next(value)
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+        return RunnableLambda(answer)
 
     def invoke(self, input: Any, config: Any = None, **kwargs: Any) -> AIMessage:  # type: ignore[override]
         self.seen.append(list(input))
@@ -58,21 +83,28 @@ def analysis_decision(question: str = "total revenue in 2025") -> RouterDecision
 
 
 class FakeLLMFactory:
-    """The router returns ``decision``; the analyst replies with ``analyst`` in order.
-    ``fail`` makes every ``chat`` call raise it, like a model outage; ``router_fail`` only the
-    router's. ``steps`` records every model asked for."""
+    """The router returns ``decision`` (a list: one per turn, the last repeats); the analyst
+    replies with ``analyst`` in order. ``structured`` gives other structured-output steps
+    their value (``ModelStep.ENTITY_EXTRACTION``, ``ModelStep.DELETION_FILTER``); an unset
+    one raises, like a model outage. ``fail`` makes every ``chat`` call raise it;
+    ``router_fail`` only the router's. ``steps`` records every model asked for."""
 
     def __init__(
         self,
         analyst: list[AIMessage] | None = None,
-        decision: RouterDecision | None = None,
+        decision: RouterDecision | list[RouterDecision] | None = None,
         fail: Exception | None = None,
         router_fail: Exception | None = None,
+        structured: dict[ModelStep, Any] | None = None,
     ) -> None:
         self.analyst = ScriptedChatModel(messages=iter(analyst or []), seen=[])
         self.router = ScriptedChatModel(
             messages=iter([]), structured=decision or analysis_decision(), seen=[]
         )
+        self.others = {
+            step: ScriptedChatModel(messages=iter([]), structured=value, seen=[])
+            for step, value in (structured or {}).items()
+        }
         self.fail = fail
         self.router_fail = router_fail
         self.steps: list[ModelStep] = []
@@ -83,7 +115,13 @@ class FakeLLMFactory:
             raise self.fail
         if step is ModelStep.ROUTER and self.router_fail is not None:
             raise self.router_fail
-        return self.router if step is ModelStep.ROUTER else self.analyst
+        if step is ModelStep.ROUTER:
+            return self.router
+        if step in (ModelStep.ENTITY_EXTRACTION, ModelStep.DELETION_FILTER):
+            return self.others.get(step) or ScriptedChatModel(
+                messages=iter([]), structured=TransientError("unscripted", dependency="gemini")
+            )
+        return self.analyst
 
     def embeddings(self) -> Embeddings:
         raise AssertionError("no embeddings in slice 1")
@@ -245,6 +283,7 @@ def fake_ports(
     llm: FakeLLMFactory | None = None,
     warehouse: FakeQueryRunner | None = None,
     trios: Any = None,
+    reports: ReportRepository | None = None,
 ) -> Ports:
     return Ports(
         llm=llm or FakeLLMFactory(),
@@ -255,14 +294,22 @@ def fake_ports(
         trios=trios or NullTrioRetriever(),
         personas=FakePersonas(),
         tracer=FakeTracer(),
+        reports=reports or InMemoryReportRepository(),
     )
 
 
-def turn_context(user: UserContext, ports: Ports | None = None) -> TurnContext:
+def turn_context(
+    user: UserContext,
+    ports: Ports | None = None,
+    *,
+    conversation_id: UUID | None = None,
+    turn_id: str = "t1",
+) -> TurnContext:
     return TurnContext(
         user=user,
-        conversation_id=uuid4(),
-        turn_id="t1",
+        conversation_id=conversation_id or uuid4(),
+        turn_id=turn_id,
+        channel=Channel.CLI,
         ports=ports or fake_ports(user),
         limits=Limits(_env_file=None),  # pyright: ignore[reportCallIssue]
     )
@@ -296,3 +343,139 @@ def ask(
 def checkpointer() -> InMemorySaver:
     """Strict, like production: an unregistered type in state fails the test."""
     return InMemorySaver(serde=JsonPlusSerializer(allowed_msgpack_modules=CHECKPOINT_TYPES))
+
+
+class InMemoryReportRepository:
+    """``ReportRepository`` in memory, held to the same tests as the SQLite adapter.
+
+    Full text is a case-folded word match over title, question and markdown, like FTS5's
+    default tokenizer."""
+
+    def __init__(self) -> None:
+        self.reports: dict[UUID, SavedReport] = {}
+        self.entities: dict[UUID, list[ReportEntity]] = {}
+        self.audits: dict[UUID, DeletionAuditRecord] = {}
+
+    def save(
+        self, report: SavedReport, entities: list[ReportEntity], *, channel: Channel
+    ) -> tuple[SavedReport, bool]:
+        for stored in self.reports.values():
+            if (stored.conversation_id, stored.turn_id) == (report.conversation_id, report.turn_id):
+                return stored, False
+        self.reports[report.report_id] = report
+        self.entities[report.report_id] = list(entities)
+        return report, True
+
+    def find(
+        self, author_id: UserId, query: ReportQuery, *, conversation_id: UUID
+    ) -> tuple[list[ReportListItem], int]:
+        narrowed = bool(query.this_conversation or query.entities or query.text or query.created)
+        criteria = DeletionFilter.model_construct(
+            all_reports=not narrowed,
+            this_conversation=query.this_conversation,
+            entities=query.entities,
+            topic=query.text,
+            created=query.created,
+        )
+        found = sorted(
+            (r for r in self._own(author_id) if self._reasons(r, criteria, conversation_id)),
+            key=lambda r: r.created_at,
+            reverse=True,
+        )
+        items = [
+            ReportListItem(
+                report_id=r.report_id,
+                title=r.title,
+                created_at=r.created_at,
+                conversation_id=r.conversation_id,
+                accessible=True,
+                scope=r.scope,
+            )
+            for r in found[: query.limit]
+        ]
+        return items, len(found)
+
+    def get(self, author_id: UserId, report_id: UUID) -> SavedReport | None:
+        report = self.reports.get(report_id)
+        return report if report and report.author_id == author_id else None
+
+    def match(
+        self, author_id: UserId, filter: DeletionFilter, *, conversation_id: UUID
+    ) -> list[DeletionPlanItem]:
+        matched = [
+            (r, reasons)
+            for r in sorted(self._own(author_id), key=lambda r: r.created_at)
+            if (reasons := self._reasons(r, filter, conversation_id))
+        ]
+        return [
+            DeletionPlanItem(
+                index=i,
+                report_id=r.report_id,
+                title=r.title,
+                created_at=r.created_at,
+                reason=reasons,
+            )
+            for i, (r, reasons) in enumerate(matched, start=1)
+        ]
+
+    def delete_with_audit(
+        self,
+        author_id: UserId,
+        plan_id: UUID,
+        report_ids: list[UUID],
+        titles: dict[UUID, str],
+        filter: DeletionFilter,
+    ) -> DeletionReceipt:
+        if plan_id in self.audits:
+            return DeletionReceipt(audit=self.audits[plan_id], already_gone=[], replayed=True)
+        own = {r.report_id for r in self._own(author_id)}
+        deleted = [i for i in report_ids if i in own]
+        for report_id in deleted:
+            del self.reports[report_id]
+            del self.entities[report_id]
+        audit = None
+        if deleted:
+            audit = DeletionAuditRecord(
+                audit_id=uuid4(),
+                plan_id=plan_id,
+                author_id=author_id,
+                deleted_at=datetime.now(UTC),
+                report_ids=deleted,
+                titles=[titles[i] for i in deleted],
+            )
+            self.audits[plan_id] = audit
+        gone = [i for i in report_ids if i not in own]
+        return DeletionReceipt(audit=audit, already_gone=gone, replayed=False)
+
+    def _own(self, author_id: UserId) -> list[SavedReport]:
+        return [r for r in self.reports.values() if r.author_id == author_id]
+
+    def _reasons(self, report: SavedReport, f: DeletionFilter, conversation_id: UUID) -> str:
+        """Why ``report`` matches ``f``; empty when it does not."""
+        if f.all_reports:
+            return match_reason(f, [])
+        if f.this_conversation and report.conversation_id != conversation_id:
+            return ""
+        words = _words(f"{report.title} {report.question} {report.markdown}")
+        keys = {e.normalized for e in self.entities[report.report_id]}
+        hits = [e for e in f.entities if normalize_entity(e) in keys or _phrase_in(e, words)]
+        if f.entities and not hits:
+            return ""
+        if f.topic and not set(_words(f.topic)) <= set(words):
+            return ""
+        if f.created:
+            day = report.created_at.astimezone(UTC).date()
+            start, end = f.created.start, f.created.end
+            if (start and day < start) or (end and day > end):
+                return ""
+        return match_reason(f, hits)
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[^\W_]+", text.casefold())
+
+
+def _phrase_in(phrase: str, words: list[str]) -> bool:
+    want = _words(phrase)
+    n = len(want)
+    return n > 0 and any(words[i : i + n] == want for i in range(len(words) - n + 1))

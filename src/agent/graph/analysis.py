@@ -10,6 +10,7 @@ so no row ever enters ``AgentState`` or a checkpoint (LLD 03 § What never enter
 import json
 from collections.abc import Callable
 from typing import Any
+from uuid import UUID
 
 from langchain_core.messages import AIMessage, BaseMessage, ToolCall, ToolMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
@@ -17,14 +18,30 @@ from pydantic import BaseModel, ValidationError
 
 from agent.composition import Ports
 from agent.config import Limits
-from agent.contracts.tools import GetSchemaInput, RunSqlInput, RunSqlOk, ToolError
+from agent.contracts.tools import (
+    GetReportInput,
+    GetSchemaInput,
+    ListReportsInput,
+    RunSqlInput,
+    RunSqlOk,
+    SaveReportInput,
+    SaveReportOk,
+    ToolError,
+)
 from agent.core.catalog import render
 from agent.domain.query import ResultSummary
 from agent.errors import MessageClass
 from agent.graph.prompts import analyst_system, tool_result
 from agent.graph.state import AgentState
 from agent.ports.llm import ModelStep
-from agent.tools.analysis import get_schema, run_sql, scope_note
+from agent.tools.analysis import (
+    get_my_report,
+    get_schema,
+    list_my_reports,
+    run_sql,
+    save_report,
+    scope_note,
+)
 from agent.tools.context import SqlBudget, TurnContext
 
 
@@ -47,8 +64,20 @@ BOUND_TOOLS = [
         "Run one BigQuery SELECT and get the rows back. A LIMIT is added for you.",
         RunSqlInput,
     ),
+    _spec(
+        "save_report",
+        "Save the answer as one of the User's Saved Reports. Only when the User asked to "
+        "save it; run_sql the query behind it in this turn first.",
+        SaveReportInput,
+    ),
+    _spec(
+        "list_my_reports",
+        "List the User's own Saved Reports, newest first, optionally filtered.",
+        ListReportsInput,
+    ),
+    _spec("get_my_report", "Open one of the User's own Saved Reports by ID.", GetReportInput),
 ]
-"""Slice 1 binds two of the six ``ANALYSIS_TOOLS``; the rest are bound with their slice."""
+"""Five of the six ``ANALYSIS_TOOLS``; ``search_golden_trios`` is bound with slice 7."""
 
 
 class _Turn:
@@ -58,6 +87,7 @@ class _Turn:
         self.ctx = ctx
         self.budget = SqlBudget()
         self.summaries: list[ResultSummary] = []
+        self.saved: list[UUID] = []
         self.end_message: MessageClass | None = None
         """Set when a tool returned a ``ToolError``: the turn ends with that catalog message."""
 
@@ -65,6 +95,11 @@ class _Turn:
         tools: dict[str, Callable[[dict[str, Any]], BaseModel]] = {
             "get_schema": lambda a: get_schema(GetSchemaInput.model_validate(a), self.ctx),
             "run_sql": self._run_sql,
+            "save_report": self._save_report,
+            "list_my_reports": lambda a: list_my_reports(
+                ListReportsInput.model_validate(a), self.ctx
+            ),
+            "get_my_report": lambda a: get_my_report(GetReportInput.model_validate(a), self.ctx),
         }
         name = call["name"]
         tool = tools.get(name)
@@ -85,6 +120,12 @@ class _Turn:
             self.summaries.append(ResultSummary.of(out.result))
         return out
 
+    def _save_report(self, args: dict[str, Any]) -> BaseModel:
+        out = save_report(SaveReportInput.model_validate(args), self.ctx, self.budget)
+        if isinstance(out, SaveReportOk) and out.report_id not in self.saved:
+            self.saved.append(out.report_id)
+        return out
+
 
 def analysis(state: AgentState, ports: Ports, limits: Limits) -> dict[str, Any]:
     user = state["user"]
@@ -95,6 +136,7 @@ def analysis(state: AgentState, ports: Ports, limits: Limits) -> dict[str, Any]:
             user=user,
             conversation_id=state["conversation_id"],
             turn_id=state["turn_id"],
+            channel=state["channel"],
             ports=ports,
             limits=limits,
         )
@@ -131,4 +173,5 @@ def analysis(state: AgentState, ports: Ports, limits: Limits) -> dict[str, Any]:
         "ran_sql": bool(turn.summaries),
         "last_query_scope": turn.budget.last_scope,
         "result_summaries": turn.summaries,
+        "saved_report_ids": turn.saved,
     }

@@ -46,6 +46,9 @@ class ConversationState(TypedDict, total=False):
     """``UserContext.access_version`` at the previous turn. A change drops earlier results."""
     open_plan: DeletionPlan | None
     """The latest open Deletion Plan. A new plan replaces (cancels) it; executing clears it."""
+    last_plan_id: UUID | None
+    """The last plan ever shown here. With no plan open, a reply such as "yes" is then
+    answered with ``PLAN_EXPIRED`` instead of being guessed at."""
     deferred_request: str | None
     """Kept while a delete or Persona change runs; consumed by the ``after`` edge."""
 
@@ -73,6 +76,8 @@ class TurnState(TypedDict, total=False):
     result_summaries: list[ResultSummary]
     saved_report_ids: list[UUID]
     # deletion branch
+    confirmed_report_ids: list[UUID] | None
+    """Set by ``confirm_deletion`` from the reply; read by ``execute_deletion``."""
     deletion_outcome: DeletionOutcome | None
     # Persona branch
     persona_draft: PersonaDraft | None

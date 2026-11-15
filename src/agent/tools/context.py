@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from agent.config import Limits
+from agent.contracts.channel import Channel
 from agent.domain.identity import BrandScope, UserContext
 
 if TYPE_CHECKING:
@@ -21,6 +22,8 @@ class TurnContext:
     user: UserContext
     conversation_id: UUID
     turn_id: str
+    channel: Channel
+    """Recorded with the Conversation when its first report is saved."""
     ports: "Ports"
     limits: Limits
 

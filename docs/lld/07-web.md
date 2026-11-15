@@ -48,7 +48,7 @@ A test in Phase 4 pins this: for each row below, the CLI command and the web end
 | Agent metrics | `/stats`, `agent stats` | `GET /api/stats` | `Views.stats` |
 | Who am I (prototype) | `--as <id>` | `GET /api/dev/users` + picker | `UserDirectory` |
 
-Report and Persona results reuse the tool output types ([05](05-tools.md)); trace and stats use [`contracts/views.py`](../../src/agent/contracts/views.py).
+`Views(ports, limits)` builds the same `TurnContext` a tool gets for the User the channel resolved; an unknown User or one with no role raises `PermanentError(NO_ROLE)`. `build_app` in [composition.py](../../src/agent/composition.py) returns `ChatService` and `Views` over one set of ports. Report and Persona results reuse the tool output types ([05](05-tools.md)); trace and stats use [`contracts/views.py`](../../src/agent/contracts/views.py).
 
 ## The chat stream
 

@@ -21,7 +21,11 @@ from typing import Protocol
 from uuid import UUID
 
 from agent.contracts.channel import Channel, InboundMessage
+from agent.contracts.tools import ListReportsInput, ListReportsOutput
+from agent.core.catalog import BUNDLED
 from agent.core.chat import ChatService
+from agent.core.views import Views
+from agent.errors import AgentError
 from agent.ports.channel import ChannelAdapter
 
 _log = logging.getLogger("agent.cli")
@@ -58,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _chat(user_id: str) -> int:
-    from agent.composition import build_chat_service, build_cli_channel
+    from agent.composition import build_app, build_cli_channel
     from agent.config import Settings
 
     try:
@@ -68,17 +72,22 @@ def _chat(user_id: str) -> int:
     except ImportError:  # Windows has no readline; input() still works, just unedited.
         pass
 
-    run_chat(build_chat_service(Settings()), user_id, build_cli_channel(), input)
+    service, views = build_app(Settings())
+    run_chat(service, views, user_id, build_cli_channel(), input)
     return 0
 
 
 def run_chat(
     service: ChatService,
+    views: Views,
     user_id: str,
     channel: ConversationChannel,
     read: Callable[[str], str],
+    write: Callable[[str], None] = print,
 ) -> None:
     """Read a line, hand it to ``ChatService.handle``, repeat until EOF or ``/quit``.
+    ``/reports`` goes to ``Views.reports`` instead, with no model call; ``Views`` has already
+    run the PII filter on what ``write`` prints.
 
     Catches everything around a turn, so a failed turn never ends the session. ``handle``
     already never raises; this is the last line, and it logs rather than prints, because
@@ -93,6 +102,12 @@ def run_chat(
             continue
         if text in _QUIT:
             return
+        if text == "/reports":
+            try:
+                write(render_reports(views.reports(user_id, ListReportsInput(limit=50))))
+            except AgentError as exc:
+                write(BUNDLED[exc.message_class].replace("{ref}", "none"))
+            continue
         try:
             service.handle(
                 InboundMessage(
@@ -106,3 +121,15 @@ def run_chat(
             )
         except Exception as exc:
             _log.error("the turn failed (%s); the session continues", type(exc).__name__)
+
+
+def render_reports(listed: ListReportsOutput) -> str:
+    if not listed.reports:
+        return "You have no saved reports yet."
+    lines = [f"Your saved reports ({listed.total}):"]
+    for n, r in enumerate(listed.reports, start=1):
+        note = "" if r.accessible else "  (covers Brands you no longer have; title only)"
+        lines.append(f"  {n}. {r.title}  ({r.created_at:%d %b %Y}){note}")
+    if listed.total > len(listed.reports):
+        lines.append(f"  … and {listed.total - len(listed.reports)} older.")
+    return "\n".join(lines)

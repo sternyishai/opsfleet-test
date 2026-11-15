@@ -12,8 +12,9 @@ The LangGraph state is [`AgentState`](../../src/agent/graph/state.py): one per C
 | `messages` | `list[AnyMessage]` with `add_messages` | every node that talks | analysis, answer writing |
 | `running_summary` | `str` | `respond` when history exceeds `verbatim_turns` (`MODEL_SUMMARIZER`) | analysis |
 | `access_version_seen` | `int` | `load_context` | `load_context`: if it differs from `user.access_version`, earlier results and the summary are dropped and the User is told |
-| `open_plan` | `DeletionPlan \| None` | `plan_deletion` (replaces, so a new plan cancels the old one) | `confirm_deletion`, `execute_deletion` |
-| `deferred_request` | `str \| None` | `router` | `after`: runs it through `retrieve_trios` once the delete or Persona change is answered |
+| `open_plan` | `DeletionPlan \| None` | `plan_deletion` (replaces, so a new plan cancels the old one) | `confirm_deletion`, `execute_deletion`, `ChatService` (only the plan's User may resume) |
+| `last_plan_id` | `UUID \| None` | `plan_deletion` | `input_guard`: with no plan open, a reply shaped like `yes` / `no` / `yes except 2` is answered `PLAN_EXPIRED`, never guessed at |
+| `deferred_request` | `str \| None` | `router` | `after`: sends the branch's reply, then adds the request as a `HumanMessage` and routes to `retrieve_trios`, once the delete or Persona change is answered. Cleared when the plan is cancelled by another message |
 
 **Turn fields** are reset by `load_context` at the start of every turn ([`TURN_KEYS`](../../src/agent/graph/state.py)).
 
@@ -23,7 +24,7 @@ The LangGraph state is [`AgentState`](../../src/agent/graph/state.py): one per C
 | Presentation | `persona`, `profile` | `profile` is the stored profile with this turn's preferences merged in |
 | Routing | `router` | the `RouterDecision` |
 | Analysis | `trios`, `retrieval_degraded`, `analysis_steps`, `sql_attempts`, `sql_retries`, `empty_diagnoses`, `ran_sql`, `last_query_scope`, `result_summaries`, `saved_report_ids` | the retry counters are the `SqlBudget` that `run_sql` reads and returns; `ran_sql` with `trios == []` marks a retrieval gap |
-| Deletion | `deletion_outcome` | |
+| Deletion | `confirmed_report_ids`, `deletion_outcome` | `confirm_deletion` writes the IDs the reply confirmed; `execute_deletion` reads them |
 | Persona | `persona_draft`, `persona_gate` | |
 | Outcome | `error_class`, `message_class` | set by the graph-boundary catch-all or a refusal |
 
@@ -43,13 +44,13 @@ The HLD's scope list asks for "this turn's preference statements": they are `rou
 
 ## Pause and resume
 
-`confirm_deletion` calls `interrupt()` with the `ConfirmationRequest`. The paused state, `open_plan` included, is checkpointed. The User's reply resumes the graph with `Command(resume=reply)`, and `parse_reply` ([`core/confirmation.py`](../../src/agent/core/confirmation.py)) reads it:
+`confirm_deletion` calls `interrupt()` with the `ConfirmationRequest`'s fields as plain JSON (so the checkpoint holds no new type); `ChatService` adds the trace ID and time and sends it through `Outbound`. The paused state, `open_plan` included, is checkpointed. `ChatService` sees the pause (`get_state(...).interrupts`) and resumes with `Command(resume={"text" | "response", "turn_id", "trace_id"})`: the new turn's IDs ride in the resume value, and `confirm_deletion` writes them to state. A message from anyone but the plan's User gets `PLAN_EXPIRED` and does not resume. `parse_reply` ([`core/confirmation.py`](../../src/agent/core/confirmation.py)) reads the reply:
 
 | Decision | Next node |
 |---|---|
 | `ConfirmAll`, `ConfirmExcept` | `execute_deletion` with the confirmed IDs |
 | `Decline` | `after` |
-| `NeedsCount` | `confirm_deletion` again, once, asking for the count |
-| `NotAnAnswer` | the plan is cancelled (`open_plan = None`) and the reply re-enters at `input_guard` as a new message |
+| `NeedsCount` | a second `interrupt()` in the same node, asking for the count; a second bare `yes` is `NotAnAnswer` |
+| `NotAnAnswer` | the plan is cancelled (`open_plan = None`) and a typed reply re-enters as a new message at `load_context`, so it passes `input_guard` with fresh turn keys and a freshly loaded User; a button for another request ends with `PLAN_EXPIRED` |
 
 Everything a node does before `interrupt()` must be safe to run twice, because LangGraph re-runs the node from its start on resume. `plan_deletion` is a separate node for that reason: the plan is built once, and `confirm_deletion` only reads it.

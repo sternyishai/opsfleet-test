@@ -6,12 +6,21 @@ from collections.abc import Callable
 from langchain_core.messages import AIMessage
 
 from agent.cli import run_chat
+from agent.config import Limits
 from agent.contracts.channel import AgentReply, InboundMessage
 from agent.core.chat import ChatService
+from agent.core.views import Views
 from agent.domain.identity import Role, UserContext
 from agent.errors import MessageClass
 from agent.ports.channel import ChannelAdapter
-from tests.fakes import CollectingChannel, FakeLLMFactory, ask, chat_service, fake_ports
+from tests.fakes import (
+    CollectingChannel,
+    FakeLLMFactory,
+    InMemoryReportRepository,
+    ask,
+    chat_service,
+    fake_ports,
+)
 
 CEO = UserContext(user_id="ceo", role=Role.EXECUTIVE, access_version=1)
 
@@ -44,7 +53,8 @@ def typed(*lines: str) -> Callable[[str], str]:
 def test_a_failing_turn_does_not_end_the_loop() -> None:
     service = ExplodingOnce()
 
-    run_chat(service, "ceo", CollectingChannel(), typed("first question", "second question"))
+    views = Views(fake_ports(CEO), Limits(_env_file=None))  # pyright: ignore[reportCallIssue]
+    run_chat(service, views, "ceo", CollectingChannel(), typed("first question", "second question"))
 
     assert service.texts == ["first question", "second question"]
 
@@ -92,3 +102,44 @@ def test_a_user_with_no_role_gets_no_role() -> None:
 
     assert isinstance(reply, AgentReply)
     assert reply.message_class is MessageClass.NO_ROLE
+
+
+def test_slash_reports_lists_the_users_reports_without_a_model_call() -> None:
+    from tests.test_reports import MANAGER_A, ctx_for, saved
+
+    reports = InMemoryReportRepository()
+    saved(ctx_for(MANAGER_A, reports))
+    llm = FakeLLMFactory(fail=AssertionError("/reports needs no model"))
+    ports = fake_ports(CEO, MANAGER_A, llm=llm, reports=reports)
+    service, _ = chat_service(ports)
+    printed: list[str] = []
+
+    run_chat(
+        service,
+        Views(ports, Limits(_env_file=None)),  # pyright: ignore[reportCallIssue]
+        "manager-a",
+        CollectingChannel(),
+        typed("/reports"),
+        printed.append,
+    )
+
+    [text] = printed
+    assert "1. Calvin Klein 2025 revenue" in text
+    assert llm.steps == []
+
+
+def test_slash_reports_with_none_says_so() -> None:
+    ports = fake_ports(CEO)
+    service, _ = chat_service(ports)
+    printed: list[str] = []
+
+    run_chat(
+        service,
+        Views(ports, Limits(_env_file=None)),  # pyright: ignore[reportCallIssue]
+        "ceo",
+        CollectingChannel(),
+        typed("/reports"),
+        printed.append,
+    )
+
+    assert printed == ["You have no saved reports yet."]

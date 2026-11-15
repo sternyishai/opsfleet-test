@@ -46,7 +46,10 @@ The three outbound messages share `conversation_id`, `trace_id` (the reference I
 | `yes, delete all 37` | 37 items | `ConfirmAll` |
 | `yes except 2,3` | any | `ConfirmExcept([2, 3])`; indices outside the plan, or excluding every item → `NotAnAnswer` |
 | `no` | any | `Decline` |
-| anything else, or a button for another `request_id` | any | `NotAnAnswer` |
+| anything else, or a button for another `request_id` or User | any | `NotAnAnswer` |
+| a button with `selected_indices` | any | the unselected rest is excluded, by the same rules as `yes except`; `None` is a bare `yes` |
+
+Case, surrounding whitespace and one trailing full stop are ignored; `y`, `sure` and `yes please` are not answers.
 
 ## Persona Quality Gate: `PersonaGateResult`
 
