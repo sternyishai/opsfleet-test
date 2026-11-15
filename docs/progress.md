@@ -4,8 +4,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-15)
 
-**Phase:** 3 (GitHub issues) done: #5–#14. Build guardrails on branch `chore/build-guardrails`. Next: Phase 4, issue #5.
-**Branch:** `chore/build-guardrails`
+**Phase:** 3 (GitHub issues) done: #5–#14. Design iteration on the DLQ, a story map and ADR 0011 merged from `docs/dlq-data`. Next: Phase 4, issue #5.
+**Branch:** `main`
 
 | Step | Status |
 |---|---|
@@ -18,6 +18,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | ADR 0010: UI in a plain `web/` folder | ✅ optional slice 8 in the work plan; CLI and UI share `ChatService` and `Views` (LLD 07) |
 | Phase 3: GitHub issues | ✅ #5–#14 labelled `ready-for-agent`, native blocked-by links; slice 7 split into #11 Trios, #12 Persona, #13 Profile notes |
 | Build guardrails | ✅ `CODING_STANDARDS.md`, `.githooks/pre-commit` (ruff, pyright, pytest), pyright in dev deps; Phase 4 prompt is now `/mattpocock-skills:implement #N` |
+| DLQ, story map, ADR 0011 (`docs/dlq-data`) | ✅ events carry IDs only; DLQ kept 7 days on a never-expiring pull subscription, ~5 attempts, IAM, replay, 5-day ageing page; DLQ drawn in the hero and data-flow diagrams; new story map (8 stories) + component × store table in 01; preference inference reads the interaction store; nightly sweep runs on the Worker; ADR 0011 sqlglot + dry-run blind spot under row-level security |
 | Eval LLD + real seed data (PR #4) | ✅ LLD 08, `evals/` (20 cases, pre-registered bar), `seed/users.yaml`, 5 seed Trios; all queries verified on BigQuery via project `opsfleet-prototype` (ADC set up) |
 
 ## Decisions made this session, not yet written elsewhere
@@ -28,6 +29,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 - 17 client questions (Q1–Q17) in `docs/hld/12`; each has a default, so none blocks Phase 3.
 - Not decided in the design: what triggers the Trio Candidate job, and whether an approved Candidate goes through ingestion. Candidate generation is off by default until Q1 is answered, so this does not block the prototype.
+- Not decided in the design: who writes chart images to GCS (proposal: a future chart tool writes `charts/<report_id>/…` at save time), and whether an approved Trio Candidate becomes a GCS file so ingestion stays the single path (proposal: yes).
 - Cost estimate inputs in `11` are list prices; recompute from prototype traces in Phase 4.
 - The "LLD default" limits in `config.py` are starting values; tune them from traces in Phase 4.
 
