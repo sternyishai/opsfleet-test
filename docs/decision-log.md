@@ -291,6 +291,14 @@ Detail in `docs/hld/06-resilience.md`:
 
 - **Background jobs** (Trio ingestion and validation, entity extraction, preference inference, Trio Candidates, aggregation, canaries):
   - Pub/Sub with a **dead-letter topic** per job type. After N delivery attempts with backoff, the message moves to the DLQ, an alert fires, and it can be inspected and replayed once fixed.
+  - **What a dead-lettered message holds.** *Revised 2026-11-15:* the DLQ is a store too, so its data is now decided.
+    - **Events carry IDs only:** `report.saved` and `report.deleted` carry `report_id` + Author; `turn.completed` carries `conversation_id` + turn number; a Trio file event carries the GCS object name + generation. The handler reads content from Postgres or GCS. A DLQ message therefore holds **no PII and no content**, and a replay acts on current state: replaying an event for a report deleted since is a no-op.
+    - **Only event work dead-letters.** The DLQ sits on each push subscription (Trio ingestion, entity extraction, report cleanup, Trio Candidates, interaction-store write). Batch jobs on Cloud Scheduler are retried by Cloud Run and alerted; chat turns are never dead-lettered.
+    - **N = 5, approximately:** the Pub/Sub default; the range is 5–100, and the count is best-effort ([dead-letter topics](https://docs.cloud.google.com/pubsub/docs/dead-letter-topics)).
+    - **Kept 7 days** on a pull subscription attached to each dead-letter topic, the Pub/Sub default retention (max 31 days, [subscription properties](https://docs.cloud.google.com/pubsub/docs/subscription-properties)). The subscription is required: a topic with no subscription loses what is published to it. It is set never to expire, because its default 31-day expiry would remove a quiet DLQ subscription.
+    - **IAM:** the Pub/Sub service agent gets `roles/pubsub.publisher` on each dead-letter topic and `roles/pubsub.subscriber` on each source subscription; without them nothing is forwarded.
+    - **Replay:** after the fix, an operator re-publishes the DLQ messages to the source topic and acknowledges them in the DLQ subscription. Handlers are idempotent, so a double replay is safe.
+    - **Alerts:** a ticket on the first DLQ message; business-hours page when the oldest DLQ message is older than 5 days, because the 7-day window is about to close.
   - Event work runs on a worker Cloud Run service behind Pub/Sub push; the handler acknowledges (returns 2xx) only after its work commits. Scheduled batch work runs as Cloud Run jobs on Cloud Scheduler.
   - Delivery is at least once, so **every job is idempotent**, with a dedupe key such as `trio_id + version` or `report_id`.
 - **Chat turns: no queue at this scale.** The Gateway acknowledges the channel immediately and runs the turn asynchronously in-process; Cloud Run with CPU always allocated is enough.
