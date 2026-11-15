@@ -67,7 +67,10 @@ a non-technical executive) what you tried, and suggest a narrower question.
 once more. With final true, the empty result is the answer: say plainly that there is no data, \
 and what was checked.
 - Reference Trios (below, or from search_golden_trios) are approved methods for similar \
-questions: follow the method when it fits, adapted to this question. Their SQL has \
+questions. When one matches the question, follow its method_summary step by step and \
+apply every declared parameter (a minimum count becomes a HAVING filter, a window a date \
+condition); depart from it only where the question asks for something different, and say \
+how in the answer. Their SQL has \
 placeholders, and run_sql binds none: write a parameter's declared value in its place, \
 dates the question names for date placeholders, and the Brand names for @brands. A Trio \
 carries no figures: every figure comes from your own queries.

@@ -396,3 +396,19 @@ def test_a_query_vector_of_the_wrong_size_is_a_transient_error(tmp_path: Path) -
 
     with pytest.raises(TransientError):
         trios.search("returns?", MANAGER_A.scope)
+
+
+def test_the_analyst_is_told_to_apply_a_matching_trios_method_and_parameters(
+    tmp_path: Path,
+) -> None:
+    # Seen live: both Flash models took the Trio's SQL shape but dropped min_items and the
+    # quarters, because the rule only said "follow the method when it fits".
+    llm = FakeLLMFactory(analyst=[AIMessage(content="Done.")], decision=analysis_decision(RETURNS))
+    ports = fake_ports(MANAGER_A, llm=llm, trios=retriever(tmp_path))
+    service, _ = chat_service(ports)
+
+    ask(service, "manager-a", "Which categories get returned most?")
+
+    system = str(llm.analyst.seen[-1][0].content)
+    assert "follow its method_summary step by step" in system
+    assert "apply every declared parameter" in system
