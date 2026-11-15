@@ -61,6 +61,14 @@ type RetryKind = Literal["guard_rejected", "dry_run_error", "over_bytes_cap", "r
 def get_schema(args: GetSchemaInput, ctx: TurnContext) -> SchemaOutput:
     """Allowlisted tables and columns with descriptions, as this User's scoped view projects
     them (no ``num_of_item`` for a Manager). No I/O beyond the bundled descriptions."""
+    role = ctx.user.role
+    with ctx.ports.tracer.span(
+        "get_schema", tables=[str(t) for t in args.tables or []], role=role.value if role else None
+    ):
+        return _schema_output(args, ctx)
+
+
+def _schema_output(args: GetSchemaInput, ctx: TurnContext) -> SchemaOutput:
     wanted = set(args.tables) if args.tables else None
     hide_order_level = ctx.user.role is not Role.EXECUTIVE
     tables = [
@@ -111,11 +119,11 @@ def run_sql(
     """
     with ctx.ports.tracer.span("run_sql") as span:
         out, budget = _run_sql(args, ctx, budget, span)
-        span.set(**_trace(out, budget))
+        span.set(**_trace(out, budget, ctx))
     return out, budget
 
 
-def _trace(out: RunSqlOutput, budget: SqlBudget) -> dict[str, AttrValue]:
+def _trace(out: RunSqlOutput, budget: SqlBudget, ctx: TurnContext) -> dict[str, AttrValue]:
     """LLD 05 § run_sql trace attributes. Never rows: counts and the error text only."""
     ok = isinstance(out, RunSqlOk)
     retry = isinstance(out, RunSqlRetry)
@@ -126,7 +134,8 @@ def _trace(out: RunSqlOutput, budget: SqlBudget) -> dict[str, AttrValue]:
         # Which plain message the User got; the technical reason is in sql.retry_kind / error
         # on the call before.
         "sql.gave_up": out.message_class.value if isinstance(out, RunSqlGaveUp) else None,
-        "error": out.error if retry else None,
+        # The warehouse's error can quote a literal from the SQL: filtered like the SQL.
+        "error": _traceable(out.error, ctx) if retry else None,
         "row_count": out.result.row_count if ok else 0 if isinstance(out, RunSqlEmpty) else None,
         "bytes_billed": out.result.bytes_billed if ok else None,
     }
@@ -226,9 +235,17 @@ def _guarded(sql: str, ctx: TurnContext) -> GuardDecision:
                 "guard.rewritten": allowed and decision.rewritten,
                 "guard.tables": list(decision.tables) if allowed else [],
                 "guard.scope_brands": "all" if scope.all_brands else len(scope.brands),
+                # The SQL before and after the guard, through the PII filter: a literal in a
+                # WHERE clause can quote a Customer's email the User typed.
+                "sql.written": _traceable(sql, ctx),
+                "sql.rewritten": _traceable(decision.rewritten_sql, ctx) if allowed else None,
             }
         )
     return decision
+
+
+def _traceable(sql: str, ctx: TurnContext) -> str:
+    return ctx.ports.pii.scan(sql).text
 
 
 def _tried(tried: tuple[str, ...], filters: list[FilterLiteral]) -> tuple[str, ...]:
@@ -238,7 +255,7 @@ def _tried(tried: tuple[str, ...], filters: list[FilterLiteral]) -> tuple[str, .
 
 def _schema(tables: list[TableName], ctx: TurnContext) -> list[TableSchema]:
     """The tables a failed statement read, as ``get_schema`` shows them to this User."""
-    return get_schema(GetSchemaInput(tables=tables), ctx).tables
+    return _schema_output(GetSchemaInput(tables=tables), ctx).tables  # not a tool call: no span
 
 
 def _retry(

@@ -49,6 +49,12 @@ class ModelSettings(BaseSettings):
     judge: str | None = None  # Pro
     judge_fallback: str | None = None
     embedding: str | None = None  # Gemini embedding model; needed for the Trio slice
+    prices: dict[str, tuple[float, float]] = Field(
+        default_factory=dict,
+        description="USD per million tokens (input, output) by model ID, for the cost line "
+        'of /stats; MODEL_PRICES as JSON, e.g. {"gemini-3-flash-preview": [0.5, 3.0]}. '
+        "A model with no price is left out of the dollar figure.",
+    )
 
     def resolve(self, step: ModelStep) -> tuple[str, str | None]:
         """The (primary, fallback) model for ``step``. Primary and fallback are resolved
@@ -132,4 +138,8 @@ class Settings(BaseSettings):
     checkpoint_db_url: str = "sqlite:///./data/checkpoints.db"
     seed_dir: Path = Path("seed")
     traces_dir: Path = Path("traces")
-    phoenix_endpoint: str | None = None  # set when Phoenix is running
+    phoenix_endpoint: str | None = Field(
+        default="http://127.0.0.1:6006",
+        description="Where `uvx arize-phoenix serve` listens. Spans go there only if it "
+        "answers at start-up; empty turns the export off.",
+    )

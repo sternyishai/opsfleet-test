@@ -54,6 +54,8 @@ class MessageClass(StrEnum):
     # reports (HLD 04)
     REPORT_NOT_FOUND = "report_not_found"
     REPORT_OUT_OF_SCOPE = "report_out_of_scope"
+    # observability (HLD 08)
+    STATS_FORBIDDEN = "stats_forbidden"  # /stats spans every User: Executives only
 
 
 class AgentError(Exception):

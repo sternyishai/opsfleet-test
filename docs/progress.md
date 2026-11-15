@@ -4,8 +4,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-15)
 
-**Phase:** 4. Slices 1 (#5), 2 (#6), 3 (#7) and 4 (#8, PR #22) built. Next: slice 5 (#9).
-**Branch:** `feat/8-saved-reports`
+**Phase:** 4. Slices 1 (#5), 2 (#6), 3 (#7), 4 (#8, PR #22) and 5 (#9) built. Next: slice 6 (#10).
+**Branch:** `feat/9-observability`
 
 | Step | Status |
 |---|---|
@@ -28,6 +28,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 | Slice 4: Saved Reports + deletion (#8, branch `feat/8-saved-reports`) | ✅ `SqliteReportRepository` (FTS5, same file as the users) + in-memory fake, both under one test suite; `save_report` (PII filter on every field, guard scope, entity extraction with `MODEL_ENTITY_EXTRACTION` failing soft), `list_my_reports`, `get_my_report` bound to the analyst; `parse_reply`; deletion branch `plan_deletion` → `confirm_deletion` (`interrupt()`) → `execute_deletion` → `after` (deferred request); `ChatService` resumes a paused Conversation; `/reports`; 438 offline tests. Deviations in `decision-log.md` § Slice 4. Adversarial review fixed: a punctuation-only topic matched every report, ticking every box on a large plan skipped the count, Unicode digits and multi-line replies were read as answers. Live demo done (screenshot in PR #22): manager-a saved two reports and deleted one by Brand with `yes except`. Found live: the prompt always suggested "yes except 2", even for a one-report plan; it now names an item in the plan |
 
+| Slice 5: observability (#9, branch `feat/9-observability`) | ✅ `JsonlTracer` with span and parent IDs and `read(since)`; a span per graph node (`_traced`), root attributes set from the checkpoint after the turn (a failed turn still says who and what); `sql.written`/`sql.rewritten` PII-filtered on `query_guard`; `deletion_reply` span for cancelled plans; `/trace [id]`, `/stats [7d]`, `agent stats --as <id>` through `Views` and `core/observability.py`; Phoenix as a second sink (`tracer_phoenix.py`, OpenInference attributes, same IDs, used only if it answers at start-up); `STATS_FORBIDDEN`; `MODEL_PRICES`; 465 offline tests. Review fixed: a dry-run error quoting a Customer email reached JSONL (span errors now keep class and type only; free text is PII-filtered), a failure before `load_context` reported the previous turn's router, replays counted twice. Live: CEO 2025 revenue $2,358,149.49, `/trace` showed the router call, a 429 on Flash falling back to Flash-Lite, and the guarded SQL. Export checked against a local OTLP receiver (same trace ID as the reference ID; a vanished receiver leaves the turn unchanged). Deviations in `decision-log.md` § Slice 5 |
+
 ## Decisions made this session, not yet written elsewhere
 
 - None. Slice 3's approved deviations (breaker per model, `QUERY_TOO_LARGE`, plain catalog wording) are in `decision-log.md` § Slice 3.
@@ -42,11 +44,12 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> /mattpocock-skills:implement #9
+> /mattpocock-skills:implement #10
 
 Notes for what comes next:
 
-- The probe was not seen live: the AI Studio free-tier quota for the analyst model ran out during the session. Try "orders from Customers whose state is 'CA'" (thelook stores full state names) when quota allows.
-- `.env` now sets `MODEL_ANALYST_FALLBACK=gemini-3.5-flash-lite`; the fallback answered live when Flash hit its free-tier 429. `gemini-2.5-flash-lite` returns 404 for new AI Studio users: a 404 is a permanent error, so the turn ends as `UNCLASSIFIED` rather than falling back.
-- Slice 5 (`/trace`, `/stats`): the deletion spans already carry `plan_id`, `plan.size`, `outcome` (`confirmed`, `partial`, `expired`), `deleted`, `kept`, `already_gone`; `save_report` carries `redactions` and `entities`.
-- Slice 4 follow-up (`fix/8-plan-answer-wording`): an answer that does not fit the open plan (`yes except 4` to a plan of 3) now says so (`PLAN_ANSWER_INVALID`) instead of "That confirmation is no longer open". The plan is still cancelled and nothing deleted.
+- Not seen live: Phoenix itself (`uvx arize-phoenix serve`). The export was checked against a local OTLP receiver only; run Phoenix once and look for the turn and its `session.id` grouping.
+- `MODEL_PRICES` is empty, so `/stats` shows "$ n/a". Set it in `.env` from the current Gemini price list (USD per million tokens, input and output, by model ID) to get cost per successful answer.
+- Old trace lines (before slice 5) have no span IDs; `read` skips them.
+- The probe was not seen live: the AI Studio free-tier quota for the analyst model ran out during slice 3. Try "orders from Customers whose state is 'CA'" (thelook stores full state names) when quota allows.
+- `.env` sets `MODEL_ANALYST_FALLBACK=gemini-3.5-flash-lite`; the fallback answered live when Flash hit its free-tier 429 (again in slice 5).

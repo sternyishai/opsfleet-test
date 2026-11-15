@@ -408,3 +408,19 @@ Approved deviations from issue #8:
 - **A deferred request is sent as its own reply** after the branch's reply. The turn then delivers two `AgentReply`s: the deletion outcome, then the answer.
 - **Port changes:** `save` takes the `channel` (the first save records the Conversation that the `saved_reports` foreign key needs); `delete_with_audit` takes the filter (the `deletion_audit.filter` column) and returns a `DeletionReceipt` with `replayed`. `TurnContext` gains `channel`; `Views` takes `limits`.
 - **The `REPORT_OUT_OF_SCOPE` wording** no longer promises a title it does not show: "…so I can't show what's in it. You can still delete it."
+
+## Slice 5: observability (2026-11-15)
+
+Deviations from issue #9, for approval:
+
+- **`Tracer` gains `read(since)`.** `Views.trace` and `Views.stats` read spans back through the port, not from the files, so `core/` never touches `traces/` and tests can hand `/stats` a fixed set of spans. The JSONL adapter reads its own files; the Phoenix exporter is write-only.
+- **Phoenix is a second sink of the JSONL tracer, not a second tracer.** Each finished `SpanRecord` is rebuilt as an OTel span with the same trace and span IDs and queued on the SDK's `BatchSpanProcessor` (bounded queue, background thread, drops when full). The reference ID a User quotes therefore finds the turn in Phoenix too. Phoenix is used only if `PHOENIX_ENDPOINT` (default `http://127.0.0.1:6006`) answers at start-up; a Phoenix that stops later fails in the background and is logged once at ERROR.
+- **Root span gains `message_class`.** `/stats` needs input-guard blocks by category, and the rules block before the router runs, so `router.verdict` cannot carry them. `outcome` is one of `answered`, `confirmation`, `refused`, `gave_up`, `error`.
+- **`query_guard` spans carry `sql.written` and `sql.rewritten`**, both through the PII filter: a literal can quote a Customer's email the User typed. `run_sql` still holds no SQL text.
+- **A cancelled Deletion Plan is a `deletion_reply` span** (`plan_id`, `reply`, `outcome=cancelled`): a decline never reaches `execute_deletion`, which LLD 05 listed as the place for `cancelled`.
+- **A span's error keeps its class and type, never its text.** Classified errors wrap provider messages (`BadRequest: …`) that can quote a Customer literal. Free text that does go on a span (`sql.written`, `sql.rewritten`, the `run_sql` `error`, the report and deletion `filter`) passes the PII filter first. Review found a dry-run error quoting an email reaching JSONL before this.
+- **A new turn's input clears the turn keys**, as `load_context` does, so a turn that fails before `load_context` does not report the previous turn's router or retrieval on its root span.
+- **A replayed `execute_deletion` is not counted again** in `/stats`.
+- **`llm.cost_usd` is not on the span.** `/stats` prices tokens from `MODEL_PRICES` (USD per million tokens by model ID, empty by default), so a price change re-prices past turns and the adapter stays as it was. With no prices, the dollar figure is "n/a".
+- **`agent stats` needs `--as <user_id>`.** `/stats` spans every User and is for Executives (`STATS_FORBIDDEN` otherwise, new catalog class), so the command outside the chat needs to know who asks.
+- **`Views.trace` returns `None`** for a missing turn and for another User's turn alike, so the reply cannot tell them apart.

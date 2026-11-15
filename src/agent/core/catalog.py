@@ -75,6 +75,10 @@ BUNDLED: dict[MessageClass, str] = {
         "That report covers Brands you can no longer analyze, so I can't show what's in it. "
         "You can still delete it."
     ),
+    MessageClass.STATS_FORBIDDEN: (
+        "The agent's statistics cover every User, so only Executives can see them. "
+        "/trace shows how your own last question was answered."
+    ),
 }
 
 
