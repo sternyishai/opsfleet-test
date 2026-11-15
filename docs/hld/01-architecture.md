@@ -28,9 +28,9 @@ This section names every building block, says how the blocks talk to each other,
 | Chat API → Gemini | sync | HTTPS through the model factory, with timeouts, backoff on retryable errors, model fallback and a circuit breaker ([06](06-resilience.md)). |
 | Chat API → BigQuery | sync | BigQuery client library. Every statement is dry-run first, then executed with `maximum_bytes_billed`. It runs as the agent's read-only service account, with the query guard carrying Brand scoping; in production it can run as the User after a one-time OAuth consent, so row access policies apply ([03](03-safety-and-pii.md#data-platform-production)). |
 | Chat API → Postgres | sync | Cloud SQL connector with pooling: LangGraph checkpointer, reports, profiles, Persona (cached ~60 s). |
-| Chat API → Pub/Sub | async, fire-and-forget | Domain events after commit: `report.saved`, `report.deleted`, `turn.completed`. The chat path never waits for a background job. |
-| Pub/Sub → Background jobs | async, at-least-once | Push subscription, backoff, then a dead-letter topic and an alert after N attempts. Jobs dedupe on a key such as `report_id` or `trio_id + version`. |
-| GCS → Trio ingestion | async | An object-finalize event triggers ingestion, plus a nightly sweep. |
+| Chat API → Pub/Sub | async, fire-and-forget | Domain events after commit: `report.saved`, `report.deleted`, `turn.completed`. Payloads carry IDs only (`report_id` + Author, `conversation_id` + turn number); handlers read content from Postgres, so no message holds PII or report text. The chat path never waits for a background job. |
+| Pub/Sub → Background jobs | async, at-least-once | Push subscription, backoff, then a dead-letter topic and an alert after about 5 attempts (the Pub/Sub default; the count is best-effort). Each dead-letter topic has a pull subscription that keeps messages 7 days for inspection and replay. Jobs dedupe on a key such as `report_id` or `trio_id + version`. |
+| GCS → Pub/Sub → Trio ingestion | async | An object-finalize notification (object name + generation) goes through Pub/Sub, with the same dead-letter path; a nightly sweep catches anything missed. |
 | All services → Observability | async | OTLP export of spans, logs and metrics. |
 
 **Why no queue on the chat path.** At ~1,000 questions a day with a few concurrent Users, a queue between the Gateway and the agent adds latency and moving parts for no benefit. A failed turn fails fast to the User with a reference ID; it is never parked for later replay, because a late answer to an old question confuses the User. The growth path is to put Cloud Tasks or Pub/Sub in that spot ([11](11-operations.md)).
@@ -198,6 +198,7 @@ flowchart LR
 | Trio Candidates | Postgres | Candidate job | Until approved or rejected; deleted with their source Saved Report | Anonymized, figures stripped |
 | Interaction store (question, plan, SQL, result *shape*, feedback) | Postgres | Chat API via `turn.completed` | Raw 90 days; anonymized aggregates indefinitely | PII redacted on write; reads limited to the AI-ops team and logged |
 | Traces | Observability backend (self-hosted) | All services | Raw 90 days | Self-hosted because spans carry business data; no result rows |
+| Failed background events | Pub/Sub dead-letter topic + pull subscription, one per event job | Pub/Sub, after about 5 failed deliveries | 7 days (Pub/Sub default), then dropped; an alert before that | IDs only, no content; replay re-reads current state ([11](11-operations.md#running-it)) |
 
 **Data the agent writes.** The agent never writes to BigQuery. Its only writes are its own state in Postgres: Saved Reports, audit rows, User Profiles, Trio Candidates and interaction and observability records. This matches the client's split: the data team owns ETL and modelling, and the agent only reads.
 
