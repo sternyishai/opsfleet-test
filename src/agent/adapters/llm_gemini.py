@@ -44,6 +44,9 @@ _PROVIDERS = {"google_genai", "gemini", "google"}
 type BuildModel = Callable[[str, float], BaseChatModel]
 """``(model name, timeout seconds) -> chat model``; tests pass scripted models."""
 
+EMBEDDING_STEP = "embedding"
+"""``llm.step`` on the span of an embedding call; not a ``ModelStep`` (no fallback pair)."""
+
 type BuildEmbeddings = Callable[[str], Embeddings]
 """``model name -> embeddings``; tests pass scripted ones."""
 
@@ -123,7 +126,7 @@ class GeminiLLMFactory:
                 breaker=self._breaker(name),
                 limiter=self._bucket(name),
             )
-            self._embeddings = ResilientEmbeddings("embedding", option, self._policy)
+            self._embeddings = ResilientEmbeddings(EMBEDDING_STEP, option, self._policy)
         return self._embeddings
 
     def _gemini_embeddings(self, name: str) -> Embeddings:

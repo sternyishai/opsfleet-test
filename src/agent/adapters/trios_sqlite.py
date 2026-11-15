@@ -2,8 +2,8 @@
 
 The seed Trios in ``seed/trios/`` are synced into ``golden_trios`` on construction (no network).
 Their vectors (one per question and per paraphrase, ``trio_embeddings``) are made on the first
-search that needs them and kept in the file, so a restart embeds only queries. A seed Trio that
-changed is rewritten, and the cascade drops its old vectors.
+search that needs them and kept in the file, so a restart embeds only queries. The table is
+kept equal to the seed (``_sync``).
 
 Five Trios are a few dozen vectors: a scan in Python is fast enough, and the production adapter
 (pgvector + full text, RRF) keeps the same filter and threshold.
@@ -26,9 +26,25 @@ from agent.domain.trios import Trio, TrioMatch, TrioParameter, TrioSearchResult,
 from agent.errors import TransientError
 
 _COLUMNS = (
-    "trio_id, version, question, paraphrases, sql, method_summary, parameters, scope_all, "
-    "brands, tables_used, question_type, status, source_uri, approved_by"
+    "trio_id",
+    "version",
+    "question",
+    "paraphrases",
+    "sql",
+    "method_summary",
+    "parameters",
+    "scope_all",
+    "brands",
+    "tables_used",
+    "question_type",
+    "status",
+    "source_uri",
+    "approved_by",
 )
+_SELECT = f"SELECT {', '.join(_COLUMNS)} FROM golden_trios"
+
+type TrioKey = tuple[str, int]
+"""``(trio_id, version)``, the table's primary key."""
 
 
 class SqliteTrioRetriever:
@@ -39,25 +55,25 @@ class SqliteTrioRetriever:
         self._embeddings = embeddings
         self._min_score = min_score
         db_path.parent.mkdir(parents=True, exist_ok=True)
+        trios = [Trio.model_validate(yaml.safe_load(p.read_text())) for p in seed.glob("*.yaml")]
         with self._connect() as db:
             if not db.execute("SELECT 1 FROM sqlite_master WHERE name = 'golden_trios'").fetchone():
                 db.executescript(ddl("sqlite"))
-            for path in sorted(seed.glob("*.yaml")):
-                _sync(db, Trio.model_validate(yaml.safe_load(path.read_text())))
+            _sync(db, trios)
 
     def search(self, query: str, scope: BrandScope, *, limit: int = 3) -> TrioSearchResult:
         try:
             with self._connect() as db:
                 self._embed_missing(db)
-                trios = [t for t in _active(db) if scope.covers(t.scope)]
-                vectors = _vectors(db, [t.ref for t in trios])
+                trios = [t for t in _active(db) if _reachable(t, scope)]
+                vectors = _vectors(db)
             asked = self._embeddings.embed_query(query)
+            scored = [(_best(asked, vectors.get((t.trio_id, t.version), [])), t) for t in trios]
         except Exception as exc:  # embedding model or app DB: retrieval never blocks a turn
             raise TransientError(type(exc).__name__, dependency="trios") from exc
-        scored = [(_best(asked, vectors.get(t.ref, [])), t) for t in trios]
         kept = sorted(((s, t) for s, t in scored if s >= self._min_score), key=lambda p: -p[0])
         return TrioSearchResult(
-            matches=[_match(t, s) for s, t in kept[:limit]],
+            matches=[_match(t, s) for s, t in kept[: max(limit, 0)]],
             dropped_below_threshold=len(scored) - len(kept),
         )
 
@@ -84,6 +100,7 @@ class SqliteTrioRetriever:
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         db = sqlite3.connect(self._db_path)
+        db.row_factory = sqlite3.Row
         try:
             db.execute("PRAGMA foreign_keys = ON")
             with db:
@@ -92,23 +109,39 @@ class SqliteTrioRetriever:
             db.close()
 
 
-def _sync(db: sqlite3.Connection, trio: Trio) -> None:
-    """Insert a seed Trio, or rewrite it when its content changed (dropping its vectors)."""
-    row = _row(trio)
-    stored = db.execute(
-        f"SELECT {_COLUMNS} FROM golden_trios WHERE trio_id = ? AND version = ?",
-        (trio.trio_id, trio.version),
-    ).fetchone()
-    if stored == row:
-        return
-    db.execute(
-        "DELETE FROM golden_trios WHERE trio_id = ? AND version = ?", (trio.trio_id, trio.version)
-    )
-    db.execute(f"INSERT INTO golden_trios ({_COLUMNS}) VALUES ({', '.join('?' * len(row))})", row)
+def _sync(db: sqlite3.Connection, trios: list[Trio]) -> None:
+    """Make the table hold exactly the seed: in the prototype the seed is the whole Golden
+    Bucket. An unchanged Trio is left alone (its vectors stay); a changed one is rewritten (the
+    cascade drops its vectors); a new active version supersedes the older one; a Trio whose
+    file was deleted is deleted."""
+    seeded = {(t.trio_id, t.version) for t in trios}
+    for row in db.execute("SELECT trio_id, version FROM golden_trios").fetchall():
+        if (row["trio_id"], row["version"]) not in seeded:
+            db.execute("DELETE FROM golden_trios WHERE trio_id = ? AND version = ?", tuple(row))
+    for trio in trios:
+        row = _row(trio)
+        stored = db.execute(
+            f"{_SELECT} WHERE trio_id = ? AND version = ?", (trio.trio_id, trio.version)
+        ).fetchone()
+        if stored is not None and dict(stored) == row:
+            continue
+        db.execute(
+            "DELETE FROM golden_trios WHERE trio_id = ? AND version = ?",
+            (trio.trio_id, trio.version),
+        )
+        if trio.status is TrioStatus.ACTIVE:  # at most one active version (partial index)
+            db.execute(
+                "UPDATE golden_trios SET status = ? WHERE trio_id = ? AND status = ?",
+                (TrioStatus.SUPERSEDED.value, trio.trio_id, TrioStatus.ACTIVE.value),
+            )
+        db.execute(
+            f"INSERT INTO golden_trios ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})",
+            tuple(row.values()),
+        )
 
 
-def _row(trio: Trio) -> tuple[object, ...]:
-    return (
+def _row(trio: Trio) -> dict[str, object]:
+    values: tuple[object, ...] = (
         trio.trio_id,
         trio.version,
         trio.question,
@@ -124,41 +157,45 @@ def _row(trio: Trio) -> tuple[object, ...]:
         trio.source_uri,
         trio.approved_by,
     )
+    return dict(zip(_COLUMNS, values, strict=True))
 
 
 def _active(db: sqlite3.Connection) -> list[Trio]:
-    rows = db.execute(
-        f"SELECT {_COLUMNS} FROM golden_trios WHERE status = ?", (TrioStatus.ACTIVE.value,)
-    ).fetchall()
+    rows = db.execute(f"{_SELECT} WHERE status = ?", (TrioStatus.ACTIVE.value,)).fetchall()
     return [
         Trio(
-            trio_id=r[0],
-            version=r[1],
-            question=r[2],
-            paraphrases=json.loads(r[3]),
-            sql=r[4],
-            method_summary=r[5],
-            parameters=[TrioParameter.model_validate(p) for p in json.loads(r[6])],
-            scope=BrandScope(all_brands=bool(r[7]), brands=frozenset(json.loads(r[8]))),
-            tables_used=json.loads(r[9]),
-            question_type=r[10],
-            status=r[11],
-            source_uri=r[12],
-            approved_by=r[13],
+            trio_id=r["trio_id"],
+            version=r["version"],
+            question=r["question"],
+            paraphrases=json.loads(r["paraphrases"]),
+            sql=r["sql"],
+            method_summary=r["method_summary"],
+            parameters=[TrioParameter.model_validate(p) for p in json.loads(r["parameters"])],
+            scope=BrandScope(
+                all_brands=bool(r["scope_all"]), brands=frozenset(json.loads(r["brands"]))
+            ),
+            tables_used=json.loads(r["tables_used"]),
+            question_type=r["question_type"],
+            status=r["status"],
+            source_uri=r["source_uri"],
+            approved_by=r["approved_by"],
         )
         for r in rows
     ]
 
 
-def _vectors(db: sqlite3.Connection, refs: list[str]) -> dict[str, list[list[float]]]:
-    """Each Trio's vectors by ``trio_id@version``."""
-    out: dict[str, list[list[float]]] = {ref: [] for ref in refs}
-    for trio_id, version, blob in db.execute(
-        "SELECT trio_id, version, embedding FROM trio_embeddings"
-    ).fetchall():
-        ref = f"{trio_id}@{version}"
-        if ref in out:
-            out[ref].append(_unpack(blob))
+def _reachable(trio: Trio, scope: BrandScope) -> bool:
+    """Fully inside the scope. A Trio tagged with no Brands is read as untagged, so it goes to
+    Executives only: an empty set is inside every Manager's scope, which would default open."""
+    if not trio.scope.all_brands and not trio.scope.brands:
+        return scope.all_brands
+    return scope.covers(trio.scope)
+
+
+def _vectors(db: sqlite3.Connection) -> dict[TrioKey, list[list[float]]]:
+    out: dict[TrioKey, list[list[float]]] = {}
+    for row in db.execute("SELECT trio_id, version, embedding FROM trio_embeddings").fetchall():
+        out.setdefault((row["trio_id"], row["version"]), []).append(_unpack(row["embedding"]))
     return out
 
 
