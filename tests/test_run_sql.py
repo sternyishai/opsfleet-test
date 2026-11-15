@@ -236,6 +236,10 @@ def test_giving_up_after_the_bytes_cap_says_the_question_is_too_large() -> None:
 
     assert isinstance(out, RunSqlGaveUp)
     assert out.message_class is MessageClass.QUERY_TOO_LARGE
+    tracer = ctx.ports.tracer
+    assert isinstance(tracer, FakeTracer)
+    last = [s.attributes for s in tracer.spans if s.name == "run_sql"][-1]
+    assert last["sql.gave_up"] == "query_too_large"
 
 
 def test_insisting_on_an_out_of_scope_brand_after_the_retry_ends_with_out_of_scope() -> None:
@@ -413,6 +417,7 @@ def test_each_call_leaves_its_outcome_on_a_run_sql_span() -> None:
         "attempt": 2,
         "sql.status": "ok",
         "sql.retry_kind": None,
+        "sql.gave_up": None,
         "error": None,
         "row_count": 1,
         "bytes_billed": 1024,

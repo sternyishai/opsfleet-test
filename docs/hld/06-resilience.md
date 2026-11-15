@@ -98,14 +98,14 @@ Background jobs have their own resilience: at-least-once delivery, idempotent ha
 
 ### The message catalog
 
-User-facing messages never contain service names, error codes or stack traces. Each failure class has one plain-language message, and every message offers a next step. The technical detail goes to the trace; the message carries a short **reference ID** (the trace ID) for support. The catalog's wording lives in the Persona layer, so its tone follows the Persona ([09](09-persona-management.md)).
+User-facing messages never contain service names, error codes, stack traces or technical terms such as "query" or "SQL": the Users are non-technical executives. Each failure class has one plain-language message, and every message offers a next step. The technical detail goes to the trace; the message carries a short **reference ID** (the trace ID) for support. The catalog's wording lives in the Persona layer, so its tone follows the Persona ([09](09-persona-management.md)).
 
 | Class | Message (example wording) |
 |---|---|
 | Data source down | "The sales data is unavailable right now. You can still open your saved reports, or ask again in a few minutes." |
 | Model busy or down | "I'm a bit overloaded. Please ask again in a minute." |
-| Self-correction exhausted | "I couldn't build a reliable query for that. I tried filtering by state and by month. Could you rephrase, for example with a specific period?" |
-| Query too large | "That question needs more data than one query may scan. Try a shorter period or a specific Brand." |
+| Self-correction exhausted | "I couldn't find a reliable answer to that. I tried filtering by state and by month. Could you rephrase it, for example with a specific time period?" |
+| Query too large | "That question covers too much data to answer in one go. Try a shorter time period or a single Brand." |
 | Out of Brand scope | "You can analyze Nike and Adidas. I can't show data for Puma." |
 | PII request | "I can't show personal details, but I can show your top customers by ID with their total spend and state." |
 | Daily quota reached | "You've reached today's analysis limit. It resets at midnight." |

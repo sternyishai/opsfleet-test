@@ -28,8 +28,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Decisions made this session, not yet written elsewhere
 
-- **Circuit breaker per model, not per dependency** (slice 3). Issue #7 says "per dependency"; the code keys Gemini breakers and token buckets by model, so a Flash outage or quota leaves Flash-Lite (the fallback) callable. BigQuery has one breaker. Needs the user's OK, then a line in `decision-log.md`.
-- **`QUERY_TOO_LARGE` on giving up after the bytes cap** (slice 3), where the issue says `SELF_CORRECTION_EXHAUSTED`: HLD 06's catalog has this message for exactly this case.
+- None. Slice 3's approved deviations (breaker per model, `QUERY_TOO_LARGE`, plain catalog wording) are in `decision-log.md` § Slice 3.
 
 ## Open questions
 
