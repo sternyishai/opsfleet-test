@@ -37,9 +37,11 @@ from agent.domain.query import (
     RejectReason,
     TableName,
 )
+from agent.domain.trios import TrioSearchResult
 from agent.domain.warehouse import ALLOWLIST
-from agent.errors import MessageClass, SelfCorrectableError
-from agent.ports.tracer import AttrValue, Span
+from agent.errors import MessageClass, SelfCorrectableError, TransientError
+from agent.ports.tracer import AttrValue, Span, Tracer
+from agent.ports.trios import TrioRetriever
 from agent.tools.context import SqlBudget, TurnContext
 from agent.tools.probe import diagnose
 from agent.tools.reports import get_my_report, list_my_reports, save_report
@@ -51,6 +53,7 @@ __all__ = [
     "run_sql",
     "save_report",
     "search_golden_trios",
+    "search_trios",
 ]
 
 _NARROW_HINT = "Narrow the date range or aggregate earlier."
@@ -100,9 +103,49 @@ def scope_note(scope: BrandScope) -> str:
 
 
 def search_golden_trios(args: SearchTriosInput, ctx: TurnContext) -> SearchTriosOutput:
-    """Re-search for a sub-question. ``TrioRetriever.search(args.query, ctx.user.scope)``.
+    """Re-search for a sub-question, in the User's own scope (never one from the model).
     A ``TransientError`` returns no matches; it never fails the step."""
-    raise NotImplementedError
+    result = search_trios(
+        ctx.ports.trios,
+        ctx.ports.tracer,
+        args.query,
+        ctx.user.scope,
+        limit=args.limit,
+        span_name="search_golden_trios",
+        # The model wrote it, but from the User's words: filtered like the SQL.
+        attributes={"query": _traceable(args.query, ctx)},
+    )
+    return SearchTriosOutput(matches=result.matches if result else [])
+
+
+def search_trios(
+    trios: TrioRetriever,
+    tracer: Tracer,
+    query: str,
+    scope: BrandScope,
+    *,
+    limit: int,
+    span_name: str,
+    attributes: dict[str, AttrValue] | None = None,
+) -> TrioSearchResult | None:
+    """One traced search, shared by the tool and the ``retrieve_trios`` node: ``None`` when
+    the retriever is down (``TransientError``), which callers treat as no matches."""
+    with tracer.span(span_name, **(attributes or {})) as span:
+        try:
+            result = trios.search(query, scope, limit=limit)
+        except TransientError:
+            span.set(**{"trios.degraded": True, "trios.refs": [], "trios.scores": []})
+            return None
+        span.set(
+            **{
+                "trios.degraded": False,
+                "trios.refs": [m.ref for m in result.matches],
+                # Strings: a trace attribute list holds str or int, and two places is enough.
+                "trios.scores": [f"{m.score:.2f}" for m in result.matches],
+                "trios.dropped": result.dropped_below_threshold,
+            }
+        )
+    return result
 
 
 def run_sql(

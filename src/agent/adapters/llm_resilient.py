@@ -18,6 +18,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.embeddings import Embeddings
 from langchain_core.exceptions import ModelError
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
@@ -212,3 +213,25 @@ class ResilientChatModel(BaseChatModel):
 
     def with_structured_output(self, schema: Any, **kwargs: Any) -> Runnable[Any, Any]:  # type: ignore[override]
         return self.chain.derive(lambda model: model.with_structured_output(schema, **kwargs))
+
+
+class ResilientEmbeddings(Embeddings):
+    """What ``LLMFactory.embeddings()`` returns: one model behind the same breaker, limiter
+    and retries as a chat step, and no fallback (vectors are not comparable across models).
+    ``option.runnable`` takes a list of texts (documents) or one text (a query)."""
+
+    def __init__(self, step: str, option: ModelOption, policy: LlmPolicy) -> None:
+        self._step = step
+        self._option = option
+        self._policy = policy
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._run(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._run(text)
+
+    def _run(self, request: Any) -> Any:
+        return self._policy.run(
+            self._step, [self._option], lambda runnable, cfg: runnable.invoke(request, cfg), None
+        )

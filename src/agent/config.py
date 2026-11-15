@@ -48,7 +48,11 @@ class ModelSettings(BaseSettings):
     trio_candidate_fallback: str | None = None
     judge: str | None = None  # Pro
     judge_fallback: str | None = None
-    embedding: str | None = None  # Gemini embedding model; needed for the Trio slice
+    embedding: str | None = Field(
+        default="google_genai:gemini-embedding-001",
+        description="Golden Trio retrieval; no fallback (vectors are not comparable across "
+        "models). Unset (empty) turns retrieval off: the Null retriever.",
+    )
     prices: dict[str, tuple[float, float]] = Field(
         default_factory=dict,
         description="USD per million tokens (input, output) by model ID, for the cost line "

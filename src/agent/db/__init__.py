@@ -9,6 +9,10 @@ The LangGraph checkpointer owns its own tables; they are not declared here.
 
 from importlib.resources import files
 
+EMBEDDING_DIMENSIONS = 768
+"""``trio_embeddings.embedding`` holds this many float32 values (LLD 02); the embedding model
+is truncated to it with ``output_dimensionality``."""
+
 
 def ddl(dialect: str) -> str:
     """Return the DDL script for ``"postgres"`` or ``"sqlite"``."""

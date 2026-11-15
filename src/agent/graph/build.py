@@ -33,13 +33,14 @@ from agent.core.catalog import render
 from agent.core.confirmation import looks_like_reply
 from agent.core.input_rules import screen
 from agent.domain.profile import UserProfile
-from agent.errors import AgentError, ErrorClass, MessageClass, TransientError
+from agent.errors import AgentError, ErrorClass, MessageClass
 from agent.graph.analysis import analysis
 from agent.graph.deletion import DeletionNodes
 from agent.graph.prompts import router_messages
 from agent.graph.state import TURN_KEYS, AgentGraph, AgentState, TurnRuntime
 from agent.ports.llm import ModelStep
 from agent.ports.tracer import Tracer
+from agent.tools.analysis import search_trios
 
 
 class Node(StrEnum):
@@ -258,9 +259,15 @@ class _Nodes:
         assert user is not None
         router = state["router"]
         question = (router.search_question if router else None) or _last_text(state)
-        try:
-            result = self._ports.trios.search(question, user.scope, limit=self._limits.trio_top_k)
-        except TransientError:
+        result = search_trios(
+            self._ports.trios,
+            self._ports.tracer,
+            question,
+            user.scope,
+            limit=self._limits.trio_top_k,
+            span_name="trio_search",
+        )
+        if result is None:
             return {"trios": [], "retrieval_degraded": True}
         return {"trios": result.matches}
 

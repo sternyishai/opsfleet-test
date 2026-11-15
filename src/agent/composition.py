@@ -15,7 +15,8 @@ QueryRunner         ``google-cloud-bigquery`` with ADC, tenacity, breaker 1, 3
 PiiFilter           regex detectors                                       2
 UserDirectory       ``seed/users.yaml`` loaded into SQLite                1
 ReportRepository    SQLite + FTS5, same file as the users                 4
-TrioRetriever       ``NullTrioRetriever``; SQLite + cosine (stretch)      1, 7
+TrioRetriever       SQLite + cosine over ``seed/trios/``; Null if        1, 7
+                    ``MODEL_EMBEDDING`` is empty or ``eval --no-trios``
 ProfileStore        SQLite notes (stretch)                                7
 PersonaStore        bundled ``persona.yaml``; SQLite versions (stretch)   1, 7
 ChannelAdapter      CLI (stdout); web SSE stream (optional, ADR 0010)     1, 8
@@ -31,7 +32,7 @@ import sqlite3
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -90,6 +91,7 @@ def build_ports(settings: Settings) -> Ports:
     from agent.adapters.reports_sqlite import SqliteReportRepository
     from agent.adapters.tracer_jsonl import JsonlTracer
     from agent.adapters.tracer_phoenix import PhoenixExporter
+    from agent.adapters.trios_sqlite import SqliteTrioRetriever
     from agent.adapters.users_sqlite import SqliteUserDirectory
 
     limits = settings.limits
@@ -103,15 +105,26 @@ def build_ports(settings: Settings) -> Ports:
     app_db = _sqlite_path(settings.app_db_url)
     # The users first: they create the schema and the Authors the reports point at.
     users = SqliteUserDirectory(app_db, seed=settings.seed_dir / "users.yaml")
+    llm = GeminiLLMFactory(settings.models, limits, settings.google_api_key, tracer=tracer)
+    trios: TrioRetriever = (
+        SqliteTrioRetriever(
+            app_db,
+            seed=settings.seed_dir / "trios",
+            embeddings=llm.embeddings(),
+            min_score=limits.trio_min_score,
+        )
+        if settings.models.embedding
+        else NullTrioRetriever()
+    )
     return Ports(
-        llm=GeminiLLMFactory(settings.models, limits, settings.google_api_key, tracer=tracer),
+        llm=llm,
         guard=SqlglotQueryGuard(dialect="bigquery"),
         warehouse=BigQueryRunner(
             project=settings.bigquery_project, dataset=settings.bigquery_dataset, limits=limits
         ),
         pii=RegexPiiFilter(),
         users=users,
-        trios=NullTrioRetriever(),
+        trios=trios,
         personas=FilePersonaStore(settings.seed_dir / "persona.yaml"),
         tracer=tracer,
         reports=SqliteReportRepository(app_db),
@@ -171,7 +184,7 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
     chat app: traces go to ``traces/eval/`` (kept out of ``/stats``), the rate limiter waits
     longer, the base ports use a throwaway app store (each trial gets its own), and the
     scorecard goes to ``evals/runs/`` and, if it answers, Phoenix. ``trios_enabled=False`` is
-    the Golden Bucket ablation; until slice 7 the retriever is the Null one either way."""
+    the Golden Bucket ablation: the Null retriever in place of the seed Trios."""
     from agent.adapters.eval_files import (
         JsonScorecardSink,
         fixture_hash,
@@ -179,6 +192,7 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
         prereg_id,
         read_case_files,
     )
+    from agent.adapters.null import NullTrioRetriever
     from agent.adapters.scorecard_phoenix import PhoenixScorecardSink
     from agent.evals.runner import EvalEnvironment, EvalRunner, load_cases
     from agent.evals.scorers import (
@@ -206,6 +220,8 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
         }
     )
     ports = build_ports(eval_settings)
+    if not trios_enabled:
+        ports = replace(ports, trios=NullTrioRetriever())
     models = settings.models
     resolved = {step: models.resolve(step) for step in ModelStep}
     env = EvalEnvironment(
