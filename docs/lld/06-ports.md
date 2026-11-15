@@ -52,6 +52,10 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `pr
   6. the rewrite: each warehouse table becomes `(SELECT <allowlist> FROM t [WHERE <HLD 03 filter>]) AS <alias>`, the filters built from constant templates over `@brands`; `params = {"brands": sorted(scope)}` for a Manager, `{}` for an Executive. Then the outer `LIMIT`.
 - **Not yet:** `GuardAllowed.filters` is empty until the empty-result probe (slice 3).
 - **Trace:** `guard.decision`, `guard.reason`, `guard.rewritten`, `guard.tables`, `guard.scope_brands` (count for Managers, `"all"` for Executives), on the `query_guard` span that `run_sql` opens around the call (the guard itself is pure).
+- **sqlglot notes** (30.x, learned in slice 2; none of this shows in config):
+  - Type nodes as `exp.Expr`: pyright reports `exp.Expression` as a private import.
+  - `Select.args` keys the FROM clause as `from_`, not `from`.
+  - Deep nesting raises `RecursionError`, not a `SqlglotError`, so `check` catches every exception.
 - **Tests** · slice 2 · `tests/test_query_guard.py`: the full safety suite (see `run_sql` in [05](05-tools.md#run_sql)). Gated at 100%.
 
 ### `QueryRunner`

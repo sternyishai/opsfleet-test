@@ -14,7 +14,7 @@ Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/d
 
 ### Building a slice
 
-Start from the issue's **Implements** table: it names the files. Then read the matching `docs/lld/` section (index: `docs/lld/README.md`) and only the HLD sections it links, not whole packages or whole docs.
+Branch `feat/<issue>-<slug>` (e.g. `feat/7-resilience`). Start from the issue's **Implements** table: it names the files. Then read the matching `docs/lld/` section (index: `docs/lld/README.md`) and only the HLD sections it links, not whole packages or whole docs.
 
 ### Commits
 

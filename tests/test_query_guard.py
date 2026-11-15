@@ -187,6 +187,31 @@ def test_pathologically_nested_sql_is_rejected_not_raised() -> None:
     assert rejected(sql).reason is RejectReason.UNPARSEABLE
 
 
+HOSTILE = [
+    "(" * 5000 + "SELECT 1" + ")" * 5000,
+    "SELECT " + " + ".join(["1"] * 5000) + " FROM orders",
+    "SELECT " + "CONCAT(" * 500 + "'x'" + ")" * 500 + " FROM orders",
+    "SELECT 1 FROM orders WHERE " + " AND ".join(["TRUE"] * 5000),
+    "WITH " + ", ".join(f"c{i} AS (SELECT 1 AS x)" for i in range(500)) + " SELECT 1 FROM c0",
+    "SELECT 'unterminated FROM orders",
+    "SELECT `unterminated FROM orders",
+    "SELECT 1 FROM orders /* unterminated",
+    "\x00\xff\ufffd" * 100,
+    "SELECT \u202e1 FROM orders",
+    ";" * 1000,
+    "SELECT * FROM orders " + "JOIN orders USING (order_id) " * 300,
+]
+
+
+@pytest.mark.parametrize("sql", HOSTILE, ids=range(len(HOSTILE)))
+@pytest.mark.parametrize("scope", [EXECUTIVE, MANAGER], ids=["executive", "manager"])
+def test_the_guard_never_raises_on_hostile_input(sql: str, scope: BrandScope) -> None:
+    """The port's contract is a decision for any string; an exception would escape run_sql."""
+    decision = GUARD.check(sql, scope, row_limit=LIMIT)
+
+    assert isinstance(decision, GuardAllowed | GuardRejected)
+
+
 def test_no_role_rejects_everything() -> None:
     assert rejected("SELECT 1 FROM orders", BrandScope()).reason is RejectReason.NO_ROLE
 

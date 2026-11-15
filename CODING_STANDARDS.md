@@ -25,6 +25,7 @@ From [HLD 03](docs/hld/03-safety-and-pii.md) and [ADR 0003](docs/adr/0003-layere
 - Result rows never enter `AgentState`, a trace or a log; only `ResultSummary` does ([LLD 03](docs/lld/03-graph-state.md#what-never-enters-state)).
 - Only the router opens a branch. A tool result never decides routing.
 - A safety step that cannot run fails closed (refuse), never open.
+- A change to the query guard, the PII filter or the input rules is reviewed by attacking it: the Spec review runs hostile inputs against the real adapter (other Brands' literals in every comparison form, PII under other names, deep nesting), not only the diff. In slice 2 this found two holes the tests had missed.
 
 ## 3. Errors and outcomes
 

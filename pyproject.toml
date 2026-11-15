@@ -49,6 +49,8 @@ source-include = ["src/agent/db/*.sql", "src/agent/db/*.md"]
 
 [tool.ruff]
 line-length = 100
+# The assignment text as given; ruff would reformat its code examples.
+extend-exclude = ["ASSIGNMENT.md"]
 target-version = "py312"
 
 [tool.ruff.lint]
