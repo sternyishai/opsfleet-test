@@ -13,12 +13,15 @@ Wired so far: the analysis path ``load_context`` -> ``input_guard`` -> ``router`
 a deferred request goes back to ``retrieve_trios``. The other nodes join with their slice.
 """
 
+import functools
+from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.errors import GraphBubbleUp
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 
@@ -30,12 +33,13 @@ from agent.core.catalog import render
 from agent.core.confirmation import looks_like_reply
 from agent.core.input_rules import screen
 from agent.domain.profile import UserProfile
-from agent.errors import ErrorClass, MessageClass, TransientError
+from agent.errors import AgentError, ErrorClass, MessageClass, TransientError
 from agent.graph.analysis import analysis
 from agent.graph.deletion import DeletionNodes
 from agent.graph.prompts import router_messages
 from agent.graph.state import TURN_KEYS, AgentGraph, AgentState, TurnRuntime
 from agent.ports.llm import ModelStep
+from agent.ports.tracer import Tracer
 
 
 class Node(StrEnum):
@@ -81,15 +85,19 @@ def build_graph(ports: Ports, limits: Limits, checkpointer: BaseCheckpointSaver)
     """
     nodes = _Nodes(ports, limits)
     g = StateGraph(AgentState, context_schema=TurnRuntime)
-    g.add_node(Node.LOAD_CONTEXT, nodes.load_context)
-    g.add_node(Node.INPUT_GUARD, nodes.input_guard)
-    g.add_node(Node.ROUTER, _passthrough)
-    g.add_node(Node.RETRIEVE_TRIOS, nodes.retrieve_trios)
+
+    def add(node: Node, action: Callable[..., Any], **kwargs: Any) -> None:
+        g.add_node(node, _traced(node, action, ports.tracer), **kwargs)
+
+    add(Node.LOAD_CONTEXT, nodes.load_context)
+    add(Node.INPUT_GUARD, nodes.input_guard)
+    add(Node.ROUTER, _passthrough)
+    add(Node.RETRIEVE_TRIOS, nodes.retrieve_trios)
 
     def run_analysis(state: AgentState) -> dict[str, Any]:
         return analysis(state, ports, limits)
 
-    g.add_node(Node.ANALYSIS, run_analysis)
+    add(Node.ANALYSIS, run_analysis)
     deletion = DeletionNodes(
         ports,
         limits,
@@ -97,13 +105,13 @@ def build_graph(ports: Ports, limits: Limits, checkpointer: BaseCheckpointSaver)
         after=Node.AFTER,
         restart=Node.LOAD_CONTEXT,
     )
-    g.add_node(Node.PLAN_DELETION, deletion.plan_deletion)
-    g.add_node(Node.CONFIRM_DELETION, deletion.confirm_deletion, destinations=deletion.confirm_to)
-    g.add_node(Node.EXECUTE_DELETION, deletion.execute_deletion)
-    g.add_node(Node.REFUSE, nodes.refuse)
-    g.add_node(Node.AFTER, nodes.after)
-    g.add_node(Node.OUTPUT_FILTER, nodes.output_filter)
-    g.add_node(Node.RESPOND, nodes.respond)
+    add(Node.PLAN_DELETION, deletion.plan_deletion)
+    add(Node.CONFIRM_DELETION, deletion.confirm_deletion, destinations=deletion.confirm_to)
+    add(Node.EXECUTE_DELETION, deletion.execute_deletion)
+    add(Node.REFUSE, nodes.refuse)
+    add(Node.AFTER, nodes.after)
+    add(Node.OUTPUT_FILTER, nodes.output_filter)
+    add(Node.RESPOND, nodes.respond)
 
     g.add_edge(START, Node.LOAD_CONTEXT)
     g.add_conditional_edges(Node.LOAD_CONTEXT, _refused_or(Node.INPUT_GUARD))
@@ -140,6 +148,28 @@ _TURN_DEFAULTS: dict[str, Any] = {
     "saved_report_ids": [],
 }
 """What ``load_context`` resets every turn. ``turn_id`` and ``trace_id`` come in with the turn."""
+
+
+def _traced(node: Node, action: Callable[..., Any], tracer: Tracer) -> Callable[..., Any]:
+    """``action`` inside a span named after its node. ``wraps`` keeps the signature, which
+    LangGraph reads to decide whether to pass ``runtime``. A pause (``interrupt()``) is not an
+    error; any other exception is recorded on the node's span, then ends the turn as before."""
+
+    @functools.wraps(action)
+    def run(*args: Any, **kwargs: Any) -> Any:
+        with tracer.span(node.value) as span:
+            try:
+                return action(*args, **kwargs)
+            except GraphBubbleUp:
+                raise
+            except AgentError as exc:
+                span.record_error(exc.error_class, exc)
+                raise
+            except Exception as exc:
+                span.record_error(ErrorClass.UNCLASSIFIED, exc)
+                raise
+
+    return run
 
 
 def _passthrough(state: AgentState) -> dict[str, Any]:

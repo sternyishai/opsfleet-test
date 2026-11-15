@@ -44,6 +44,13 @@ from agent.ports.llm import ModelStep
 from agent.tools.branches import execute_deletion, plan_deletion
 from agent.tools.context import TurnContext
 
+_REPLY_KINDS: dict[type, str] = {
+    ConfirmAll: "confirm",
+    ConfirmExcept: "confirm_except",
+    Decline: "decline",
+}
+"""``deletion_reply.reply``; anything else (``NotAnAnswer``) is ``not_an_answer``."""
+
 
 class DeletionNodes:
     """The three nodes. ``confirm_deletion`` jumps to ``execute``, ``after`` or, for a
@@ -104,6 +111,7 @@ class DeletionNodes:
             decision = _decide(reply, plan, runtime)
             if isinstance(decision, NeedsCount):
                 decision = NotAnAnswer()
+        self._trace_reply(plan, decision)
         text: str | None = reply.get("text")
         update: dict[str, Any] = {
             "trace_id": reply["trace_id"],
@@ -131,6 +139,19 @@ class DeletionNodes:
                 update["messages"].append(AIMessage(content=said))
                 update["message_class"] = why
                 return Command(goto=self._after, update=update)
+
+    def _trace_reply(self, plan: DeletionPlan, decision: object) -> None:
+        """How the User answered, on its own span: a confirmed plan's outcome is on the
+        ``execute_deletion`` span, and only here is a cancelled one recorded."""
+        kind = _REPLY_KINDS.get(type(decision), "not_an_answer")
+        confirmed = kind in ("confirm", "confirm_except")
+        with self._ports.tracer.span(
+            "deletion_reply",
+            plan_id=str(plan.plan_id),
+            reply=kind,
+            outcome=None if confirmed else "cancelled",
+        ):
+            pass
 
     def execute_deletion(self, state: AgentState) -> dict[str, Any]:
         plan = state["open_plan"]

@@ -45,10 +45,10 @@ A test in Phase 4 pins this: for each row below, the CLI command and the web end
 | Edit the Persona directly | `/persona edit` | `PUT /api/persona` (form) | `Views.edit_persona` → Quality Gate |
 | Roll back the Persona | `/persona rollback` | `POST /api/persona/rollback` | `Views.rollback_persona` |
 | Step tree of a turn | `/trace [id]` | `GET /api/traces/{id}` | `Views.trace` |
-| Agent metrics | `/stats`, `agent stats` | `GET /api/stats` | `Views.stats` |
+| Agent metrics | `/stats [7d]`, `agent stats --as <id>` | `GET /api/stats` | `Views.stats` |
 | Who am I (prototype) | `--as <id>` | `GET /api/dev/users` + picker | `UserDirectory` |
 
-`Views(ports, limits)` builds the same `TurnContext` a tool gets for the User the channel resolved; an unknown User or one with no role raises `PermanentError(NO_ROLE)`. `build_app` in [composition.py](../../src/agent/composition.py) returns `ChatService` and `Views` over one set of ports. Report and Persona results reuse the tool output types ([05](05-tools.md)); trace and stats use [`contracts/views.py`](../../src/agent/contracts/views.py).
+`Views(ports, limits)` builds the same `TurnContext` a tool gets for the User the channel resolved; an unknown User or one with no role raises `PermanentError(NO_ROLE)`. `build_app` in [composition.py](../../src/agent/composition.py) returns `ChatService` and `Views` over one set of ports. Report and Persona results reuse the tool output types ([05](05-tools.md)); trace and stats use [`contracts/views.py`](../../src/agent/contracts/views.py), built from `Tracer.read` by [`core/observability.py`](../../src/agent/core/observability.py). `Views.trace` returns `None` for a missing turn and for another User's alike; `Views.stats` is for Executives (`PermanentError(STATS_FORBIDDEN)` otherwise) and prices tokens with `MODEL_PRICES`.
 
 ## The chat stream
 

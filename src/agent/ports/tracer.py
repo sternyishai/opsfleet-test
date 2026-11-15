@@ -1,11 +1,13 @@
 """Tracer: one trace per turn, one span per node and tool call (HLD 08)."""
 
 from contextlib import AbstractContextManager
+from datetime import datetime
 from typing import Protocol
 
+from agent.domain.traces import AttrValue, SpanRecord
 from agent.errors import ErrorClass
 
-type AttrValue = str | int | float | bool | list[str] | list[int] | None
+__all__ = ["AttrValue", "Span", "SpanRecord", "Tracer"]
 
 
 class Span(Protocol):
@@ -27,6 +29,10 @@ class Tracer(Protocol):
       OpenTelemetry/OpenInference to Phoenix when it is running.
     - **Never receives result rows or PII.** Callers pass result summaries; output-filter hits
       are recorded as types only.
+    - ``read`` returns the finished spans started at or after ``since`` (all of them when
+      ``None``), oldest first, for ``Views.trace`` and ``Views.stats``. A span is readable once
+      it has ended, so a turn's root span appears after its children. Unreadable records are
+      skipped; ``read`` never raises.
     """
 
     def turn(self, **attributes: AttrValue) -> AbstractContextManager[tuple[str, Span]]: ...
@@ -34,3 +40,5 @@ class Tracer(Protocol):
     def span(self, name: str, **attributes: AttrValue) -> AbstractContextManager[Span]: ...
 
     def current_trace_id(self) -> str | None: ...
+
+    def read(self, since: datetime | None = None) -> list[SpanRecord]: ...

@@ -25,7 +25,7 @@ The checklist from the [README](README.md#checklist-for-each-tool-or-port) is fi
 | **Ports** | none. Column descriptions are bundled with the guard's allowlist in [`domain/warehouse.py`](../../src/agent/domain/warehouse.py) (`ALLOWLIST`), so the two cannot disagree |
 | **Safety** | Shows only allowlisted, non-PII columns, as *this User's* scoped view projects them: no `orders.num_of_item` for a Manager |
 | **Failures** | none expected |
-| **Trace** | `tables`, `role` |
+| **Trace** | `tables`, `role`, on a span per model call only (`run_sql` builds its retry schema without one) |
 | **Tests** · slice 1–2 · `tests/test_tools_schema.py` | no PII column in any output; Manager view lacks `num_of_item`; Executive view has it |
 
 ### `search_golden_trios`
@@ -47,7 +47,7 @@ The checklist from the [README](README.md#checklist-for-each-tool-or-port) is fi
 | **Ports** | `QueryGuard`, `QueryRunner` |
 | **Safety** | Nothing reaches BigQuery without `QueryGuard.check`; probes pass the same guard; Brands bound as parameters; forced `LIMIT`; dry run then `maximum_bytes_billed` ([03](../hld/03-safety-and-pii.md#query-guard-the-core-guarantee)) |
 | **Failures** | guard rejection, dry-run error, bytes cap, runtime error → `retry` (shared budget of 2) → `gave_up` (`SELF_CORRECTION_EXHAUSTED`, or `QUERY_TOO_LARGE` when the last failure was the bytes cap). Out-of-scope Brand → `retry` with the Brands the User *can* analyze; if the model insists, `ToolError(OUT_OF_SCOPE)` and the analysis node ends the turn with that catalog message. 0 rows → `empty` with a probe hint, once; then `final`. BigQuery down → `TransientError` (`DATA_SOURCE_DOWN`), not caught: the turn ends at the graph boundary. |
-| **Trace** | a `run_sql` span: `attempt`, `sql.status`, `sql.retry_kind`, `sql.gave_up` (the catalog class of a give-up), `error`, `dry_run.bytes`, `row_count`, `bytes_billed`; `guard.*` on a `query_guard` span per statement, probes included ([06](06-ports.md#queryguard)); `probe.checked` (a count), `probe.final` on an `empty_result_probe` span; never the hint, which quotes warehouse values |
+| **Trace** | a `run_sql` span: `attempt`, `sql.status`, `sql.retry_kind`, `sql.gave_up` (the catalog class of a give-up), `error`, `dry_run.bytes`, `row_count`, `bytes_billed`; `guard.*`, `sql.written` and `sql.rewritten` (PII-filtered) on a `query_guard` span per statement, probes included ([06](06-ports.md#queryguard)); `probe.checked` (a count), `probe.final` on an `empty_result_probe` span; never the hint, which quotes warehouse values |
 | **Tests** · slices 1–3 · `tests/test_query_guard.py`, `tests/test_run_sql.py` | the safety suite (single SELECT, allowlist, PII columns, out-of-scope Brand, `num_of_item`, scope rewrite per role, parameter binding, forced LIMIT); filter literals for the probe; syntax error then fix; wrong literal → probe hint → success; valid filters → `final`; bytes cap; one budget across retry kinds → `gave_up`; BigQuery down; out-of-scope insisted → `OUT_OF_SCOPE`, also through a whole turn |
 
 **How the loop works** ([`tools/analysis.py`](../../src/agent/tools/analysis.py)). `run_sql(input, ctx, budget) -> (output, budget)`: the `SqlBudget` goes in and comes back, so the loop is tested without a graph. `relevant_schema` holds the tables of a statement the guard allowed (dry-run, bytes-cap and runtime errors); a guard rejection carries its own hint instead. `tried` lists `filtering by <column>` for every column the turn's allowed statements filtered on, for the plain-language give-up.
@@ -111,7 +111,7 @@ Numbers and `LIKE` patterns are not probed. The probe SQL is built from allowlis
 | **Ports** | `ReportRepository.delete_with_audit` |
 | **Safety** | Only for the `open_plan` of this User and Conversation; every confirmed ID must be in the plan; ownership re-checked inside the transaction; delete + entity cascade + audit in one transaction |
 | **Failures** | stale, cancelled or foreign plan → `PLAN_EXPIRED`; replay → `replayed = true`, nothing deleted; report already gone → listed in `already_gone`; app DB down → `TransientError`, nothing deleted |
-| **Trace** | `plan_id`, `outcome` (`confirmed`, `partial`, `cancelled`, `expired`), `deleted`, `kept`, `already_gone` counts |
+| **Trace** | `plan_id`, `outcome` (`confirmed`, `partial`, `expired`), `replayed`, `deleted`, `kept`, `already_gone` counts. A declined or unanswered plan never gets here: `cancelled` is on the `deletion_reply` span ([06](06-ports.md#trace-attributes)) |
 | **Tests** · slice 4 · `tests/test_deletion.py`, `tests/test_deletion_flow.py` | partial confirmation; reports saved after planning kept; idempotent replay (also at the repository with other IDs); expired, replaced and foreign plan; already-gone report; ownership re-checked; audit row has no content; through the graph: `yes except`, `no`, large plan and count, a new question cancels, buttons, another User's button |
 
 ### `draft_persona` (branch)

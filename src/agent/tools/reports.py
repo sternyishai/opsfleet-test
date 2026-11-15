@@ -128,7 +128,7 @@ def list_my_reports(args: ListReportsInput, ctx: TurnContext) -> ListReportsOutp
         scope = ctx.user.scope
         reports = [i.model_copy(update={"accessible": scope.covers(i.scope)}) for i in items]
         span.set(
-            filter=args.model_dump_json(exclude_defaults=True),
+            filter=ctx.ports.pii.scan(args.model_dump_json(exclude_defaults=True)).text,
             total=total,
             inaccessible=sum(not r.accessible for r in reports),
         )

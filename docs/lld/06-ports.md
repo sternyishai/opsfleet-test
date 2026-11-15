@@ -16,7 +16,7 @@ ADR 0006 lists ten ports. The LLD adds three: **`UserDirectory`**, the seam betw
 | [`ProfileStore`](../../src/agent/ports/profile.py) | `load`, `save_standing`, `remove` | SQLite notes (stretch) | Postgres |
 | [`PersonaStore`](../../src/agent/ports/persona.py) | `active`, `history`, `publish`, `record_rejection`, `rollback` | bundled `persona.yaml`; SQLite (stretch) | Postgres, ~60 s cache; or a prompt registry |
 | [`ChannelAdapter`](../../src/agent/ports/channel.py) | `deliver(message)`, per turn | CLI stdout; web SSE stream (optional) | Slack, Teams, web in the Gateway |
-| [`Tracer`](../../src/agent/ports/tracer.py) | `turn(...)`, `span(name, ...)`, `current_trace_id()` | JSONL; OTel → Phoenix if running | OTel Collector → Phoenix, Langfuse or LangSmith |
+| [`Tracer`](../../src/agent/ports/tracer.py) | `turn(...)`, `span(name, ...)`, `current_trace_id()`, `read(since)` | JSONL; OTel → Phoenix if running | OTel Collector → Phoenix, Langfuse or LangSmith |
 | [`ScorecardSink`](../../src/agent/ports/scorecards.py) | `publish(cases, scorecard)`, `baseline(...)` | JSON in `evals/runs/`; Phoenix experiments if running | same, or Langfuse / LangSmith datasets |
 | [`Delivery`](../../src/agent/ports/delivery.py) | `render(report)`, `send(author_id, rendered, key)` | not wired | email, Slack, push |
 
@@ -36,7 +36,7 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `No
   3. **tenacity**, up to `retry_attempts` (3) tries on retryable errors only: exponential backoff with jitter, capped at `retry_max_wait_s` (10 s). The provider's delay replaces the backoff (an HTTP `Retry-After`, or the `RetryInfo.retryDelay` in Gemini's 429 body); a delay longer than the cap stops the retries and moves to the fallback.
 
   Retryable is LangChain's own tag (`ModelError.is_retryable`: 429, 5xx, connection, timeout), plus raw `httpx` transport errors and SDK `ServerError`. A known non-retryable error (400, 401, 403, 404) raises `PermanentError` at once, **without fallback**: another model would get the same bad request. Anything else raises an unclassified `AgentError`. `bind_tools` and `with_structured_output` are applied to every model in the chain, so a bound or structured call keeps the same fallback.
-- **Trace:** an `llm` span per call: `llm.step`, `llm.model` (None when every model failed), `llm.fallback_used`, `llm.attempts`, `llm.errors` (`model: ErrorType` per model that failed, so a `MODEL_BUSY` turn says why), `breaker.state`, `llm.tokens.prompt`, `llm.tokens.completion`, `llm.latency_ms`. Not yet: `llm.provider` (one provider in the prototype) and `llm.cost_usd` (slice 5).
+- **Trace:** an `llm` span per call: `llm.step`, `llm.model` (None when every model failed), `llm.fallback_used`, `llm.attempts`, `llm.errors` (`model: ErrorType` per model that failed, so a `MODEL_BUSY` turn says why), `breaker.state`, `llm.tokens.prompt`, `llm.tokens.completion`, `llm.latency_ms`. Not on the span: `llm.provider` (one provider in the prototype) and the cost, which `/stats` works out from the tokens and `MODEL_PRICES` (slice 5).
 - **Tests** · slice 3 · `tests/test_resilience.py`: a 429 burst then success; `Retry-After` honoured; primary down → fallback; all down → `MODEL_BUSY`; a 400 is not retried and does not fall back; bound and structured calls fall back too; the breaker opens after 5 failures in 30 s, not when they are spread out, and closes after a successful probe; the rate limiter waits, and a wait over the queue limit is `MODEL_BUSY`; an unknown exception never crosses the port.
 - **Gemini adapter notes** (`langchain-google-genai` 4.x, learned in slice 1; none of this shows in config):
   - `retries` counts attempts: `1` is one try, and `0` silently means the SDK default of 5 retries.
@@ -58,7 +58,7 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `No
   6. the rewrite: each warehouse table becomes `(SELECT <allowlist> FROM t [WHERE <HLD 03 filter>]) AS <alias>`, the filters built from constant templates over `@brands`; `params = {"brands": sorted(scope)}` for a Manager, `{}` for an Executive. Then the outer `LIMIT`.
 - **Filters** (slice 3): `GuardAllowed.filters` lists each `column <op> literal` of the SQL as the model wrote it (before the scope rewrite), in source order, through `DATE()`, `LOWER()`, `CAST` and the like; a column is kept only when its table is certain ([05](05-tools.md#run_sql)).
 - **Brand comparisons** (slice 3): for a Manager, `brand` may be compared only with a literal, a column or `NULL`. A comparison with an expression (`LOWER('NIKE')`, `CONCAT(...)`, `IN (SELECT ...)`) is `BRAND_OUT_OF_SCOPE`: the scoped rewrite would return no other Brand's rows anyway, but only the refusal tells the User why. Input to the empty-result probe ([05](05-tools.md#run_sql)).
-- **Trace:** `guard.decision`, `guard.reason`, `guard.rewritten`, `guard.tables`, `guard.scope_brands` (count for Managers, `"all"` for Executives), on the `query_guard` span that `run_sql` opens around the call (the guard itself is pure).
+- **Trace:** `guard.decision`, `guard.reason`, `guard.rewritten`, `guard.tables`, `guard.scope_brands` (count for Managers, `"all"` for Executives), `sql.written` and `sql.rewritten` (None when rejected; both through the PII filter), on the `query_guard` span that `run_sql` opens around the call (the guard itself is pure).
 - **sqlglot notes** (30.x, learned in slice 2; none of this shows in config):
   - Type nodes as `exp.Expr`: pyright reports `exp.Expression` as a private import.
   - `Select.args` keys the FROM clause as `from_`, not `from`.
@@ -142,12 +142,13 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `No
 
 ### `Tracer`
 
-- **Schema:** `Span.set(**attrs)`, `Span.record_error(error_class, exc)`.
+- **Schema:** `Span.set(**attrs)`, `Span.record_error(error_class, exc)`; `read(since)` returns `SpanRecord`s ([domain/traces.py](../../src/agent/domain/traces.py)): `trace_id`, `span_id`, `parent_id`, `name`, `start`, `duration_ms`, `attributes`, `error`.
 - **Depends on:** nothing.
-- **Safety:** never receives rows or PII.
-- **Failures:** never blocks or fails a turn.
+- **Safety:** never receives rows or PII. An error keeps its class and exception type, never its text; callers put free text (SQL, a warehouse error, a report filter) through the PII filter before setting it.
+- **Failures:** never blocks or fails a turn. A JSONL write error and any export error are swallowed; `read` skips unreadable lines and never raises.
+- **How it is built** (slice 5, [tracer_jsonl.py](../../src/agent/adapters/tracer_jsonl.py), [tracer_phoenix.py](../../src/agent/adapters/tracer_phoenix.py)): one JSON line per finished span in `traces/<UTC date>.jsonl`. The current span is a `ContextVar`, so a tool's span is a child of the node it runs in. Every graph node runs inside a span named after its `Node` (`_traced` in [graph/build.py](../../src/agent/graph/build.py)); a pause is not an error. `ChatService` sets the root attributes after the turn from the checkpoint, so a failed turn still records who asked and what was routed. The optional second sink rebuilds each record as an OTel span with OpenInference attributes (`openinference.span.kind`, `session.id`, `llm.model_name`, `llm.token_count.*`, `tool.name`) and the same IDs, on a `BatchSpanProcessor` to Phoenix's OTLP endpoint; it is used only when `PHOENIX_ENDPOINT` answers at start-up.
 - **Trace:** it is the trace.
-- **Tests** · slice 5 · `tests/test_tracing.py`: one root span per turn with the attributes below; `/trace` renders the step tree from JSONL; an export failure does not fail the turn.
+- **Tests** · slice 5 · `tests/test_tracing.py`: one root span per turn with the attributes below; node spans under the root and tool spans under their node; no rows or PII in the files; `/trace` renders the step tree from JSONL, `/trace <id>` an earlier turn, never another User's; the catalog reference ID is the ID `/trace` accepts; an export failure or an unwritable folder does not fail the turn; the OpenInference mapping; `/stats` from hand-written spans; slash commands make no model call.
 
 ### `ScorecardSink`
 
@@ -160,4 +161,4 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `No
 
 ## Trace attributes
 
-The root span (`turn`) carries: `trace_id`, `conversation_id`, `user.id`, `user.role`, `channel`, `router.verdict`, `router.action`, `persona.version`, `profile.snapshot`, `retrieval.gap`, `retrieval.degraded`, `outcome`, `error_class`. Node and tool spans add the attributes in [05](05-tools.md) and above. `Outbound.emit` opens an `outbound` span per message with `kind` and `pii.hits` (types only). `/stats` ([08](../hld/08-observability.md#in-the-prototype)) is computed from these names only, so they are a contract: renaming one is an interface change and updates this page.
+The root span (`turn`) carries: `trace_id`, `conversation_id`, `user.id`, `user.role`, `channel`, `router.verdict`, `router.action`, `persona.version`, `profile.snapshot`, `retrieval.gap`, `retrieval.degraded`, `outcome`, `error_class`, and `message_class` (the catalog message the turn ended with, if any). `outcome` is `answered`, `confirmation` (paused at a Deletion Plan), `refused` (input guard, no role, out-of-scope Brand), `gave_up` (another catalog message) or `error`. `profile.snapshot` holds typed values and a note count, never note text. Every graph node is a span named after its `Node`; node and tool spans add the attributes in [05](05-tools.md) and above. `Outbound.emit` opens an `outbound` span per message with `kind` and `pii.hits` (types only). The confirmation node opens a `deletion_reply` span with `plan_id`, `reply` (`confirm`, `confirm_except`, `decline`, `not_an_answer`) and `outcome` (`cancelled`, or None when the plan goes on to `execute_deletion`). `/stats` ([08](../hld/08-observability.md#in-the-prototype)) is computed from these names only, so they are a contract: renaming one is an interface change and updates this page.

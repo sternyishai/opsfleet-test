@@ -147,6 +147,8 @@ def test_guard_decisions_are_trace_attributes() -> None:
     tracer = ports.tracer
     assert isinstance(tracer, FakeTracer)
     allowed, rejected = [s.attributes for s in tracer.spans if s.name == "query_guard"]
+    assert allowed.pop("sql.written") == "SELECT COUNT(*) FROM orders"
+    assert "@brands" in allowed.pop("sql.rewritten")  # scoped by parameter, never by name
     assert allowed == {
         "guard.decision": "allowed",
         "guard.reason": None,
@@ -157,6 +159,8 @@ def test_guard_decisions_are_trace_attributes() -> None:
     assert rejected["guard.decision"] == "rejected"
     assert rejected["guard.reason"] == "not_single_select"
     assert rejected["guard.tables"] == []
+    assert rejected["sql.written"] == "DROP TABLE orders"
+    assert rejected["sql.rewritten"] is None
 
 
 # --- self-correction (slice 3) ---------------------------------------------------------------

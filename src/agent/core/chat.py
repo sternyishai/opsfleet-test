@@ -7,7 +7,7 @@ one method.
 """
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from langchain_core.messages import HumanMessage
@@ -23,9 +23,54 @@ from agent.contracts.channel import (
 )
 from agent.core.catalog import render
 from agent.core.outbound import Outbound
+from agent.domain.profile import UserProfile
 from agent.errors import AgentError, ErrorClass, MessageClass
-from agent.graph.state import AgentGraph, AgentState, TurnRuntime
+from agent.graph.state import TURN_KEYS, AgentGraph, AgentState, TurnRuntime
 from agent.ports.channel import ChannelAdapter
+from agent.ports.tracer import AttrValue
+
+_REFUSALS = frozenset(
+    {
+        MessageClass.OFF_TOPIC,
+        MessageClass.PII_REQUEST,
+        MessageClass.INJECTION,
+        MessageClass.NO_ROLE,
+        MessageClass.OUT_OF_SCOPE,
+        MessageClass.PERSONA_FORBIDDEN,
+    }
+)
+"""A refusal is the safety layer working, not a failed task: ``/stats`` counts it apart."""
+
+_ANSWERS = frozenset({MessageClass.NOTHING_MATCHED})
+"""Catalog messages that are the answer, not a failure: nothing matched the delete."""
+
+
+def turn_outcome(paused: bool, failed: bool, message_class: MessageClass | None) -> str:
+    """``outcome`` on the root span: ``answered``, ``confirmation`` (paused at a Deletion
+    Plan), ``refused``, ``gave_up`` (a catalog message instead of an answer) or ``error``."""
+    if failed:
+        return "error"
+    if paused:
+        return "confirmation"
+    if message_class is None or message_class in _ANSWERS:
+        return "answered"
+    return "refused" if message_class in _REFUSALS else "gave_up"
+
+
+def profile_snapshot(profile: UserProfile | None) -> str:
+    """The profile the answer was written with, as typed values and a note count only:
+    note text is free text, so it stays out of the trace."""
+    if profile is None:
+        return ""
+    values = [
+        f"{name}={getattr(profile, name).value}"
+        for name in ("format", "depth", "charts", "language")
+        if getattr(profile, name) is not None
+    ]
+    values += [f"{name}={v.value}" for name, v in sorted(profile.attributes.items())]
+    if profile.notes:
+        values.append(f"notes={len(profile.notes)}")
+    return " ".join(values)
 
 
 class ChatService:
@@ -58,21 +103,27 @@ class ChatService:
     ) -> None:
         conversation_id = message.conversation_id or uuid4()
         outbound = Outbound(channel, self._ports.pii, self._ports.tracer)
+        config: RunnableConfig = {"configurable": {"thread_id": str(conversation_id)}}
         with self._ports.tracer.turn(
-            conversation_id=str(conversation_id), **{"user.id": message.user_id}
+            conversation_id=str(conversation_id),
+            # A button press carries no channel: the Conversation's is read after the turn.
+            channel=message.channel.value if isinstance(message, InboundMessage) else None,
+            **{"user.id": message.user_id},
         ) as (trace_id, span):
+            failure: AgentError | None = None
+            paused = False
+            turn_id = uuid4().hex
             try:
-                config: RunnableConfig = {"configurable": {"thread_id": str(conversation_id)}}
-                turn_id = uuid4().hex
                 result = self._graph.invoke(
                     self._turn_input(message, config, conversation_id, turn_id, trace_id),
                     config,
                     context=TurnRuntime(user_id=message.user_id, outbound=outbound),
                 )
-                for paused in result.get("__interrupt__", []):
+                for pause in result.get("__interrupt__", []):
+                    paused = True
                     outbound.emit(
                         ConfirmationRequest.model_validate(
-                            paused.value["request"]
+                            pause.value["request"]
                             | {
                                 "conversation_id": conversation_id,
                                 "trace_id": trace_id,
@@ -81,11 +132,44 @@ class ChatService:
                         )
                     )
             except AgentError as exc:
+                failure = exc
                 span.record_error(exc.error_class, exc)
                 self._fail(outbound, exc.message_class, conversation_id, trace_id)
             except Exception as exc:
+                failure = AgentError(type(exc).__name__)
                 span.record_error(ErrorClass.UNCLASSIFIED, exc)
                 self._fail(outbound, MessageClass.UNCLASSIFIED, conversation_id, trace_id)
+            span.set(**self._turn_attributes(config, paused, failure))
+
+    def _turn_attributes(
+        self, config: RunnableConfig, paused: bool, failure: AgentError | None
+    ) -> dict[str, AttrValue]:
+        """The root span's contract (LLD 06 § Trace attributes), read from the Conversation's
+        checkpoint, so a turn that failed half-way still says who asked and what was routed.
+        Never raises: a trace that cannot be read is less important than the answer."""
+        try:
+            state: dict[str, Any] = dict(self._graph.get_state(config).values)
+        except Exception:
+            state = {}
+        user = state.get("user")
+        router = state.get("router")
+        persona = state.get("persona")
+        message_class = failure.message_class if failure else state.get("message_class")
+        error_class = failure.error_class if failure else state.get("error_class")
+        channel = state.get("channel")
+        return {
+            **({"channel": channel.value} if channel else {}),
+            "user.role": user.role.value if user and user.role else None,
+            "router.verdict": router.verdict.value if router else None,
+            "router.action": router.action.value if router and router.action else None,
+            "persona.version": persona.version if persona else None,
+            "profile.snapshot": profile_snapshot(state.get("profile")),
+            "retrieval.gap": bool(state.get("ran_sql")) and not state.get("trios"),
+            "retrieval.degraded": bool(state.get("retrieval_degraded")),
+            "outcome": turn_outcome(paused, failure is not None, message_class),
+            "error_class": error_class.value if error_class else None,
+            "message_class": message_class.value if message_class else None,
+        }
 
     def _turn_input(
         self,
@@ -102,13 +186,16 @@ class ChatService:
         if plan is None:
             if isinstance(message, ConfirmationResponse):
                 raise AgentError("no open plan", message_class=MessageClass.PLAN_EXPIRED)
-            return {
+            turn: AgentState = {
                 "messages": [HumanMessage(content=message.text)],
                 "conversation_id": conversation_id,
                 "channel": message.channel,
                 "turn_id": turn_id,
                 "trace_id": trace_id,
             }
+            # Cleared here as well as in load_context, so a turn that fails before
+            # load_context never reports the previous turn's router or retrieval.
+            return cast(AgentState, dict.fromkeys(TURN_KEYS - {"turn_id", "trace_id"}) | turn)
         if message.user_id != plan.author_id:
             raise AgentError("not the plan's User", message_class=MessageClass.PLAN_EXPIRED)
         reply: dict[str, Any] = (

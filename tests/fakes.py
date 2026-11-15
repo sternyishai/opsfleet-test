@@ -46,6 +46,7 @@ from agent.graph.build import build_graph
 from agent.graph.state import CHECKPOINT_TYPES, AgentGraph
 from agent.ports.llm import ModelStep
 from agent.ports.reports import ReportRepository
+from agent.ports.tracer import SpanRecord, Tracer
 from agent.tools.context import TurnContext
 
 
@@ -267,6 +268,9 @@ class FakeTracer:
     def current_trace_id(self) -> str | None:
         return None
 
+    def read(self, since: datetime | None = None) -> list[SpanRecord]:
+        return []
+
 
 class CollectingChannel:
     def __init__(self) -> None:
@@ -284,6 +288,7 @@ def fake_ports(
     warehouse: FakeQueryRunner | None = None,
     trios: Any = None,
     reports: ReportRepository | None = None,
+    tracer: Tracer | None = None,
 ) -> Ports:
     return Ports(
         llm=llm or FakeLLMFactory(),
@@ -293,7 +298,7 @@ def fake_ports(
         users=FakeUsers(*users),
         trios=trios or NullTrioRetriever(),
         personas=FakePersonas(),
-        tracer=FakeTracer(),
+        tracer=tracer or FakeTracer(),
         reports=reports or InMemoryReportRepository(),
     )
 

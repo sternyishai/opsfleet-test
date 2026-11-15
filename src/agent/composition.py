@@ -19,7 +19,8 @@ TrioRetriever       ``NullTrioRetriever``; SQLite + cosine (stretch)      1, 7
 ProfileStore        SQLite notes (stretch)                                7
 PersonaStore        bundled ``persona.yaml``; SQLite versions (stretch)   1, 7
 ChannelAdapter      CLI (stdout); web SSE stream (optional, ADR 0010)     1, 8
-Tracer              JSONL in ``./traces/``; OTel -> Phoenix if running    1, 5
+Tracer              JSONL in ``./traces/``; OTel -> Phoenix if it answers 1, 5
+                    at start-up (``PHOENIX_ENDPOINT``)
 Delivery            not wired (ADR 0009)                                  -
 ==================  ====================================================  =========
 """
@@ -80,10 +81,14 @@ def build_ports(settings: Settings) -> Ports:
     from agent.adapters.query_guard import SqlglotQueryGuard
     from agent.adapters.reports_sqlite import SqliteReportRepository
     from agent.adapters.tracer_jsonl import JsonlTracer
+    from agent.adapters.tracer_phoenix import PhoenixExporter
     from agent.adapters.users_sqlite import SqliteUserDirectory
 
     limits = settings.limits
-    tracer = JsonlTracer(settings.traces_dir)
+    endpoint = settings.phoenix_endpoint
+    tracer = JsonlTracer(
+        settings.traces_dir, export=PhoenixExporter.connect(endpoint) if endpoint else None
+    )
     app_db = _sqlite_path(settings.app_db_url)
     # The users first: they create the schema and the Authors the reports point at.
     users = SqliteUserDirectory(app_db, seed=settings.seed_dir / "users.yaml")
@@ -124,7 +129,7 @@ def build_app(settings: Settings) -> tuple["ChatService", "Views"]:
 
     ports = build_ports(settings)
     graph = build_graph(ports, settings.limits, build_checkpointer(settings))
-    return ChatService(ports, graph), Views(ports, settings.limits)
+    return ChatService(ports, graph), Views(ports, settings.limits, settings.models.prices)
 
 
 def build_cli_channel() -> "StdoutChannel":

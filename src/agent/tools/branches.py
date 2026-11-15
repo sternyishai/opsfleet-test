@@ -35,7 +35,8 @@ def plan_deletion(args: PlanDeletionInput, ctx: TurnContext) -> PlanDeletionOutp
             ctx.user.user_id, args.filter, conversation_id=ctx.conversation_id
         )
         span.set(
-            filter=args.filter.model_dump_json(exclude_defaults=True), **{"plan.size": len(items)}
+            filter=ctx.ports.pii.scan(args.filter.model_dump_json(exclude_defaults=True)).text,
+            **{"plan.size": len(items)},
         )
         if not items:
             return PlanDeletionNothing()
