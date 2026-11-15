@@ -5,17 +5,28 @@ Spans are rebuilt from the ``SpanRecord`` the JSONL tracer wrote, with the same 
 span IDs, so the reference ID a User quotes finds the trace in Phoenix too. Export is the OTel
 SDK's ``BatchSpanProcessor``: a bounded queue drained by a background thread, which drops
 spans when full and never blocks a turn. Phoenix is used only when it answers at start-up.
+
+**Full content** (``instrument_langchain`` + ``active``, off unless ``PHOENIX_FULL_CONTENT``):
+OpenInference's LangChain instrumentation adds a span per LangGraph node, model call and tool
+call with its whole input and output, prompts and tool results included. That breaks the
+tracer's rule (no rows, no PII), so it is for a developer's machine only (LLD 06 § Tracer).
+``active`` makes each of our spans the current OTel span while it runs, so those spans nest
+under our ``turn`` and each question stays one trace.
 """
 
 import atexit
 import logging
 import socket
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from urllib.parse import urlsplit
 
+from openinference.instrumentation.langchain import LangChainInstrumentor
+from opentelemetry import context as otel_context
+from opentelemetry import trace as otel_trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import ReadableSpan
+from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import SpanContext, Status, StatusCode, TraceFlags
 
@@ -40,8 +51,10 @@ _GUARDRAILS = frozenset({"query_guard", "outbound", "input_guard", "output_filte
 class PhoenixExporter:
     """``export(record)`` queues one span for Phoenix. Build it with ``connect``."""
 
-    def __init__(self, processor: BatchSpanProcessor) -> None:
+    def __init__(self, processor: SpanProcessor) -> None:
         self._processor = processor
+        self._provider = TracerProvider(resource=_RESOURCE)
+        self._provider.add_span_processor(processor)
 
     @classmethod
     def connect(cls, endpoint: str, timeout_s: float = 0.3) -> "PhoenixExporter | None":
@@ -65,6 +78,32 @@ class PhoenixExporter:
 
     def __call__(self, record: SpanRecord) -> None:
         self._processor.on_end(to_otel(record))
+
+    def instrument_langchain(self) -> None:
+        """Full content: every LangChain run (graph, nodes, model and tool calls) becomes a
+        span with its input and output, sent through the same queue."""
+        LangChainInstrumentor().instrument(tracer_provider=self._provider)
+
+    def uninstrument_langchain(self) -> None:
+        LangChainInstrumentor().uninstrument()
+
+    @contextmanager
+    def active(self, trace_id: str | None, span_id: str) -> Iterator[None]:
+        """Our span as the current OTel span, so instrumented spans started inside it are its
+        children. Never raises: without it they would only land in a trace of their own."""
+        try:
+            parent = otel_trace.NonRecordingSpan(_context(int(trace_id or "0", 16) or 1, span_id))
+            token = otel_context.attach(otel_trace.set_span_in_context(parent))
+        except Exception:
+            yield
+            return
+        try:
+            yield
+        finally:
+            try:
+                otel_context.detach(token)
+            except Exception:
+                pass
 
 
 def to_otel(record: SpanRecord) -> ReadableSpan:

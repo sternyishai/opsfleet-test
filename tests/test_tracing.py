@@ -441,6 +441,41 @@ def test_a_span_becomes_an_openinference_span_with_its_parent() -> None:
     assert not otel_llm.status.is_ok
 
 
+def test_full_content_spans_nest_under_the_turn_with_tool_input_and_output(
+    tmp_path: Path,
+) -> None:
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    received = InMemorySpanExporter()
+    phoenix = PhoenixExporter(SimpleSpanProcessor(received))
+    phoenix.instrument_langchain()
+    try:
+        tracer = JsonlTracer(tmp_path, export=phoenix, activate=phoenix.active)
+        service, _ = chat_service(fake_ports(CEO, llm=sql_turn_llm(), tracer=tracer))
+        [reply], _ = ask(service, "ceo", "What was total revenue in 2025?")
+    finally:
+        phoenix.uninstrument_langchain()
+
+    spans = received.get_finished_spans()
+    turn_trace = int(reply.trace_id, 16)
+    assert {s.context.trace_id for s in spans if s.context} == {turn_trace}  # one trace
+    [tool] = [
+        s for s in spans if s.name == "run_sql" and s.attributes and "input.value" in s.attributes
+    ]
+    assert tool.attributes is not None
+    assert "SUM(sale_price)" in str(tool.attributes["input.value"])
+    assert '"row_count":1' in str(tool.attributes["output.value"])  # the whole result
+    assert any(s.attributes and s.attributes.get("openinference.span.kind") == "LLM" for s in spans)
+
+
+def test_full_content_is_off_unless_asked_for() -> None:
+    from agent.config import Settings
+
+    settings = Settings(_env_file=None, models={"router": "r", "analyst": "a"})  # pyright: ignore[reportCallIssue]
+    assert settings.phoenix_full_content is False
+
+
 # --- slash commands make no model call ------------------------------------------------------
 
 

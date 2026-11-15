@@ -11,7 +11,7 @@ so is any error from ``export``, the optional second sink (Phoenix).
 import secrets
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +22,8 @@ from agent.errors import ErrorClass
 from agent.ports.tracer import AttrValue, SpanRecord
 
 type Export = Callable[[SpanRecord], None]
+type Activate = Callable[[str | None, str], AbstractContextManager[None]]
+"""Makes a span current in another tracing system while it runs (Phoenix full content)."""
 
 _trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
 _span_id: ContextVar[str | None] = ContextVar("span_id", default=None)
@@ -43,9 +45,12 @@ class _JsonlSpan:
 
 
 class JsonlTracer:
-    def __init__(self, traces_dir: Path, export: Export | None = None) -> None:
+    def __init__(
+        self, traces_dir: Path, export: Export | None = None, activate: Activate | None = None
+    ) -> None:
         self._dir = traces_dir
         self._export = export
+        self._activate = activate
 
     @contextmanager
     def turn(self, **attributes: AttrValue) -> Iterator[tuple[str, _JsonlSpan]]:
@@ -88,8 +93,10 @@ class JsonlTracer:
         token = _span_id.set(span_id)
         started = time.perf_counter()
         start = datetime.now(UTC)
+        active = self._activate(trace_id, span_id) if self._activate else nullcontext()
         try:
-            yield span
+            with active:
+                yield span
         finally:
             _span_id.reset(token)
             self._finish(
