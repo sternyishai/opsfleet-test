@@ -235,6 +235,12 @@ def _out_of_scope(query: exp.Expr, scope: BrandScope) -> GuardRejected | None:
     words the hint, from the User's scope."""
     if scope.all_brands:
         return None
+    if opaque := _opaque_brand_comparison(query):
+        return GuardRejected(
+            reason=RejectReason.BRAND_OUT_OF_SCOPE,
+            detail=f"brand is compared with an expression: {opaque[:80]}",
+            hint="compare brand only with Brand names written as plain text",
+        )
     outside: list[str] = []
     for value, match in _brand_literals(query):
         if not any(match(value, brand) for brand in scope.brands) and value not in outside:
@@ -270,6 +276,43 @@ def _regex(value: str, brand: str) -> bool:
         return re.search(value, brand) is not None
     except re.error:  # not a pattern Python reads: it names no Brand we can confirm
         return False
+
+
+_PLAIN = (exp.Literal, exp.Column, exp.Null)
+"""What ``brand`` may be compared with: a value the guard can read, or another column."""
+
+
+def _opaque_brand_comparison(query: exp.Expr) -> str | None:
+    """A comparison of ``brand`` with anything the guard cannot read as a literal
+    (``LOWER('NIKE')``, ``CONCAT(...)``, a subquery). The scoped rewrite would still return no
+    other Brand's rows, but the refusal is what tells the User why, so it fails closed."""
+    pairs = (exp.EQ, exp.NEQ, exp.NullSafeEQ, exp.NullSafeNEQ, exp.Like, exp.ILike)
+    for node in query.find_all(*pairs, exp.StartsWith, exp.RegexpLike, exp.In):
+        if isinstance(node, exp.In):
+            if _is_brand(node.this):
+                unnest = node.args.get("unnest")
+                arrays = unnest.expressions if unnest else []
+                plain = (
+                    node.args.get("query") is None
+                    and all(isinstance(e, _PLAIN) for e in node.expressions)
+                    and all(
+                        isinstance(a, exp.Array)
+                        and all(isinstance(v, _PLAIN) for v in a.expressions)
+                        for a in arrays
+                    )
+                )
+            else:
+                brand_listed = any(_is_brand(e) for e in node.expressions)
+                plain = not brand_listed or isinstance(node.this, _PLAIN)
+        else:
+            left, right = node.this, node.expression
+            plain = not (
+                (_is_brand(left) and not isinstance(right, _PLAIN))
+                or (_is_brand(right) and not isinstance(left, _PLAIN))
+            )
+        if not plain:
+            return node.sql()
+    return None
 
 
 def _brand_literals(query: exp.Expr) -> list[tuple[str, _BrandMatch]]:
@@ -353,6 +396,8 @@ def _filters(query: exp.Expr, tables: list[TableName]) -> list[FilterLiteral]:
             pairs = [(node.this, op, node.expression)]
             if op in _FLIPPED or op in ("=", "!="):  # '2025-01-01' <= created_at
                 pairs.append((node.expression, _FLIPPED.get(op, op), node.this))
+        if node.find_ancestor(exp.Not):  # NOT state = 'X' names no value the rows hold
+            continue
         for column_side, op, value_side in pairs:
             column, value = _unwrap(column_side, _COLUMN_WRAPPERS), _literal(value_side)
             if not isinstance(column, exp.Column) or value is None:
@@ -367,16 +412,26 @@ def _filters(query: exp.Expr, tables: list[TableName]) -> list[FilterLiteral]:
 def _column_resolver(
     query: exp.Expr, tables: list[TableName]
 ) -> Callable[[exp.Column], TableName | None]:
-    aliases: dict[str, TableName] = {
-        t.alias_or_name.lower(): _SPECS[t.name.lower()].name for t in _warehouse_tables(query)
-    }
+    """Resolve conservatively, without scope analysis: a qualifier must name exactly one
+    warehouse table in the whole query, and an unqualified column is resolved only when no
+    CTE or derived table could define a column of the same name."""
+    bound: dict[str, list[str]] = {}
+    for node in query.find_all(exp.Table, exp.Subquery, exp.CTE):
+        name = node.alias_or_name.lower()
+        if name:
+            kind = node.name.lower() if isinstance(node, exp.Table) else "<derived>"
+            bound.setdefault(name, []).append(kind)
+    derived = any("<derived>" in kinds for kinds in bound.values())
 
     def resolve(column: exp.Column) -> TableName | None:
         name = column.name.lower()
         if column.table:
-            table = aliases.get(column.table.lower())
-            has = table is not None and any(c.name == name for c in _SPECS[table].columns)
-            return table if has else None
+            kinds = bound.get(column.table.lower(), [])
+            spec = _SPECS.get(kinds[0]) if len(kinds) == 1 else None
+            has = spec is not None and any(c.name == name for c in spec.columns)
+            return spec.name if spec is not None and has else None
+        if derived:
+            return None
         owners: list[TableName] = [
             t for t in tables if any(c.name == name for c in _SPECS[t].columns)
         ]

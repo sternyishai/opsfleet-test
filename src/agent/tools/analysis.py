@@ -48,7 +48,7 @@ from agent.ports.tracer import AttrValue, Span
 from agent.tools.context import SqlBudget, TurnContext
 from agent.tools.probe import diagnose
 
-_NARROW = "Narrow the date range or aggregate earlier."
+_NARROW_HINT = "Narrow the date range or aggregate earlier."
 
 type RetryKind = Literal["guard_rejected", "dry_run_error", "over_bytes_cap", "runtime_error"]
 
@@ -150,7 +150,7 @@ def _run_sql(
     span.set(**{"dry_run.bytes": dry.bytes_processed})
     if dry.over_cap:
         error = f"the query would scan {dry.bytes_processed:,} bytes, over the cap"
-        return _retry("over_bytes_cap", error, ctx, budget, hint=_NARROW, schema=schema)
+        return _retry("over_bytes_cap", error, ctx, budget, hint=_NARROW_HINT, schema=schema)
     try:
         result = warehouse.execute(
             decision.rewritten_sql,
@@ -174,11 +174,13 @@ def _empty(
         return RunSqlEmpty(probe_hint=None, checked=filters, final=True), budget
     budget = replace(budget, diagnoses_used=budget.diagnoses_used + 1)
     with ctx.ports.tracer.span("empty_result_probe") as span:
-        found = diagnose(
+        diagnosis = diagnose(
             filters, lambda sql: _probe(sql, ctx), max_columns=ctx.limits.probe_max_columns
         )
-        span.set(**{"probe.findings": found.hint, "probe.final": found.final})
-    return RunSqlEmpty(probe_hint=found.hint, checked=found.checked, final=found.final), budget
+        # Counts only: the hint quotes warehouse values, and rows never enter a trace.
+        span.set(**{"probe.checked": len(diagnosis.checked), "probe.final": diagnosis.final})
+    out = RunSqlEmpty(probe_hint=diagnosis.hint, checked=diagnosis.checked, final=diagnosis.final)
+    return out, budget
 
 
 def _probe(sql: str, ctx: TurnContext) -> QueryResult | None:

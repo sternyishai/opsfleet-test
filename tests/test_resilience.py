@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import requests
 from google.api_core import exceptions as gexc
 from google.genai.errors import ClientError
 from langchain_core.language_models import BaseChatModel
@@ -471,3 +472,30 @@ def test_the_persona_wording_wins_and_the_reference_is_filled_in() -> None:
 
     assert render(MessageClass.MODEL_BUSY, persona, ref="a1b2c3") == "Busy, sorry (ref a1b2c3)."
     assert render(MessageClass.DATA_SOURCE_DOWN, persona, ref="a1b2c3").endswith("(ref: a1b2c3)")
+
+
+def test_a_non_retryable_error_on_the_half_open_probe_still_closes_the_breaker() -> None:
+    llm, models, _, clock = factory([unavailable()], retry_attempts=1)
+    analyst = llm.chat(ModelStep.ANALYST)
+    for _ in range(5):
+        with pytest.raises(TransientError):
+            analyst.invoke("revenue?")
+    clock.now += 31
+    models[PRIMARY].script = [GoogleInvalidRequestError("400 bad request"), OK]
+    models[PRIMARY].calls = 0
+
+    with pytest.raises(PermanentError):
+        analyst.invoke("revenue?")  # the probe: the model answered, so it is up
+
+    assert analyst.invoke("revenue?").text == "Revenue was $2."
+
+
+def test_a_bigquery_transport_failure_is_retried_then_data_source_down() -> None:
+    client = FakeBigQueryClient(requests.exceptions.ConnectionError("dns"))
+    bq, _ = runner(client)
+
+    with pytest.raises(TransientError) as raised:
+        bq.execute("SELECT 1", {}, max_bytes=10, max_rows=5)
+
+    assert raised.value.message_class is MessageClass.DATA_SOURCE_DOWN
+    assert client.calls == 3
