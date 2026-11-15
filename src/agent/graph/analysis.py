@@ -164,7 +164,12 @@ def analysis(state: AgentState, ports: Ports, limits: Limits) -> dict[str, Any]:
     )
     model = ports.llm.chat(ModelStep.ANALYST).bind_tools(BOUND_TOOLS)
     convo: list[BaseMessage] = [
-        analyst_system(persona, scope_note(user.scope), state.get("trios", [])),
+        analyst_system(
+            persona,
+            scope_note(user.scope),
+            state.get("trios", []),
+            max_steps=limits.max_analysis_steps,
+        ),
         *state["messages"],
     ]
     answer: str | None = None

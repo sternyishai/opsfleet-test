@@ -401,8 +401,9 @@ def test_a_query_vector_of_the_wrong_size_is_a_transient_error(tmp_path: Path) -
 def test_the_analyst_is_told_to_apply_a_matching_trios_method_and_parameters(
     tmp_path: Path,
 ) -> None:
-    # Seen live: both Flash models took the Trio's SQL shape but dropped min_items and the
-    # quarters, because the rule only said "follow the method when it fits".
+    # Seen live: with "follow the method when it fits", both Flash models dropped min_items and
+    # the quarters; with "follow its method_summary step by step", gemini-3.6-flash ran the
+    # right query first, then queried every step of the method until the 8-step cap.
     llm = FakeLLMFactory(analyst=[AIMessage(content="Done.")], decision=analysis_decision(RETURNS))
     ports = fake_ports(MANAGER_A, llm=llm, trios=retriever(tmp_path))
     service, _ = chat_service(ports)
@@ -410,5 +411,6 @@ def test_the_analyst_is_told_to_apply_a_matching_trios_method_and_parameters(
     ask(service, "manager-a", "Which categories get returned most?")
 
     system = str(llm.analyst.seen[-1][0].content)
-    assert "follow its method_summary step by step" in system
     assert "apply every declared parameter" in system
+    assert "As soon as a query answers the question, write the answer" in system
+    assert "at most 8 steps" in system  # Limits.max_analysis_steps, the default
