@@ -14,7 +14,8 @@ class ProfileStore(Protocol):
     - ``save_standing`` takes only ``STANDING`` statements (raises ``ValueError`` otherwise;
       this-turn preferences are never saved). It writes them as ``explicit``, overwriting
       earlier values of the same field; at the notes cap the oldest note is dropped.
-      Note text has already passed the input guard.
+      Note text has already passed the input guard's rules (the graph re-screens each value
+      the router extracted).
     - ``remove`` deletes one note (``note_id``) or, with ``None``, resets the whole profile.
     - Called off the critical path (the parallel "save to User Profile" branch), so a failure
       is traced and does not fail the turn.

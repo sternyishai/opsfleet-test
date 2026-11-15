@@ -99,6 +99,17 @@ _TYPED: dict[PreferenceField, type[StrEnum] | type[str]] = {
 }
 
 
+def is_option(statement: PreferenceStatement) -> bool:
+    """A note is always one; a typed value only when it names one of the field's options."""
+    if statement.field is PreferenceField.NOTE:
+        return bool(statement.value.strip())
+    try:
+        _TYPED[statement.field](statement.value.strip())
+    except ValueError:
+        return False
+    return True
+
+
 def merged(
     profile: UserProfile,
     statements: list[PreferenceStatement],
@@ -128,5 +139,5 @@ def merged(
         except ValueError:
             continue
         update[s.field.value] = {"value": value, "source": Source.EXPLICIT, "confirmed_at": at}
-    update["notes"] = notes[-min(max_notes, UserProfile.MAX_NOTES) :]
+    update["notes"] = notes[-max_notes:]
     return UserProfile.model_validate(dict(profile) | update)

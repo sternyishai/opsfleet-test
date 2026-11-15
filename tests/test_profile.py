@@ -448,3 +448,18 @@ def test_slash_profile_clear_of_a_note_that_does_not_exist_changes_nothing(
 
 def test_slash_profile_with_nothing_saved_says_so(store: SqliteProfileStore) -> None:
     assert "no saved preferences" in cli(views(store), "/profile")
+
+
+def test_a_value_that_is_not_an_option_is_not_acknowledged(store: SqliteProfileStore) -> None:
+    llm = FakeLLMFactory(
+        decision=preference_only(
+            standing(PreferenceField.FORMAT, "spreadsheet"),
+            standing(PreferenceField.DEPTH, "headline"),
+        )
+    )
+    service, _ = chat_service(fake_ports(CEO, llm=llm, profiles=store))
+
+    said, _ = ask(service, "ceo", "always spreadsheets, and keep it short")
+
+    text = said[-1].markdown  # type: ignore[union-attr]
+    assert "spreadsheet" not in text and "headline" in text

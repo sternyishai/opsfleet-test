@@ -98,7 +98,7 @@ class Limits(BaseSettings):
     # deletion (HLD 04)
     deletion_plan_shown: int = Field(default=20, ge=1)
     # profile (HLD 05)
-    profile_max_notes: int = Field(default=20, ge=1)
+    profile_max_notes: int = Field(default=20, ge=1, le=20, description="CHECK in the DDL.")
     # input guard (HLD 03)
     input_max_chars: int = Field(
         default=2000, ge=1, description="LLD default; the channel caps a message at 4000."
