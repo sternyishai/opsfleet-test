@@ -411,7 +411,7 @@ Approved deviations from issue #8:
 
 ## Slice 5: observability (2026-11-15)
 
-Deviations from issue #9, for approval:
+Approved deviations from issue #9:
 
 - **`Tracer` gains `read(since)`.** `Views.trace` and `Views.stats` read spans back through the port, not from the files, so `core/` never touches `traces/` and tests can hand `/stats` a fixed set of spans. The JSONL adapter reads its own files; the Phoenix exporter is write-only.
 - **Phoenix is a second sink of the JSONL tracer, not a second tracer.** Each finished `SpanRecord` is rebuilt as an OTel span with the same trace and span IDs and queued on the SDK's `BatchSpanProcessor` (bounded queue, background thread, drops when full). The reference ID a User quotes therefore finds the turn in Phoenix too. Phoenix is used only if `PHOENIX_ENDPOINT` (default `http://127.0.0.1:6006`) answers at start-up; a Phoenix that stops later fails in the background and is logged once at ERROR.
@@ -429,7 +429,7 @@ Deviations from issue #9, for approval:
 
 ## Slice 6: eval scorecard (2026-11-15)
 
-Deviations from issue #10, for approval:
+Approved deviations from issue #10:
 
 - **`EvalRunner(env, scorers, sink)` takes an `EvalEnvironment`, not `Ports`.** A trial needs a fresh store, so the runner gets a `fresh_store()` factory (a `TrialStore`: users, reports, and two grading reads across Authors) plus the manifest inputs the composition root resolves (git SHA, fixture hash, pre-registration ID, models, judge, Trio switch). `run(cases, trials, baseline_run_id)` loses `trios_enabled`: the switch picks the ports, so it is fixed when the runner is built.
 - **`load_cases` validates already-parsed files.** `yaml` is banned outside adapters, so `adapters/eval_files.read_case_files` parses and `evals.runner.load_cases` validates (schema, file name = case ID, folder = suite, unique IDs).
