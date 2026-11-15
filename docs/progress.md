@@ -20,6 +20,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Build guardrails | ✅ `CODING_STANDARDS.md`, `.githooks/pre-commit` (ruff, pyright, pytest), pyright in dev deps; Phase 4 prompt is now `/mattpocock-skills:implement #N` |
 | DLQ, story map, ADR 0011 (`docs/dlq-data`) | ✅ events carry IDs only; DLQ kept 7 days on a never-expiring pull subscription, ~5 attempts, IAM, replay, 5-day ageing page; DLQ drawn in the hero and data-flow diagrams; new story map (8 stories) + component × store table in 01; preference inference reads the interaction store; nightly sweep runs on the Worker; ADR 0011 sqlglot + dry-run blind spot under row-level security |
 | Eval LLD + real seed data (PR #4) | ✅ LLD 08, `evals/` (20 cases, pre-registered bar), `seed/users.yaml`, 5 seed Trios; all queries verified on BigQuery via project `opsfleet-prototype` (ADC set up) |
+| Slice 1: walking skeleton (#5, PR #17) | ✅ `agent chat --as <id>` → graph → Gemini → `run_sql` on BigQuery; CEO 2025 revenue $2,358,149.49 and manager-a Calvin Klein 2025 $46,399.46, both matching direct BigQuery queries; 66 offline tests. Real adapters: SQLite users, sqlglot guard (no scope rewrite yet), BigQuery runner, Gemini, file Persona, JSONL tracer, stdout channel; null Trio retriever and pass-through PII filter |
+| Slice 1 retro | ✅ ruff bans `sqlglot`, `yaml`, `langgraph.checkpoint.sqlite` and `agent.adapters` outside adapters/composition/tests; CI workflow; Gemini SDK gotchas in LLD 06 § LLMFactory; `CLAUDE.md` pointer for building a slice |
 
 ## Decisions made this session, not yet written elsewhere
 
@@ -35,6 +37,10 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> /mattpocock-skills:implement #5
+> /mattpocock-skills:implement #6
 
-(The Gemini key in `.env` is needed only for #5's final manual check.)
+#6 extends slice 1's code rather than starting fresh:
+
+- `adapters/query_guard.py` (`SqlglotQueryGuard`) already does the single-SELECT check, the table allowlist (from `domain/warehouse.py`'s `ALLOWLIST`) and the forced `LIMIT`. Still missing: the per-role scope rewrite, `@brands` parameters, out-of-scope Brand literals, the `num_of_item` rejection, and span attributes. Until then it returns an all-Brands scope for everyone, Managers included.
+- `get_schema` already hides `num_of_item` from Managers, and `tests/test_tools_schema.py` covers it.
+- `adapters/null.py`'s `PassThroughPiiFilter` is the stand-in the regex `PiiFilter` replaces; `Outbound.emit` and the `output_filter` node already call the port.

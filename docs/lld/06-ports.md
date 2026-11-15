@@ -32,6 +32,10 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `reports` and `pr
 - **Failures:** retries 429, 5xx and timeouts (≤ 3, `Retry-After`), then the step's fallback model, then `TransientError(MODEL_BUSY)`. A 400 or a permission error is never retried.
 - **Trace:** `llm.step`, `llm.model`, `llm.provider`, `llm.fallback_used`, `llm.tokens.prompt`, `llm.tokens.completion`, `llm.cost_usd`, `llm.latency_ms`, `breaker.state`.
 - **Tests** · slice 3 · `tests/test_resilience.py`: a 429 burst then success; primary down → fallback; all down → `MODEL_BUSY`; a 400 is not retried; the breaker opens after 5 failures in 30 s.
+- **Gemini adapter notes** (`langchain-google-genai` 4.x, learned in slice 1; none of this shows in config):
+  - `retries` counts attempts: `1` is one try, and `0` silently means the SDK default of 5 retries.
+  - Pydantic schemas with nested models emit `$defs`, which the adapter ignores unless structured output uses `with_structured_output(..., method="json_schema")` and tools are bound as `convert_to_openai_tool(...)` specs (they inline `$defs`).
+  - The AI Studio free tier allows about 5 requests a minute on Flash models; one analysis turn makes 3–5 calls, so back-to-back live checks hit 429. Space them, or use a billed key.
 
 ### `QueryGuard`
 

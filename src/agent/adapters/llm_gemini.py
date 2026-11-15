@@ -3,6 +3,8 @@
 Slice 1: one model per step, the step's timeout, no retries. Retries, the token bucket, the
 circuit breaker, the fallback chain and provider-error classification arrive with slice 3;
 until then a provider error reaches the graph-boundary catch-all as ``UNCLASSIFIED``.
+
+SDK gotchas (``retries`` semantics, ``$defs``, free-tier quota): docs/lld/06-ports.md § LLMFactory.
 """
 
 from langchain_core.embeddings import Embeddings
