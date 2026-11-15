@@ -515,3 +515,35 @@ def test_a_column_two_tables_share_is_skipped_when_unqualified() -> None:
     )
 
     assert allowed(sql, EXECUTIVE).filters == []
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        # an alias bound twice: which table u.state means depends on scope
+        "SELECT COUNT(*) FROM (SELECT name AS state FROM products) AS u "
+        "WHERE u.state = 'Calif' AND EXISTS(SELECT 1 FROM users AS u)",
+        "SELECT COUNT(*) FROM orders AS t WHERE t.created_at > '2030-01-01' "
+        "AND t.user_id IN (SELECT t.id FROM users AS t)",
+        # an unqualified name a CTE or derived table may define
+        "WITH c AS (SELECT category AS country FROM products) "
+        "SELECT COUNT(*) FROM c WHERE country = 'Jeans' AND EXISTS(SELECT 1 FROM users)",
+        # a negated comparison names no value the rows hold
+        "SELECT COUNT(*) FROM users WHERE NOT state = 'California'",
+    ],
+)
+def test_a_filter_whose_table_or_meaning_is_uncertain_is_not_read(sql: str) -> None:
+    assert allowed(sql, EXECUTIVE).filters == []
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT COUNT(*) FROM products WHERE brand = LOWER('NIKE')",
+        "SELECT COUNT(*) FROM products WHERE brand = CONCAT('Ni', 'ke')",
+        "SELECT COUNT(*) FROM products WHERE brand IN (SELECT 'Nike')",
+        "SELECT COUNT(*) FROM products WHERE LOWER(brand) LIKE CONCAT('%', 'nike')",
+    ],
+)
+def test_a_manager_compares_brand_only_with_plain_literals_or_columns(sql: str) -> None:
+    assert rejected(sql).reason is RejectReason.BRAND_OUT_OF_SCOPE

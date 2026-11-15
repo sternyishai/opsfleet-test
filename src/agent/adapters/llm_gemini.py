@@ -69,7 +69,6 @@ class GeminiLLMFactory:
                 retry_after=retry_after,
                 sleep=sleep,
             ),
-            is_retryable=gemini_retryable,
             max_queue_s=limits.llm_max_queue_s,
             tracer=tracer,
             sleep=sleep,

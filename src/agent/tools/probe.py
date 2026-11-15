@@ -37,6 +37,8 @@ class Diagnosis:
 
 
 def diagnose(filters: list[FilterLiteral], run: RunProbe, *, max_columns: int) -> Diagnosis:
+    """Probe the first ``max_columns`` filtered columns, one statement each, and say what was
+    wrong. A probe that could not run checks nothing: it never makes a filter look wrong."""
     findings: list[str] = []
     checked: list[FilterLiteral] = []
     wrong = False

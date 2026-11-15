@@ -20,7 +20,9 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+import requests
 from google.api_core import exceptions as gexc
+from google.auth import exceptions as auth_exc
 from google.cloud import bigquery
 
 from agent.adapters.resilience import CircuitBreaker, Clock, Retry, Sleep, Unavailable
@@ -41,6 +43,10 @@ _RETRYABLE = (
     gexc.DeadlineExceeded,
     TimeoutError,
     ConnectionError,
+    # With the client's retries off, transport failures arrive raw.
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    auth_exc.TransportError,
 )
 
 

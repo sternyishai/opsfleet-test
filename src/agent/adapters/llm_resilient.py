@@ -49,12 +49,15 @@ def is_retryable(exc: BaseException) -> bool:
 
 
 class LlmPolicy:
+    """Runs one call down a step's chain of models: each model behind its breaker, limiter
+    and retries, the next model when one is spent, ``MODEL_BUSY`` when all are. Records on an
+    ``llm`` span which model answered and why the others did not."""
+
     def __init__(
         self,
         *,
         dependency: str,
         retry: Retry,
-        is_retryable: Callable[[BaseException], bool],
         max_queue_s: float,
         tracer: Tracer,
         sleep: Sleep,
@@ -62,7 +65,6 @@ class LlmPolicy:
     ) -> None:
         self._dependency = dependency
         self._retry = retry
-        self._is_retryable = is_retryable
         self._max_queue_s = max_queue_s
         self._tracer = tracer
         self._sleep = sleep
@@ -91,7 +93,7 @@ class LlmPolicy:
                     continue
                 except Exception as exc:
                     errors.append(f"{option.name}: {type(exc).__name__}")
-                    if self._is_retryable(exc):
+                    if self._retry.is_retryable(exc):
                         continue  # this model's retries are spent: next in the chain
                     span.set(**{"llm.model": None, "llm.errors": errors})
                     raise _classified(exc) from exc
@@ -201,7 +203,8 @@ class ResilientChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         message = self.chain.invoke(messages, stop=stop, **kwargs)
-        assert isinstance(message, AIMessage)
+        if not isinstance(message, AIMessage):  # never a bare AssertionError across the port
+            raise AgentError(f"chat model returned {type(message).__name__}")
         return ChatResult(generations=[ChatGeneration(message=message)])
 
     def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> Runnable[Any, Any]:  # type: ignore[override]

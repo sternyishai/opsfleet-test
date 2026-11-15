@@ -4,7 +4,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-15)
 
-**Phase:** 4. Slices 1 (#5) and 2 (#6) built. Next: slice 3.
+**Phase:** 4. Slices 1 (#5), 2 (#6) and 3 (#7) built. Next: slice 4.
 **Branch:** `main`
 
 | Step | Status |
@@ -24,10 +24,12 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Slice 1 retro | ✅ ruff bans `sqlglot`, `yaml`, `langgraph.checkpoint.sqlite` and `agent.adapters` outside adapters/composition/tests; CI workflow; Gemini SDK gotchas in LLD 06 § LLMFactory; `CLAUDE.md` pointer for building a slice |
 | Slice 2: safety (#6) | ✅ full query guard (node-type allowlist, PII and order-level columns by name, out-of-scope Brand literals case-insensitively, per-role scope rewrite with `@brands`, forced `LIMIT`), guard span attributes, `RegexPiiFilter` behind `Outbound.emit` and `output_filter`, input rules before the router; 198 offline tests. New `RejectReason.UNSUPPORTED_SYNTAX`; model-written query parameters are rejected (the model inlines a Trio's parameters) |
 | Slice 2 retro | ✅ never-raises test over hostile input; `CODING_STANDARDS` §2: safety changes get an adversarial Spec review; ruff skips `ASSIGNMENT.md`; sqlglot notes in LLD 06; branch name in `CLAUDE.md` |
+| Slice 3: resilience (#7, branch `feat/7-resilience`) | ✅ `run_sql` guard → dry run → execute with one shared budget, `QUERY_TOO_LARGE`/`SELF_CORRECTION_EXHAUSTED` give-up with a plain `tried` list, empty-result probe in code (`tools/probe.py`) from guard filter literals, insisted out-of-scope Brand → `OUT_OF_SCOPE` ends the turn; `adapters/resilience.py` (tenacity retry honouring `Retry-After`, breaker, token bucket) behind both the Gemini factory (fallback chain → `MODEL_BUSY`, `llm` spans) and the BigQuery runner (client retries off); 282 offline tests. Live: CEO 2025 revenue still $2,358,149.49; a free-tier 429 ends as `MODEL_BUSY` with `llm.errors` naming it. Review fixed: half-open breaker stuck after a non-retryable probe, raw transport errors unclassified, filters attributed to the wrong table, `brand` compared with an expression slipping past the refusal |
 
 ## Decisions made this session, not yet written elsewhere
 
-- None. This session's approved additions are in `decision-log.md` § LLD (Phase 2).
+- **Circuit breaker per model, not per dependency** (slice 3). Issue #7 says "per dependency"; the code keys Gemini breakers and token buckets by model, so a Flash outage or quota leaves Flash-Lite (the fallback) callable. BigQuery has one breaker. Needs the user's OK, then a line in `decision-log.md`.
+- **`QUERY_TOO_LARGE` on giving up after the bytes cap** (slice 3), where the issue says `SELF_CORRECTION_EXHAUSTED`: HLD 06's catalog has this message for exactly this case.
 
 ## Open questions
 
@@ -39,10 +41,10 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> /mattpocock-skills:implement #7
+> /mattpocock-skills:implement #8
 
-Notes from slice 2 for what comes next:
+Notes for what comes next:
 
-- `GuardAllowed.filters` is still `[]`; the empty-result probe (slice 3) needs it filled from the AST.
-- An out-of-scope Brand already returns `RunSqlRetry(reason=BRAND_OUT_OF_SCOPE, hint=<scope note>)`; slice 3 adds "model insists → `OUT_OF_SCOPE` ends the turn".
-- `save_report` (slice 4) should call `ports.pii.scan` on every text field; `RegexPiiFilter` is wired.
+- `save_report` (slice 4) should call `ports.pii.scan` on every text field; `RegexPiiFilter` is wired. It reads `SqlBudget.last_scope`, which `run_sql` now also sets on an empty result.
+- The probe was not seen live: the AI Studio free-tier quota for the analyst model ran out during the session. Try "orders from Customers whose state is 'CA'" (thelook stores full state names) when quota allows.
+- No `MODEL_ANALYST_FALLBACK` is set in `.env`, so a 429 on Flash goes straight to `MODEL_BUSY`; setting it to Flash-Lite makes the fallback live.

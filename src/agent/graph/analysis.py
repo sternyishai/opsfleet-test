@@ -58,7 +58,7 @@ class _Turn:
         self.ctx = ctx
         self.budget = SqlBudget()
         self.summaries: list[ResultSummary] = []
-        self.ended: MessageClass | None = None
+        self.end_message: MessageClass | None = None
         """Set when a tool returned a ``ToolError``: the turn ends with that catalog message."""
 
     def call(self, call: ToolCall) -> str:
@@ -76,7 +76,7 @@ class _Turn:
             detail = exc.errors(include_url=False, include_context=False, include_input=False)
             return tool_result(name, json.dumps({"status": "error", "detail": detail}, default=str))
         if isinstance(out, ToolError):
-            self.ended = out.message_class
+            self.end_message = out.message_class
         return tool_result(name, out.model_dump_json())
 
     def _run_sql(self, args: dict[str, Any]) -> BaseModel:
@@ -114,9 +114,9 @@ def analysis(state: AgentState, ports: Ports, limits: Limits) -> dict[str, Any]:
             break
         for call in reply.tool_calls:
             convo.append(ToolMessage(content=turn.call(call), tool_call_id=call["id"] or ""))
-        if turn.ended:  # a permanent refusal: no more model steps
+        if turn.end_message:  # a permanent refusal: no more model steps
             break
-    message_class = turn.ended
+    message_class = turn.end_message
     if answer is None:  # the step cap: answer from the catalog, not from a half-done loop
         message_class = message_class or MessageClass.SELF_CORRECTION_EXHAUSTED
     if message_class is not None:

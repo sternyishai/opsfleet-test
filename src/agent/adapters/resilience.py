@@ -55,6 +55,10 @@ class CircuitBreaker:
         self._opened_at = None
         self._probing = False
 
+    def abandon(self) -> None:
+        """A let-through call that never reached the dependency: allow another probe."""
+        self._probing = False
+
     def failure(self) -> None:
         now = self._clock()
         if self._probing:  # the probe failed: open for another cool-down
@@ -96,7 +100,8 @@ class Retry:
     ``attempts`` times. A provider's ``Retry-After`` replaces the backoff; one longer than
     ``max_wait_s`` stops the retries (the caller falls back instead of hanging).
 
-    Every attempt first asks the breaker; each retryable failure is counted on it.
+    Every attempt first asks the breaker; each retryable failure is counted on it, and any
+    other answer (a success, but also a 400 or a bad query) tells it the dependency is up.
     """
 
     def __init__(
@@ -110,7 +115,7 @@ class Retry:
     ) -> None:
         self._attempts = attempts
         self._max_wait_s = max_wait_s
-        self._is_retryable = is_retryable
+        self.is_retryable = is_retryable
         self._retry_after = retry_after
         self._sleep = sleep
         self._backoff = tenacity.wait_exponential_jitter(initial=1, max=max_wait_s, jitter=1)
@@ -127,9 +132,14 @@ class Retry:
             attempts += 1
             try:
                 result = fn()
+            except Unavailable:  # the limiter refused before any request: no health signal
+                breaker.abandon()
+                raise
             except Exception as exc:
-                if self._is_retryable(exc):
+                if self.is_retryable(exc):
                     breaker.failure()
+                else:  # the dependency answered (a 400, a bad query): it is up
+                    breaker.success()
                 raise
             breaker.success()
             return result
@@ -137,7 +147,7 @@ class Retry:
         retrying = tenacity.Retrying(
             stop=self._stop,
             wait=self._wait,
-            retry=tenacity.retry_if_exception(self._is_retryable),
+            retry=tenacity.retry_if_exception(self.is_retryable),
             sleep=self._sleep,
             reraise=True,
         )
