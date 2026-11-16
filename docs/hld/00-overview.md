@@ -63,7 +63,7 @@ Smaller decisions are explained in the section they affect.
 
 | Concern | Prototype | Production |
 |---|---|---|
-| Channel | CLI (`agent chat --as <user>`) | Channel Gateway with Slack, Teams and web adapters, behind SSO |
+| Channel | CLI (`agent chat --as <user>`), and a local web UI (`agent web`) with a dev User picker | Channel Gateway with Slack, Teams and web adapters, behind SSO |
 | Identity | Seeded Users in `seed/users.yaml` | SSO identity mapped to roles and Brand Assignments |
 | Analytics data | `bigquery-public-data.thelook_ecommerce` | Our own copy with row access policies and column-level security |
 | App state | SQLite | Cloud SQL Postgres + pgvector |
