@@ -1,0 +1,18 @@
+# Secrets and local state never enter the image (README.md § Docker).
+.env
+.env.*
+!.env.example
+data/
+traces/
+evals/runs/
+# Rebuilt inside the image.
+.venv/
+web/node_modules/
+web/dist/
+web/tsconfig.tsbuildinfo
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.git/
+.claude/
+.DS_Store
