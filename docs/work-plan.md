@@ -145,7 +145,7 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 | 7a–7c stretch | #11–#13 | no | Built on patterns already reviewed |
 | 6b per-step evals | #26 | no | Extends the #10 runner and bar, whose patterns its retro already reviewed |
 | 8 web UI (optional) | #14 | no | A separate front end over `ChatService`; nothing later builds on it |
-| dev aid: Ollama models (nice to have) | #20 | no | A second provider behind the #7 resilient chain, to show models can be swapped (in evals too); dev only, no new guarantee |
+| dev aid: Ollama models (nice to have) | #20 | no | Deferred (2026-11-16): Phase 5 comes first, so a clean clone runs anywhere; picked up only if time remains |
 | end of Phase 4 | none | **yes** | One last retro over the whole build before Phase 5, while the problems are still fresh |
 
 **How to run one:** `/mattpocock-skills:retro`, then commit its fixes as `docs: record the slice N retro`.
@@ -162,9 +162,11 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 
 > Read docs/work-plan.md. Write the README (setup, example run, links into docs/hld/), `.env.example` and the Dockerfile. Then verify a clean clone works by following only the README.
 
+The Dockerfile covers both channels (added after slice 8, #14): one image, a Node stage that builds `web/` and a Python stage that runs either `agent chat --as <id>` or `agent web` serving the built UI next to `/api`. Secrets (`GOOGLE_API_KEY`, BigQuery credentials) are passed at run time, never baked in; `data/` and `traces/` are mounted volumes. The dev identity is bound to `127.0.0.1` (LLD 07), so the README says how to reach it from the host (for example host networking) or that a container on another machine runs without the picker.
+
 **Done when:**
-- [ ] a clean clone runs by following the README alone (native `uv` and Docker)
-- [ ] the README includes screenshots of a CLI session and a Phoenix trace
+- [ ] a clean clone runs by following the README alone (native `uv` and Docker), CLI and web UI
+- [ ] the README includes screenshots of a CLI session, the web UI and a Phoenix trace
 
 ## Phase 6: Final check & submit (~30 min)
 

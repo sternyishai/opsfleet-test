@@ -49,11 +49,11 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> /mattpocock-skills:implement #20
+> Read docs/work-plan.md and do Phase 5 (branch `docs/readme`, already created with this plan change), including the web UI in the Docker image.
 
 Notes for what comes next:
 
-- Before merging #14: run the slice 8 rows of `docs/demo.md` in the browser (`make dev`), screenshot into the PR. #20 (Ollama) is nice to have; the end-of-Phase-4 retro may come first (work-plan § retros).
+- #14 merged (PR #32, screenshots attached). #20 (Ollama) is deferred: Phase 5 first, by the user's choice on 2026-11-16. The end-of-Phase-4 retro is still open.
 
 - Before merging #13: run the slice 7c live demo (`docs/demo.md`, 7c rows), screenshot it into the PR, then merge.
 - The regex PII filter reads "ID 48213" as an Idaho postal code ("ID" + 5 digits), so "Customer ID 48213" in an answer is redacted, and the analyst prompt asks for Customer IDs. Found in #12, not fixed there (the gate's PII case counts email hits only); a slice 2 filter fix with its adversarial review.
