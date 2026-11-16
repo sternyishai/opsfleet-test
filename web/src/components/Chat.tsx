@@ -1,84 +1,105 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   send,
+  type AgentReply,
   type ConfirmationRequest,
   type DevUser,
-  type OutboundMessage,
   type WebRequest,
 } from "../api/client";
-import { COMMANDS, isCommand, run } from "../commands";
+import { isCommand, run, type ViewResult } from "../commands";
+import { brandsOf } from "../format";
+import { Composer } from "./Composer";
 import { DeletionPlan } from "./DeletionPlan";
-import { describe } from "./UsersPanel";
+import { Icon } from "./Icon";
+import { Avatar } from "./Identity";
+import { Markdown } from "./Markdown";
+import { ViewCard } from "./ViewCard";
 
-type Entry =
-  | { from: "you"; text: string }
-  | { from: "agent"; message: OutboundMessage }
-  | { from: "view"; text: string };
+/** One exchange with the agent: what was sent, its progress, and how it ended. */
+type Turn = {
+  kind: "turn";
+  id: number;
+  asked: string;
+  progress: string[];
+  outcome: AgentReply | ConfirmationRequest | null;
+  error: string | null;
+};
+/** A slash command: a `Views` call, shown as a card. */
+type View = { kind: "view"; id: number; command: string; result: ViewResult | null; error: string | null };
+type Item = Turn | View;
 
 /** One Conversation. Remounted (new `key`) for a new chat or another User. */
-export function Chat(props: { user: DevUser; onNewChat: () => void; onTurnEnded: () => void }) {
+export function Chat(props: {
+  user: DevUser;
+  onNewChat: () => void;
+  onChanged: () => void;
+  onOpenReport: (id: string) => void;
+}) {
   const userId = props.user.user_id;
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [log, setLog] = useState<Entry[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
   const [plan, setPlan] = useState<ConfirmationRequest | null>(null);
-  const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const bottom = useRef<HTMLDivElement>(null);
+  const nextId = useRef(0);
 
-  const turn = async (body: WebRequest, shown: string) => {
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [items, plan]);
+
+  const update = <T extends Item>(id: number, change: (item: T) => T) =>
+    setItems((all) => all.map((it) => (it.id === id ? change(it as T) : it)));
+
+  const turn = async (body: WebRequest, asked: string) => {
+    const id = nextId.current++;
     setBusy(true);
-    setError(null);
     setPlan(null);
-    setLog((l) => [...l, { from: "you", text: shown }]);
+    setItems((all) => [...all, { kind: "turn", id, asked, progress: [], outcome: null, error: null }]);
     try {
       await send(userId, body, (message) => {
         setConversationId(message.conversation_id);
-        setLog((l) => [...l, { from: "agent", message }]);
-        if (message.kind === "confirmation") setPlan(message);
+        if (message.kind === "progress") {
+          update<Turn>(id, (t) => ({ ...t, progress: [...t.progress, message.text] }));
+        } else {
+          update<Turn>(id, (t) => ({ ...t, outcome: message }));
+          if (message.kind === "confirmation") setPlan(message);
+        }
       });
     } catch (e) {
-      setError((e as Error).message);
+      update<Turn>(id, (t) => ({ ...t, error: (e as Error).message }));
     } finally {
       setBusy(false);
-      props.onTurnEnded();
+      props.onChanged(); // a saved report or preference shows in the sidebar
     }
   };
 
-  /** A slash command: a `Views` call, no model and no Conversation turn, as on the CLI. */
-  const command = async (typed: string) => {
-    if (typed === "/new") return props.onNewChat();
+  const view = async (command: string) => {
+    if (command.trim() === "/new") return props.onNewChat();
+    const id = nextId.current++;
     setBusy(true);
-    setError(null);
-    setLog((l) => [...l, { from: "you", text: typed }]);
+    setItems((all) => [...all, { kind: "view", id, command, result: null, error: null }]);
     try {
-      const output = await run(userId, typed);
-      setLog((l) => [...l, { from: "view", text: output }]);
+      const result = await run(userId, command);
+      update<View>(id, (v) => ({ ...v, result }));
     } catch (e) {
-      setError((e as Error).message);
+      update<View>(id, (v) => ({ ...v, error: (e as Error).message }));
     } finally {
       setBusy(false);
-      props.onTurnEnded(); // /profile clear and /persona change what the side panels show
+      props.onChanged(); // /profile clear and /persona change what the sidebar shows
     }
   };
 
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault();
-    const typed = text.trim();
-    if (!typed || busy) return;
-    setText("");
-    if (isCommand(typed)) return void command(typed);
+  const submit = (text: string) => {
+    if (isCommand(text)) return void view(text);
     // conversation_id null starts a new Conversation, as on the CLI.
-    void turn({ kind: "text", text: typed, conversation_id: conversationId }, typed);
+    void turn({ kind: "text", text, conversation_id: conversationId }, text);
   };
 
-  /** `selected` null: every item of the plan. `typed`: the CLI's text, for a count. */
+  /** `selected` null: every item of the plan. `typed`: the CLI's text, for the count. */
   const answer = (approved: boolean, selected: number[] | null, typed?: string) => {
     if (!plan || !conversationId) return;
-    if (typed) {
-      void turn({ kind: "text", text: typed, conversation_id: conversationId }, typed);
-      return;
-    }
-    const shown = !approved ? "Cancel" : selected ? `Delete ${selected.length}` : "Delete all";
+    if (typed) return void turn({ kind: "text", text: typed, conversation_id: conversationId }, typed);
+    const asked = !approved ? "Keep all" : selected ? `Delete ${selected.length} of ${plan.total}` : "Delete all";
     void turn(
       {
         kind: "confirmation",
@@ -87,66 +108,146 @@ export function Chat(props: { user: DevUser; onNewChat: () => void; onTurnEnded:
         approved,
         selected_indices: selected,
       },
-      shown,
+      asked,
     );
   };
 
-  const hints = text.startsWith("/")
-    ? COMMANDS.filter(([c]) => c.startsWith(text.split(" ", 1)[0]))
-    : [];
-
   return (
     <div className="chat">
-      <div className="chat-bar">
-        <span className={`as role-${props.user.role ?? "none"}`}>
-          You are: <strong>{describe(props.user)}</strong>
-        </span>
-        <button onClick={props.onNewChat} disabled={busy}>
-          New chat
-        </button>
+      <header className="chat-head">
+        <div className="chat-title">{items.length ? "Conversation" : "New conversation"}</div>
+        <div className="who-pill" title="Every question and command runs as this User">
+          <Avatar user={props.user} size="sm" />
+          <span>
+            <strong>{userId}</strong> · {brandsOf(props.user)}
+          </span>
+        </div>
+      </header>
+      <div className="thread">
+        <div className="thread-inner">
+          {items.length === 0 && <Welcome user={props.user} onPick={submit} />}
+          {items.map((item) =>
+            item.kind === "turn" ? (
+              <TurnView key={item.id} turn={item} user={props.user} onTrace={(id) => view(`/trace ${id}`)} />
+            ) : (
+              <div key={item.id} className="exchange">
+                <div className="bubble-row mine">
+                  <div className="bubble mine command">
+                    <Icon name="slash" size={14} /> {item.command.replace(/^\//, "")}
+                  </div>
+                </div>
+                <div className="answer">
+                  {item.result ? (
+                    <ViewCard result={item.result} onOpenReport={props.onOpenReport} />
+                  ) : item.error ? (
+                    <div className="note note-refused">{item.error}</div>
+                  ) : (
+                    <Working text="Loading…" />
+                  )}
+                </div>
+              </div>
+            ),
+          )}
+          {plan && <DeletionPlan key={plan.request_id} plan={plan} disabled={busy} onAnswer={answer} />}
+          <div ref={bottom} />
+        </div>
       </div>
-      <ol className="log">
-        {log.length === 0 && (
-          <li className="hint-line">Ask a question, or type / for commands (/help lists them).</li>
-        )}
-        {log.map((entry, i) => (
-          <li key={i} className={entry.from === "agent" ? `agent ${entry.message.kind}` : entry.from}>
-            {entry.from === "agent" ? render(entry.message) : entry.text}
-          </li>
-        ))}
-      </ol>
-      {plan && <DeletionPlan plan={plan} disabled={busy} onAnswer={answer} />}
-      {error && <p className="error">{error}</p>}
-      {hints.length > 0 && (
-        <ul className="hints">
-          {hints.map(([c, what]) => (
-            <li key={c}>
-              <code>{c}</code> {what}
-            </li>
-          ))}
-        </ul>
-      )}
-      <form onSubmit={submit} className="ask">
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={`Ask as ${userId}, or type / for commands`}
-          maxLength={4000}
-          disabled={busy}
-        />
-        <button disabled={busy || !text.trim()}>Send</button>
-      </form>
+      <Composer userId={userId} disabled={busy} onSend={submit} />
     </div>
   );
 }
 
-function render(message: OutboundMessage): string {
-  switch (message.kind) {
-    case "progress":
-      return `… ${message.text}`;
-    case "confirmation":
-      return message.text;
-    case "reply":
-      return message.markdown;
-  }
+function TurnView(props: { turn: Turn; user: DevUser; onTrace: (traceId: string) => void }) {
+  const t = props.turn;
+  const o = t.outcome;
+  const done = o !== null || t.error !== null;
+  return (
+    <div className="exchange">
+      <div className="bubble-row mine">
+        <div className="bubble mine">{t.asked}</div>
+      </div>
+      <div className="answer">
+        <span className="agent-mark">
+          <Icon name="spark" size={14} />
+        </span>
+        <div className="answer-body">
+          {!done && <Working text={t.progress.at(-1) ?? "Thinking…"} />}
+          {done && t.progress.length > 0 && (
+            <details className="steps">
+              <summary>
+                <Icon name="steps" size={14} /> {t.progress.length} step{t.progress.length === 1 ? "" : "s"}
+              </summary>
+              <ol>
+                {t.progress.map((p, i) => (
+                  <li key={i}>{p}</li>
+                ))}
+              </ol>
+            </details>
+          )}
+          {o?.kind === "reply" && (
+            <div className={o.message_class ? "reply refusal" : "reply"}>
+              {o.message_class && <Icon name="info" />}
+              <Markdown text={o.markdown} />
+            </div>
+          )}
+          {o?.kind === "confirmation" && <p className="reply-text">{o.text}</p>}
+          {t.error && <div className="note note-refused">{t.error}</div>}
+          {o && (
+            <div className="answer-foot">
+              <span>Ref {o.trace_id}</span>
+              <button className="link" onClick={() => props.onTrace(o.trace_id)}>
+                How was this answered?
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Working(props: { text: string }) {
+  return (
+    <div className="working">
+      <span className="pulse" />
+      {props.text}
+    </div>
+  );
+}
+
+function Welcome(props: { user: DevUser; onPick: (text: string) => void }) {
+  const u = props.user;
+  const brand = u.brands[0];
+  const ideas =
+    u.role === "manager" && brand
+      ? [
+          `What was ${brand} revenue in 2025?`,
+          `Which ${brand} products sold most in 2025?`,
+          "Which categories get returned most?",
+        ]
+      : [
+          "What was total revenue in 2025?",
+          "Top 5 Brands by revenue in 2025",
+          "Which categories get returned most?",
+        ];
+  return (
+    <div className="welcome">
+      <span className="welcome-mark">
+        <Icon name="spark" size={22} />
+      </span>
+      <h1>What would you like to know, {u.user_id}?</h1>
+      <p className="muted">
+        You can analyze <strong>{brandsOf(u)}</strong>. Ask about sales, save an answer as a report, or type{" "}
+        <kbd>/</kbd> for commands.
+      </p>
+      <div className="ideas">
+        {ideas.map((idea) => (
+          <button key={idea} onClick={() => props.onPick(idea)}>
+            {idea}
+          </button>
+        ))}
+        <button onClick={() => props.onPick("/help")}>/help · every command</button>
+      </div>
+    </div>
+  );
 }
