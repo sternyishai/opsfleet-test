@@ -2,6 +2,12 @@
 
 The LangGraph state is [`AgentState`](../../src/agent/graph/state.py): one per Conversation (`thread_id = conversation_id`), checkpointed after every node. The node names are in [`graph/build.py`](../../src/agent/graph/build.py) and are also the span names in traces. Edges follow the reference graph in [HLD 01 § Agent graph](../hld/01-architecture.md#agent-graph).
 
+## The graph as built
+
+![The compiled graph: every node with what it reads (state, runtime) and calls (ports), and what it writes](diagrams/agent-graph.png)
+
+<sub>Source: [diagrams/agent-graph.excalidraw](diagrams/agent-graph.excalidraw). Drawn from `build_graph`: solid edges are `add_edge`, dashed ones are `add_conditional_edges` (`_refused_or`, `_with_saving`, `_by_action`, `_planned`, `_deferred`, `permission_to`, `drafted_to`) and the `Command(goto=...)` of `confirm_deletion`. In each box, `in` is read from `AgentState` or `TurnRuntime`, `calls` is a port (the adapter behind it is in the bottom-left key), and `out` is what the node writes to state. Update it with the code, like the rest of this folder.</sub>
+
 ## Fields by lifetime
 
 **Conversation fields** survive from turn to turn.

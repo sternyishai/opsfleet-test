@@ -14,7 +14,7 @@ Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/d
 
 ### Building a slice
 
-One issue per session: branch `feat/<issue>-<slug>` (e.g. `feat/7-resilience`) from an up-to-date `main`, and stop after its PR merges; the next issue starts in a fresh session. Start from the issue's **Implements** table: it names the files. Then read the matching `docs/lld/` section (index: `docs/lld/README.md`) and only the HLD sections it links, not whole packages or whole docs. The live demo the user runs for the PR: `docs/demo.md`.
+One issue per session: branch `feat/<issue>-<slug>` (e.g. `feat/7-resilience`) from an up-to-date `main`, and stop after its PR merges; the next issue starts in a fresh session. Start from the issue's **Implements** table: it names the files. Read those by symbol: `grep -n` for the functions and classes you will change, then `sed -n` their ranges, a few files per call. Then the matching `docs/lld/` section (index: `docs/lld/README.md`) and only the HLD sections it links. `CODING_STANDARDS.md` is the reviewer's checklist; `/code-review` loads it. The live demo the user runs for the PR: `docs/demo.md`.
 
 ### Commits
 

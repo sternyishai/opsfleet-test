@@ -13,3 +13,5 @@ __pycache__/
 # Local runtime state
 data/
 traces/
+# Scorecards of local `make eval` runs; the newest PASS on the same fixture is the baseline (LLD 08)
+evals/runs/
