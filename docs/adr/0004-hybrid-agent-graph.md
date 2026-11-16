@@ -4,7 +4,7 @@ The agent is a LangGraph graph with a deterministic outer shell and a ReAct sub-
 
 - **Outer shell** (fixed edges): input guard and intent router → branch → output PII filter → respond.
 - **Golden Trio retrieval** (`retrieve_trios`): a fixed node on the analysis branch, before the sub-agent, because Req 1 makes it a step that must happen ([ADR 0008](0008-trio-retrieval-is-a-fixed-step.md)).
-- **Analysis sub-agent** (ReAct loop) with the tools `get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports` and `get_my_report`. The report tools take no author parameter; the Author is injected from graph state. The query guard and SQL self-correction live inside `run_sql`.
+- **Analysis sub-agent** (ReAct loop) with the tools `get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports` and `get_my_report`. The report tools take no author parameter; the Author is injected from graph state. The query guard and SQL self-correction live inside `run_sql`. The loop is written inside the `analysis` node rather than built with LangChain's `create_agent`; why is in `docs/decision-log.md` § Analysis loop.
 - **Report deletion**: its own deterministic branch, with an `interrupt()` for confirmation.
 - **Persona change**: its own deterministic branch, open only to the `persona_editor` permission, with an automated quality gate before the new version goes live (see `docs/hld/09`).
 

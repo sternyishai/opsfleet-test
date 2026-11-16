@@ -44,6 +44,16 @@ Decisions that don't need an ADR but must be explained in the HLD. Hard trade-of
   - Rejected: a `send_email` analysis tool, even behind human approval (the model holds a send action and picks the recipient: the "lethal trifecta"); a model drafting each message (new text after the save, needing its own checks; kept as a growth step); a delivery sub-agent (an extra model loop, and a model still decides to send); delivery in the Channel Gateway (after the single exit, no access to Saved Reports).
   - Added with the first outbound adapter; not in the prototype.
 
+## Analysis loop
+
+- **The ReAct sub-agent ([ADR 0004](adr/0004-hybrid-agent-graph.md)) is a short loop inside the `analysis` node, not LangChain's `create_agent`.** Each pass makes one call to the analyst model with the six tools bound. If the reply calls tools, they run and their results go back to the model; if it calls none, its text is the answer. Like `create_agent` with `ModelCallLimitMiddleware(run_limit=8)`, it is a model-driven loop with a step cap (`max_analysis_steps`, default 8). Reasons for writing it by hand:
+  - **Query rows stay out of graph state.** The loop's tool calls and results live in a local message list; the node returns only the answer and a `ResultSummary` per query (LLD 03 § Result rows). In `create_agent` every `ToolMessage` with rows is part of the agent's `messages` state and can be checkpointed, so it would need extra code to strip them.
+  - **The turn's own stop rules.** A `ToolError` from a tool (for example an out-of-scope Brand the model insists on) ends the loop at once with that catalog message. All `run_sql` calls in a turn share one `SqlBudget` (2 retries, 1 empty-result probe). The built-in limit middlewares count calls only; both rules would need custom middleware (`after_model` / `wrap_tool_call` with `jump_to: "end"`).
+  - **A capped turn answers from the catalog.** When the step cap is hit, the User gets a fixed catalog message (`SELF_CORRECTION_EXHAUSTED`), never a half-finished model reply. `ModelCallLimitMiddleware` with `exit_behavior="end"` writes its own generic message instead.
+  - **Retry and fallback already exist** in the resilient LLM adapter, for every model call in the graph, so `ModelRetryMiddleware` and `ModelFallbackMiddleware` would do the same work twice.
+- **Costs accepted:** the loop has no checkpoint per step, so a crash mid-analysis reruns the analysis from the start, and the graph drawing shows `analysis` as one node with no visible tool loop. Steps are not streamed to the UI one by one. All three are fine for a single-turn analysis in the prototype.
+- **When to switch:** if analysis needs per-step streaming, resuming mid-loop, or a human approval before a tool call, move it to `create_agent` as a subgraph, with the stop rules as custom middleware and the rows stripped before the checkpoint.
+
 ## Safety & PII (Req 2)
 
 Detail in `docs/hld/03-safety-and-pii.md`; layers are named, not numbered (input guard, then ADR 0003's query guard, data platform, least privilege, output PII filter).
