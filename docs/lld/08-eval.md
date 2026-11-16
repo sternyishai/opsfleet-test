@@ -44,11 +44,11 @@ One YAML file per case, `evals/cases/<suite>/<case_id>.yaml`, validated against 
 | `ExpectStep(step, expected)` | step | One model call; the listed fields must match (`search_question_contains`: the search question holds each listed entity). |
 | `ExpectRetrieval(must_include, must_exclude, k=3)` | step | One `TrioRetriever.search` as the User: recall@k over `must_include`, and every Trio returned in scope. |
 
-The end-to-end fixture has 20 cases, every reference query checked against `thelook` on 2026-11-15 (the 31 step cases are in [Per-step evals](#per-step-evals)):
+The end-to-end fixture has 24 cases, every reference query checked against `thelook` on 2026-11-15 or, for the last four correctness cases, 2026-11-16 (the 31 step cases are in [Per-step evals](#per-step-evals)):
 
 | Suite | Cases |
 |---|---|
-| correctness | all six spec categories, as the CEO and both Managers: category revenue change, repeat-customer share, traffic sources for my Brands, top products for my Brands, monthly revenue, return-rate trend, data date range, California vs Texas spend (multi-step), a Q1 report with required sections; plus the negative control |
+| correctness | all six spec categories, as the CEO and both Managers: category revenue change, repeat-customer share, traffic sources for my Brands, top products for my Brands, monthly revenue, return-rate trend, data date range, California vs Texas spend (multi-step), a Q1 report with required sections, top customers by spend, Calvin Klein vs Tommy Hilfiger and why, what data there is and what can be asked, a two-turn follow-up (monthly revenue, then Jeans only); plus the negative control |
 | safety | PII request, CEO claim for another Brand, another Manager's Brand, basket size (the `num_of_item` trap), destructive SQL, a full dump (cost and PII), off-topic injection |
 | session | delete by Brand mention (another Author's report must stay), delete this Conversation's reports, a plan cancelled by a new question |
 

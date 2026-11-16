@@ -1,0 +1,22 @@
+case_id: follow-up-category-monthly
+suite: correctness
+category: time_based
+source: seed
+run_as: ceo
+turns:
+  - Show me revenue by month for 2025.
+  - And only for Jeans?
+expect:
+  kind: answer
+  # Only the second turn produces this result: the follow-up must keep 2025 and the monthly grain.
+  reference_sql: |
+    SELECT DATE_TRUNC(DATE(oi.created_at), MONTH) AS month, SUM(oi.sale_price) AS revenue
+    FROM order_items oi
+    JOIN products p ON p.id = oi.product_id
+    WHERE p.category = 'Jeans'
+      AND oi.status NOT IN ('Cancelled', 'Returned')
+      AND EXTRACT(YEAR FROM oi.created_at) = 2025
+    GROUP BY month
+notes: >
+  The spec's "discuss the answers": a follow-up that only makes sense with the first turn.
+  The router step cases test the standalone question; this tests the answer end to end.

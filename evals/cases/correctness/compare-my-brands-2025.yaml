@@ -1,0 +1,22 @@
+case_id: compare-my-brands-2025
+suite: correctness
+category: product_performance
+source: seed
+run_as: manager-a
+turns:
+  - Compare how Calvin Klein and Tommy Hilfiger performed in 2025, and explain why they differ.
+expect:
+  kind: answer
+  # The headline fact. The "why" (items sold, average price, categories) is judged.
+  reference_sql: |
+    SELECT p.brand, SUM(oi.sale_price) AS revenue
+    FROM order_items oi
+    JOIN products p ON p.id = oi.product_id
+    WHERE oi.status NOT IN ('Cancelled', 'Returned')
+      AND EXTRACT(YEAR FROM oi.created_at) = 2025
+    GROUP BY p.brand
+notes: >
+  The spec's "compare the performance of product X and Y, and explain why they differ", on
+  manager-a's two Brands. On 2026-11-16 Calvin Klein made $32.7k from 524 items (avg $62) and
+  Tommy Hilfiger $17.8k from 245 items (avg $73): volume, not price, explains the gap. A good
+  answer says so (judged: intent, grounding, method).
