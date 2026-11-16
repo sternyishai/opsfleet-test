@@ -189,16 +189,28 @@ def _equal(a: Any, b: Any, tolerance: float) -> bool:
             return True
         return math.isfinite(a) and abs(a - b) <= tolerance * max(abs(a), abs(b))
     if isinstance(a, str) and isinstance(b, str):
-        # A DATE and a TIMESTAMP on that day are the same answer ("first order: 6 Jan").
-        return a == b or _same_day(a, b) or _same_day(b, a)
+        # A DATE and a TIMESTAMP on that day are the same answer ("first order: 6 Jan"), and so
+        # are a month label and the first day of that month ('2025-01', DATE_TRUNC(…, MONTH)).
+        return (
+            a == b
+            or _same_day(a, b)
+            or _same_day(b, a)
+            or _same_month(a, b)
+            or _same_month(b, a)
+        )
     return a == b
 
 
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_ISO_MONTH = re.compile(r"\d{4}-\d{2}")
 
 
 def _same_day(day: str, timestamp: str) -> bool:
     return bool(_ISO_DATE.fullmatch(day)) and timestamp.startswith(f"{day}t")
+
+
+def _same_month(month: str, day: str) -> bool:
+    return bool(_ISO_MONTH.fullmatch(month)) and day == f"{month}-01"
 
 
 def _cell(value: Any) -> Any:

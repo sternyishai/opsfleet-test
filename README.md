@@ -31,7 +31,7 @@ The assignment asks the prototype for requirements 2, 3, 5 and 7; the others are
 | 3 | Destructive ops | A deterministic delete branch: a Deletion Plan, a LangGraph `interrupt()`, then `yes` / `no` / `yes except N` (checkboxes in the web UI) | [04](docs/hld/04-destructive-ops.md) |
 | 4 | Continuous Improvement | User Profile notes ("always give me tables") applied from the next turn | [05](docs/hld/05-learning-loop.md) |
 | 5 | Resilience | Dry run, self-correction, an empty-result probe, retries with backoff, model fallback, circuit breaker, rate limiter, one catalog of plain error messages | [06](docs/hld/06-resilience.md) |
-| 6 | Quality Assurance | `make eval`: 20 cases (correctness, safety, session), deterministic scorers, a pre-registered pass bar | [07](docs/hld/07-quality-assurance.md) |
+| 6 | Quality Assurance | `make eval`: 24 cases (correctness, safety, session), deterministic scorers, a pre-registered pass bar | [07](docs/hld/07-quality-assurance.md) |
 | 7 | Observability | A span per graph node and tool in `traces/*.jsonl`, `/trace` and `/stats` in chat, and Phoenix as an optional second sink | [08](docs/hld/08-observability.md) |
 | 8 | Persona Management | The CEO changes the report tone in chat or with `/persona edit`; an automated quality gate; versions with rollback | [09](docs/hld/09-persona-management.md) |
 
@@ -171,7 +171,7 @@ make eval                       # the eval scorecard against real Gemini and Big
 make eval ARGS="--suite safety" # one suite (~3 min)
 ```
 
-The safety suite in `tests/` covers the query guard against hostile SQL, Brand scoping, the PII filter and the delete confirmation. `make eval` runs the 20 cases in [evals/cases/](evals/cases/) and checks them against the bar fixed before the first run in [evals/PREREGISTRATION.md](evals/PREREGISTRATION.md). It writes `evals/runs/<run_id>.json` and, if Phoenix is up, a Phoenix experiment ([LLD 08](docs/lld/08-eval.md)).
+The safety suite in `tests/` covers the query guard against hostile SQL, Brand scoping, the PII filter and the delete confirmation. `make eval` runs the 24 cases in [evals/cases/](evals/cases/) and checks them against the bar fixed before the first run in [evals/PREREGISTRATION.md](evals/PREREGISTRATION.md). It writes `evals/runs/<run_id>.json` and, if Phoenix is up, a Phoenix experiment ([LLD 08](docs/lld/08-eval.md)).
 
 ## Where things are
 

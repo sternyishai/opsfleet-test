@@ -1,0 +1,21 @@
+case_id: top-customers-by-spend-2025
+suite: correctness
+category: customer_behavior
+source: seed
+run_as: ceo
+turns:
+  - Who were our top 10 customers by total spend in 2025?
+expect:
+  kind: answer
+  reference_sql: |
+    SELECT user_id, SUM(sale_price) AS total_spend
+    FROM order_items
+    WHERE status NOT IN ('Cancelled', 'Returned')
+      AND EXTRACT(YEAR FROM created_at) = 2025
+    GROUP BY user_id
+    ORDER BY total_spend DESC
+    LIMIT 10
+notes: >
+  The spec's "top customers, total spend". Customers are named by user_id only (HLD 03); the
+  PII filter and the pii-customer-emails safety case cover the refusal side. On 2026-11-16 rank
+  10 was $1,008.95 and rank 11 $999.00: no tie at the cut.

@@ -3,7 +3,7 @@ through ``EvalRunner.run`` over fake ports. Offline: no Gemini, BigQuery or Phoe
 
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -741,7 +741,7 @@ def test_the_fixture_loads_every_suite_with_one_negative_control() -> None:
     cases = load_cases(read_case_files(ROOT / "evals" / "cases"))
 
     per_suite = {s: sum(c.suite is s for c in cases) for s in Suite}
-    assert per_suite == {Suite.CORRECTNESS: 10, Suite.SAFETY: 7, Suite.SESSION: 3, Suite.STEP: 31}
+    assert per_suite == {Suite.CORRECTNESS: 14, Suite.SAFETY: 7, Suite.SESSION: 3, Suite.STEP: 32}
     assert [c.case_id for c in cases if c.negative_control] == ["negative-control-revenue-doubled"]
 
 
@@ -929,6 +929,23 @@ def test_exec_match_reads_a_timestamp_as_the_reference_date() -> None:
     assert outcome(exec_match(first), answer_case(), transcript(agent)) is Outcome.PASS
     later = [{"first": datetime(2019, 1, 7, 0, 1, tzinfo=UTC)}]
     assert outcome(exec_match(first), answer_case(), transcript(later)) is Outcome.FAIL
+
+
+def test_exec_match_reads_a_month_label_as_the_first_day_of_that_month() -> None:
+    """FORMAT_DATE('%Y-%m', …) against DATE_TRUNC(…, MONTH): the same months, the same numbers."""
+    months = [
+        {"month": date(2025, 1, 1), "revenue": 10.0},
+        {"month": date(2025, 2, 1), "revenue": 20.0},
+    ]
+    labels = [{"m": "2025-01", "r": 10.0}, {"m": "2025-02", "r": 20.0}]
+    assert outcome(exec_match(*months), answer_case(), transcript(labels)) is Outcome.PASS
+
+    shifted = [{"m": "2025-02", "r": 10.0}, {"m": "2025-03", "r": 20.0}]
+    assert outcome(exec_match(*months), answer_case(), transcript(shifted)) is Outcome.FAIL
+    mid_month = [{"day": date(2025, 1, 15)}]
+    assert outcome(exec_match({"m": "2025-01"}), answer_case(), transcript(mid_month)) is (
+        Outcome.FAIL
+    )
 
 
 # --- per-step evals (#26): selecting cases ------------------------------------------------------

@@ -1,0 +1,21 @@
+case_id: available-data-my-brands
+suite: correctness
+category: data_question
+source: seed
+run_as: manager-a
+turns:
+  - What data do you have, what can I ask you about it, and how many products does each of my brands have in the catalog?
+expect:
+  kind: answer
+  # Written without a Brand filter: the guard scopes it to manager-a, exactly as for the agent.
+  reference_sql: |
+    SELECT brand, COUNT(*) AS products
+    FROM products
+    GROUP BY brand
+  rubric: [intent, grounding, completeness, presentation]
+notes: >
+  The spec's "database structure" capability. The structure part (the four tables, what each
+  holds, example questions) has no reference query and is judged; the product count anchors
+  the execution match. On 2026-11-16: Calvin Klein 497, Tommy Hilfiger 251. The first wording
+  ("how many products of my brands") got a total on one trial and a per-Brand count on the
+  next, both fair, so the question asks for each Brand (fixed before any baseline).
