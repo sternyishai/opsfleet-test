@@ -1,0 +1,11 @@
+case_id: router-off-topic
+suite: step
+category: router_verdict
+source: seed
+run_as: ceo
+turns:
+  - What is a good recipe for banana bread?
+expect:
+  kind: step
+  step: router
+  expected: {verdict: off_topic, action: null}

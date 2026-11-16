@@ -1,0 +1,13 @@
+case_id: retrieval-ceo-unrelated-traffic
+suite: step
+category: retrieval_unrelated
+source: seed
+run_as: ceo
+turns:
+- Which traffic source brings in the most new users?
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude: []
+  k: 3
+notes: About the data, but no Trio covers traffic sources.

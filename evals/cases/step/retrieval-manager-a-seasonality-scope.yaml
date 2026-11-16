@@ -1,0 +1,14 @@
+case_id: retrieval-manager-a-seasonality-scope
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: manager-a
+turns:
+- Which months sell the most for my Brands?
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude:
+  - seasonal-revenue
+  k: 3
+notes: 'Scope probe: the matching Trio is manager-b''s, so nothing may come back.'

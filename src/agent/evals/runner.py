@@ -15,6 +15,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
+from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from pydantic import ValidationError
@@ -30,26 +31,33 @@ from agent.contracts.channel import (
 )
 from agent.contracts.eval import (
     CaseResult,
+    Category,
     EvalCase,
     ExecutedQuery,
     ExpectAnswer,
+    ExpectRetrieval,
+    ExpectStep,
     Layer,
     LayerScore,
     Manifest,
     Outcome,
     Scorecard,
+    Suite,
     Transcript,
     TrialResult,
 )
+from agent.contracts.router import RouterDecision
 from agent.core.chat import ChatService
+from agent.core.input_rules import screen
 from agent.domain.identity import BrandScope, UserContext
 from agent.domain.query import DryRunResult, GuardAllowed, GuardDecision, QueryResult
 from agent.domain.reports import EntityType, ReportEntity, SavedReport, normalize_entity
 from agent.errors import MessageClass
 from agent.evals import scorecard as bar
 from agent.evals.scorers import Scorer, is_turn, rubric_hash
-from agent.graph.build import build_graph
+from agent.graph.build import build_graph, route
 from agent.graph.state import CHECKPOINT_TYPES
+from agent.ports.llm import ModelStep
 from agent.ports.query import QueryGuard, QueryRunner
 from agent.ports.reports import ReportRepository
 from agent.ports.scorecards import ScorecardSink
@@ -89,6 +97,40 @@ def load_cases(files: Iterable[tuple[str, object]]) -> list[EvalCase]:
     if duplicates := sorted({i for i in ids if ids.count(i) > 1}):
         raise ValueError(f"duplicate case IDs: {', '.join(duplicates)}")
     return cases
+
+
+def select_cases(
+    cases: list[EvalCase],
+    *,
+    suites: Iterable[str] | None = None,
+    case_ids: Iterable[str] | None = None,
+    categories: Iterable[str] | None = None,
+) -> list[EvalCase]:
+    """The cases of ``agent eval --suite/--case/--category``: each given filter narrows the
+    run. Correctness without its negative control would be CANNOT_MEASURE, so a selection
+    holding a correctness case brings every negative control along. Fixture order is kept.
+    An unknown ID or category, or an empty selection, is a ``ValueError`` naming it."""
+    suites, case_ids, categories = (
+        None if f is None else set(f) for f in (suites, case_ids, categories)
+    )
+    known = {c.case_id for c in cases}
+    if case_ids and (unknown := sorted(case_ids - known)):
+        raise ValueError(f"unknown case ID: {', '.join(unknown)}")
+    if categories and (unknown := sorted(categories - {c.value for c in Category})):
+        raise ValueError(f"unknown category: {', '.join(unknown)}")
+    chosen = [
+        c
+        for c in cases
+        if (not suites or c.suite.value in suites)
+        and (not case_ids or c.case_id in case_ids)
+        and (not categories or c.category.value in categories)
+    ]
+    if not chosen:
+        raise ValueError("no case matches the selection")
+    if any(c.suite is Suite.CORRECTNESS for c in chosen):
+        ids = {c.case_id for c in chosen}
+        chosen = [c for c in cases if c.case_id in ids or c.negative_control]
+    return chosen
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,7 +212,11 @@ class EvalRunner:
                 case_trials.append(trial)
                 latencies += turn_seconds
             results.append(bar.case_result(case, case_trials))
-        baseline = self._sink.baseline(baseline_run_id, fixture_hash=manifest.fixture_hash)
+        baseline = self._sink.baseline(
+            baseline_run_id,
+            fixture_hash=manifest.fixture_hash,
+            covering=bar.compared_cases(results),
+        )
         mismatch: list[str] = []
         notes: list[str] = []
         found: list[str] = []
@@ -211,11 +257,16 @@ class EvalRunner:
             return TrialResult(
                 trial=n, trace_ids=[], layers=[], outcome=Outcome.CANNOT_MEASURE, error=error
             ), []
-        trace_ids = list(dict.fromkeys(m.trace_id for m in transcript.outbound))
+        trace_ids = transcript.trace_ids
         spans = [s for s in self._env.ports.tracer.read(since) if s.trace_id in trace_ids]
         transcript = transcript.model_copy(update={"traces": spans})
         turn_seconds = [s.duration_ms / 1000 for s in spans if is_turn(s)]
-        infrastructure = _infrastructure_error(transcript.outbound, len(case.turns))
+        # A step trial sends nothing to a channel; its infrastructure failures raise above.
+        infrastructure = (
+            None
+            if case.suite is Suite.STEP
+            else _infrastructure_error(transcript.outbound, len(case.turns))
+        )
         # A turn that ended on the infrastructure is graded on nothing: only the trajectory
         # (what it cost) is kept, and the judge is not asked.
         scorers = [
@@ -243,6 +294,8 @@ class EvalRunner:
             user = store.users.load(case.run_as)
             if user is None:
                 raise LookupError(f"no seeded User {case.run_as!r}")
+            if case.suite is Suite.STEP:
+                return self._step_transcript(case, n, user)
             conversation_id = uuid4()
             refs = _seed(case, store, conversation_id, env.clock())
             before = (store.report_ids(), store.audit_rows())
@@ -276,11 +329,49 @@ class EvalRunner:
             trial=n,
             user_scope=user.scope,
             outbound=channel.delivered,
+            trace_ids=list(dict.fromkeys(m.trace_id for m in channel.delivered)),
             traces=[],
             executed=recorder.executed,
             store_report_ids={ref: rid in after[0] for ref, rid in refs.items()},
             audit_rows=after[1],
             store_changed=after != before,
+        )
+
+    def _step_transcript(self, case: EvalCase, n: int, user: UserContext) -> Transcript:
+        """One model step on its own, inside one trace: the router on the last turn (earlier
+        turns are its history; the deterministic screen first, as in the input guard), or
+        one ``TrioRetriever.search`` as the case's User. No graph, no SQL, no store."""
+        env = self._env
+        step_output: dict[str, Any] | None = None
+        retrieved: list[str] | None = None
+        text = case.turns[-1]
+        with env.ports.tracer.turn(**{"user.id": case.run_as, "eval.case": case.case_id}) as (
+            trace_id,
+            _,
+        ):
+            expect = case.expect
+            if isinstance(expect, ExpectRetrieval):
+                found = env.ports.trios.search(text, user.scope, limit=expect.k)
+                retrieved = [m.ref for m in found.matches]
+            elif isinstance(expect, ExpectStep) and expect.step == ModelStep.ROUTER:
+                if verdict := screen(text, max_chars=env.limits.input_max_chars):
+                    decision = RouterDecision(verdict=verdict, action=None)
+                else:
+                    history = [HumanMessage(t) for t in case.turns[:-1]]
+                    decision = route(env.ports.llm, history, text, turns=env.limits.verbatim_turns)
+                step_output = decision.model_dump(mode="json")
+            else:
+                raise NotImplementedError(f"no step eval for {expect!r}")
+        return Transcript(
+            case_id=case.case_id,
+            trial=n,
+            user_scope=user.scope,
+            outbound=[],
+            trace_ids=[trace_id],
+            traces=[],
+            executed=[],
+            step_output=step_output,
+            retrieved=retrieved,
         )
 
     def _score(self, scorer: Scorer, case: EvalCase, transcript: Transcript) -> LayerScore | None:

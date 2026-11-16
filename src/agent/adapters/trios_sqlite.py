@@ -55,7 +55,7 @@ class SqliteTrioRetriever:
         self._embeddings = embeddings
         self._min_score = min_score
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        trios = [Trio.model_validate(yaml.safe_load(p.read_text())) for p in seed.glob("*.yaml")]
+        trios = read_seed_trios(seed)
         with self._connect() as db:
             if not db.execute("SELECT 1 FROM sqlite_master WHERE name = 'golden_trios'").fetchone():
                 db.executescript(ddl("sqlite"))
@@ -107,6 +107,11 @@ class SqliteTrioRetriever:
                 yield db
         finally:
             db.close()
+
+
+def read_seed_trios(seed: Path) -> list[Trio]:
+    """Every Trio file in ``seed/trios/``, validated."""
+    return [Trio.model_validate(yaml.safe_load(p.read_text())) for p in seed.glob("*.yaml")]
 
 
 def _sync(db: sqlite3.Connection, trios: list[Trio]) -> None:

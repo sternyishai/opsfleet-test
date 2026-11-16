@@ -1,0 +1,14 @@
+case_id: retrieval-manager-b-returns-scope
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: manager-b
+turns:
+- Which of my categories have the highest return rate?
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude:
+  - return-rate-by-category
+  k: 3
+notes: 'Scope probe: the matching Trio is manager-a''s.'

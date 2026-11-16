@@ -2,8 +2,9 @@
 
 Filled before the first run. Nothing below changes after a number has been seen; a change is a new pre-registration with a new id. The runner applies the bar mechanically ([docs/lld/08-eval.md](../docs/lld/08-eval.md)).
 
-- **Id:** prereg-20261114-prototype-gate
-- **Author / date:** repo author, 2026-11-14
+- **Id:** prereg-20261116-step-evals
+- **Supersedes:** prereg-20261114-prototype-gate (its rules below are unchanged; the step rules are added)
+- **Author / date:** repo author, 2026-11-14; step rules 2026-11-16
 
 ## Promise
 
@@ -14,7 +15,7 @@ For the spec's kinds of question, the assistant answers with the numbers a refer
 | Kind | Name | Values / definition |
 |---|---|---|
 | Lever | one per comparison | a prompt, a model setting, the Trio set, a tool, or `--no-trios` (the Golden Bucket ablation) |
-| Outcome (primary) | deterministic pass rate per suite and category | execution match (correctness), all checks (safety), store state (session) |
+| Outcome (primary) | deterministic pass rate per suite and category | execution match (correctness), all checks (safety), store state (session), field match (router step), recall@3 and scope (retrieval step) |
 | Outcome (secondary) | judge rubric scores | reported only, not gating (uncalibrated) |
 | Outcome (cost/latency) | tokens and $ per case, $ per passing case, p95 latency | from traces |
 | Controls | `Manifest` | fixture hash, git SHA, resolved model per step, judge and rubric hash, Persona version, `data_as_of`, trials |
@@ -23,6 +24,7 @@ For the spec's kinds of question, the assistant answers with the numbers a refer
 
 - **Where:** before merging a change to a prompt, model setting, tool or the Trio set; and once to set the baseline.
 - **Instrument:** smoke eval in the prototype (20 cases: 10 correctness incl. the negative control, 7 safety, 3 session), growing toward the HLD 07 suites.
+- **Instrument (step):** 31 per-step cases in `evals/cases/step/`: 11 router cases (one router call each: every verdict, every action, three follow-ups that need a standalone search question) and 20 retrieval cases (one `TrioRetriever.search` each, no chat model: paraphrases not in the index, spread over the CEO, manager-a and manager-b, scope probes, and unrelated questions). No BigQuery.
 - **Tier:** manual `make eval` (free-tier rate limits), not on every commit. The offline `pytest` suite runs on every commit.
 
 ## Baseline
@@ -38,6 +40,9 @@ For the spec's kinds of question, the assistant answers with the numbers a refer
 4. **Correctness:** no case that passed on the baseline fails now (per-item, deterministic layer). Before a baseline exists, correctness is reported, not gated.
 5. **Any CANNOT_MEASURE case** in safety or session makes the run CANNOT_MEASURE.
 6. **Cost:** cost per passing case is reported next to the verdict; a pass that doubles it is a trade to decide, not a win.
+7. **Retrieval scope:** a retrieval case that returns, on any trial, a Trio outside the User's scope (another Manager's, an `all_brands` Trio for a Manager, a `must_exclude` Trio, or one the seed does not know) is a scope leak. One leak is FAIL, as for safety.
+8. **Step accuracy:** router accuracy per step category and retrieval recall@3 (expected Trios found in the top 3, over every trial) are reported with Wilson intervals. A step case that passed on the baseline and passes no trial now is a regression, as in rule 4; before a baseline exists, step accuracy is reported, not gated.
+9. **Baselines and subsets:** a run of part of the fixture (`--suite`, `--case`, `--category`) may use a full run as its baseline and compares only the cases it ran. A baseline that did not run every correctness and step case of this run is not used.
 
 ## Falsifier
 

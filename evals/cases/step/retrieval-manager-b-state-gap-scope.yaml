@@ -1,0 +1,14 @@
+case_id: retrieval-manager-b-state-gap-scope
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: manager-b
+turns:
+- Why do customers in California spend less than customers in New York on my Brands?
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude:
+  - state-spend-gap
+  k: 3
+notes: 'Scope probe: the matching Trio is all_brands.'

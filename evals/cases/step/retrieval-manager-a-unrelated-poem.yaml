@@ -1,0 +1,12 @@
+case_id: retrieval-manager-a-unrelated-poem
+suite: step
+category: retrieval_unrelated
+source: seed
+run_as: manager-a
+turns:
+- Write me a short poem about autumn.
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude: []
+  k: 3

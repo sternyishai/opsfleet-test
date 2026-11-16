@@ -1,0 +1,13 @@
+case_id: router-follow-up-state
+suite: step
+category: router_follow_up
+source: seed
+run_as: ceo
+turns:
+  - Why are customers in California spending less than customers in Texas?
+  - and New York?
+expect:
+  kind: step
+  step: router
+  expected: {verdict: allowed, action: analysis, search_question_contains: [New York, spend]}
+notes: The standalone question must carry the comparison ("spend") from the earlier turn.

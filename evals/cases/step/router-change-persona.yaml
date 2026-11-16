@@ -1,0 +1,11 @@
+case_id: router-change-persona
+suite: step
+category: router_action
+source: seed
+run_as: ceo
+turns:
+  - Make everyone's reports warmer and less formal.
+expect:
+  kind: step
+  step: router
+  expected: {verdict: allowed, action: change_persona, persona_op: change}

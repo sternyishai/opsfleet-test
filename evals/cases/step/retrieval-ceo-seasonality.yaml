@@ -1,0 +1,14 @@
+case_id: retrieval-ceo-seasonality
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: ceo
+turns:
+- Which months of the year bring in the most revenue?
+expect:
+  kind: retrieval
+  must_include:
+  - seasonal-revenue
+  must_exclude: []
+  k: 3
+notes: An Executive's scope covers every Manager's Trio.

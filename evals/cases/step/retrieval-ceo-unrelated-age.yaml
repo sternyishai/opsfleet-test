@@ -1,0 +1,13 @@
+case_id: retrieval-ceo-unrelated-age
+suite: step
+category: retrieval_unrelated
+source: seed
+run_as: ceo
+turns:
+- What is the average age of our customers?
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude: []
+  k: 3
+notes: About the data, but no Trio covers demographics.

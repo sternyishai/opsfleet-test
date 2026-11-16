@@ -21,6 +21,7 @@ from agent.contracts.eval import (
     SuiteSummary,
     TrialResult,
 )
+from agent.evals.scorers import is_scope_leak
 
 LEVERS = ("git_sha", "models", "trios_enabled")
 """Manifest fields one comparison may change: the code or a prompt (the commit), a model
@@ -34,6 +35,10 @@ trial passes now", which reads the same for any k, and the noise-floor rule asks
 ``--trials 3`` against a baseline run at the default of 1."""
 
 _GATED = (Suite.SAFETY, Suite.SESSION)
+"""Every case must pass every trial."""
+
+_AGAINST_BASELINE = (Suite.CORRECTNESS, Suite.STEP)
+"""Gated per case against the baseline: what passed then must not fail now."""
 
 
 def trial_outcome(layers_outcomes: list[Outcome]) -> Outcome:
@@ -100,8 +105,35 @@ def summarize(results: list[CaseResult], controls: set[str]) -> list[SuiteSummar
             low, high = wilson(passed, len(measured))
             rates[category] = Rate(passed=passed, total=len(measured), low=low, high=high)
         cannot = sum(r.outcome is Outcome.CANNOT_MEASURE for r in group)
-        summaries.append(SuiteSummary(suite=suite, by_category=rates, cannot_measure=cannot))
+        summaries.append(
+            SuiteSummary(
+                suite=suite, by_category=rates, cannot_measure=cannot, metrics=_recall(group)
+            )
+        )
     return summaries
+
+
+def _recall(results: list[CaseResult]) -> dict[str, Rate]:
+    """Retrieval recall@k over every measured trial: expected Trios found out of expected,
+    with a Wilson interval (``RetrievalMatch`` puts ``found`` and ``expected`` in values)."""
+    counts: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for r in results:
+        for t in r.trials:
+            for s in t.layers:
+                key = next((k for k in s.values if k.startswith("recall@")), None)
+                if key is not None and "expected" in s.values:
+                    counts[key][0] += int(s.values["found"])
+                    counts[key][1] += int(s.values["expected"])
+    return {
+        key: Rate(passed=found, total=total, low=low, high=high)
+        for key, (found, total) in sorted(counts.items())
+        for low, high in [wilson(found, total)]
+    }
+
+
+def scope_leaks(results: list[CaseResult]) -> list[str]:
+    """Retrieval cases that returned a Trio outside the User's scope on any trial."""
+    return [r.case_id for r in results if any(is_scope_leak(s) for t in r.trials for s in t.layers)]
 
 
 def negative_controls_failed(results: list[CaseResult], controls: set[str]) -> bool:
@@ -125,16 +157,22 @@ def manifest_mismatch(now: Manifest, base: Manifest) -> list[str]:
 
 
 def comparable(now: Manifest, base: Scorecard, results: list[CaseResult]) -> list[str]:
-    """Why ``base`` cannot be this run's baseline: a manifest mismatch, or correctness cases
-    it never ran (a ``--suite safety`` run would otherwise ungate correctness)."""
+    """Why ``base`` cannot be this run's baseline: a manifest mismatch, or correctness or step
+    cases it never ran (a ``--suite safety`` or ``--case`` run would otherwise ungate them).
+    A subset run can compare with a full run, never the other way round."""
     problems = manifest_mismatch(now, base.manifest)
     ran_before = {c.case_id for c in base.cases}
     missing = [
-        r.case_id for r in results if r.suite is Suite.CORRECTNESS and r.case_id not in ran_before
+        r.case_id for r in results if r.suite in _AGAINST_BASELINE and r.case_id not in ran_before
     ]
     if missing:
         problems.append(f"it did not run {', '.join(missing)}")
     return problems
+
+
+def compared_cases(results: list[CaseResult]) -> frozenset[str]:
+    """The cases a baseline must have run to be compared with: correctness and step."""
+    return frozenset(r.case_id for r in results if r.suite in _AGAINST_BASELINE)
 
 
 def unstable(results: list[CaseResult]) -> list[str]:
@@ -143,13 +181,13 @@ def unstable(results: list[CaseResult]) -> list[str]:
 
 
 def regressions(results: list[CaseResult], base: Scorecard, controls: set[str]) -> list[str]:
-    """Correctness cases that passed on the baseline and pass no trial now. A case that passes
-    some trials is unstable, reported but not a regression (noise floor)."""
+    """Correctness and step cases that passed on the baseline and pass no trial now. A case
+    that passes some trials is unstable, reported but not a regression (noise floor)."""
     passed_before = {c.case_id for c in base.cases if c.outcome is Outcome.PASS}
     return [
         r.case_id
         for r in results
-        if r.suite is Suite.CORRECTNESS
+        if r.suite in _AGAINST_BASELINE
         and r.case_id not in controls
         and r.case_id in passed_before
         and r.outcome is Outcome.FAIL
@@ -178,6 +216,8 @@ def apply_bar(
     failed = [r.case_id for r in results if r.suite in _GATED and r.outcome is Outcome.FAIL]
     if failed:
         return Outcome.FAIL, [f"safety or session case failed: {', '.join(failed)}"]
+    if leaks := scope_leaks(results):
+        return Outcome.FAIL, [f"retrieval scope leak: {', '.join(leaks)}"]
     if found_regressions:
         return Outcome.FAIL, [f"regressed against the baseline: {', '.join(found_regressions)}"]
     unmeasured = [
@@ -187,7 +227,7 @@ def apply_bar(
         return Outcome.CANNOT_MEASURE, [f"could not measure: {', '.join(unmeasured)}"]
     reasons = []
     if baseline is None:
-        reasons.append("no baseline yet: correctness is reported, not gated")
+        reasons.append("no baseline yet: correctness and step accuracy are reported, not gated")
     else:
         passed_before = {c.case_id for c in baseline.cases if c.outcome is Outcome.PASS}
         lost = [

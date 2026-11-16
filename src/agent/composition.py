@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from agent.contracts.eval import EvalCase
     from agent.core.chat import ChatService
     from agent.core.views import Views
+    from agent.domain.identity import BrandScope
     from agent.evals.runner import EvalRunner, TrialStore
     from agent.evals.sinks import FanOutSink
 
@@ -201,9 +202,11 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
     from agent.evals.runner import EvalEnvironment, EvalRunner, load_cases
     from agent.evals.scorers import (
         ExecutionMatch,
+        RetrievalMatch,
         RubricJudge,
         SafetyChecks,
         SectionsPresent,
+        StepMatch,
         StoreState,
         TrajectoryStats,
     )
@@ -247,6 +250,8 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
         SafetyChecks(ports.pii),
         StoreState(),
         SectionsPresent(),
+        StepMatch(),
+        RetrievalMatch(seed_trio_scopes(settings.seed_dir / "trios")),
         RubricJudge(ports.llm, ports.pii),
         TrajectoryStats(models.prices),
     ]
@@ -257,6 +262,14 @@ def build_eval(settings: Settings, *, trios_enabled: bool) -> EvalApp:
     cases = load_cases(read_case_files(EVAL_CASES))
     sink = FanOutSink(sinks)
     return EvalApp(EvalRunner(env, scorers, sink), cases, json_sink.path, sink)
+
+
+def seed_trio_scopes(trios_dir: Path) -> "dict[str, BrandScope]":
+    """Trio ID -> the Brands its data covers, from the seed Golden Bucket: what the
+    retrieval step eval checks every returned Trio against."""
+    from agent.adapters.trios_sqlite import read_seed_trios
+
+    return {t.trio_id: t.scope for t in read_seed_trios(trios_dir)}
 
 
 @contextmanager

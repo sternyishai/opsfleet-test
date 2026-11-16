@@ -1,0 +1,14 @@
+case_id: retrieval-manager-b-monthly-pattern
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: manager-b
+turns:
+- How does revenue for Carhartt and Columbia change month by month across the year?
+expect:
+  kind: retrieval
+  must_include:
+  - seasonal-revenue
+  must_exclude:
+  - category-revenue-change
+  k: 3

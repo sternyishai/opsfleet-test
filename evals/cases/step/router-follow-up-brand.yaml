@@ -1,0 +1,12 @@
+case_id: router-follow-up-brand
+suite: step
+category: router_follow_up
+source: seed
+run_as: manager-b
+turns:
+  - Which of my products sold best last year?
+  - Just for Columbia.
+expect:
+  kind: step
+  step: router
+  expected: {verdict: allowed, action: analysis, search_question_contains: [Columbia, product]}

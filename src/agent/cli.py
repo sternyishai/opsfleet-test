@@ -8,13 +8,15 @@ web UI makes.
   ends the session. Slash commands, answered without a model call: ``/reports``, ``/profile``,
   ``/persona`` (``edit``, ``history``, ``rollback``), ``/trace [id]``, ``/stats``.
 - ``agent stats --as <user_id> --since 7d``: ``Views.stats`` outside the chat (Executives).
-- ``agent eval [--suite S] [--trials K] [--no-trios] [--baseline RUN]``: the eval harness
-  (docs/lld/08-eval.md); ``make eval`` calls it. Exit 0 PASS, 1 FAIL, 2 CANNOT_MEASURE.
+- ``agent eval [--suite S] [--case ID] [--category C] [--trials K] [--no-trios]
+  [--baseline RUN]``: the eval harness (docs/lld/08-eval.md); ``make eval`` calls it. Exit 0
+  PASS, 1 FAIL, 2 CANNOT_MEASURE (also an unknown case ID or category).
 - ``agent web``: serves the HTTP API for the UI (needs the ``web`` extra, ADR 0010).
 """
 
 import argparse
 import logging
+import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Protocol
@@ -60,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument(
         "--suite", action="append", choices=["correctness", "safety", "session", "step"]
     )
+    ev.add_argument("--case", action="append", dest="case_ids", metavar="ID", help="repeatable")
+    ev.add_argument("--category", action="append", dest="categories", metavar="NAME")
     ev.add_argument("--trials", type=int, default=1, choices=range(1, 11), metavar="K")
     ev.add_argument("--no-trios", action="store_true", help="the Golden Bucket ablation")
     ev.add_argument("--baseline", help="run ID to compare against")
@@ -72,7 +76,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "stats":
         return _stats_command(args.user_id, args.since)
     if args.command == "eval":
-        return _eval(args.suite, args.trials, not args.no_trios, args.baseline)
+        return _eval(
+            select={"suites": args.suite, "case_ids": args.case_ids, "categories": args.categories},
+            trials=args.trials,
+            trios=not args.no_trios,
+            baseline=args.baseline,
+        )
     raise NotImplementedError(f"`agent {args.command}` is built in a later slice")
 
 
@@ -318,14 +327,20 @@ def _stats_command(user_id: str, since: str) -> int:
     return 0
 
 
-def _eval(suites: list[str] | None, trials: int, trios: bool, baseline: str | None) -> int:
+def _eval(
+    *, select: dict[str, list[str] | None], trials: int, trios: bool, baseline: str | None
+) -> int:
     from agent.composition import build_eval
     from agent.config import Settings
-    from agent.evals.runner import exit_code
+    from agent.evals.runner import exit_code, select_cases
 
     logging.getLogger("agent.evals").setLevel(logging.INFO)  # one line per case and trial
     app = build_eval(Settings(), trios_enabled=trios)
-    cases = [c for c in app.cases if suites is None or c.suite.value in suites]
+    try:
+        cases = select_cases(app.cases, **select)
+    except ValueError as exc:
+        print(f"agent eval: {exc}", file=sys.stderr)
+        return 2
     card = app.runner.run(cases, trials=trials, baseline_run_id=baseline)
     print(render_scorecard(card))
     print(f"\nscorecard: {app.scorecard_path(card.run_id)}")
@@ -352,8 +367,12 @@ def render_scorecard(card: Scorecard) -> str:
             f"{category.value} {r.passed}/{r.total} [{r.low:.0%}–{r.high:.0%}]"
             for category, r in suite.by_category.items()
         )
+        metrics = "".join(
+            f"   {name} {r.passed}/{r.total} [{r.low:.0%}–{r.high:.0%}]"
+            for name, r in suite.metrics.items()
+        )
         unmeasured = f"   cannot measure {suite.cannot_measure}" if suite.cannot_measure else ""
-        lines.append(f"{suite.suite.value:<12} {rates}{unmeasured}")
+        lines.append(f"{suite.suite.value:<12} {rates}{metrics}{unmeasured}")
     lines.append("")
     for case in card.cases:
         trials = " ".join(_TRIAL_MARK[t.outcome] for t in case.trials)

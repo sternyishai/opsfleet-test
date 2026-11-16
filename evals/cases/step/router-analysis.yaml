@@ -1,0 +1,11 @@
+case_id: router-analysis
+suite: step
+category: router_action
+source: seed
+run_as: ceo
+turns:
+  - Which product categories had the highest revenue in 2025?
+expect:
+  kind: step
+  step: router
+  expected: {verdict: allowed, action: analysis, search_question_contains: [categor, "2025"]}

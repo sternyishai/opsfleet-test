@@ -1,0 +1,11 @@
+case_id: router-undo-persona
+suite: step
+category: router_action
+source: seed
+run_as: ceo
+turns:
+  - Undo the last tone change to the reports.
+expect:
+  kind: step
+  step: router
+  expected: {verdict: allowed, action: change_persona, persona_op: undo}

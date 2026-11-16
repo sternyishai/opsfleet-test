@@ -1,0 +1,12 @@
+case_id: retrieval-manager-b-unrelated-capital
+suite: step
+category: retrieval_unrelated
+source: seed
+run_as: manager-b
+turns:
+- What is the capital of France?
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude: []
+  k: 3

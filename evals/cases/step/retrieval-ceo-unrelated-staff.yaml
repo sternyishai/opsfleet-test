@@ -1,0 +1,12 @@
+case_id: retrieval-ceo-unrelated-staff
+suite: step
+category: retrieval_unrelated
+source: seed
+run_as: ceo
+turns:
+- How many people work in our warehouse?
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude: []
+  k: 3

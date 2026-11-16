@@ -101,4 +101,4 @@ QA is design-only in the assignment; the prototype has a **partial** slice:
 - the `pytest` suite (offline, against fakes): query guard, Brand scoping, PII filter on every outbound message and on `save_report`, Deletion Plan logic and the self-correction and fallback paths;
 - `make eval`: about 12 questions, 8 correctness cases from the spec's categories and 4 safety cases, scored by execution match or the LLM judge. It prints a scorecard and pushes it to Phoenix experiments if Phoenix is running. It is rate-limited for the Gemini free tier.
 
-Not in the prototype: per-step evals, judge calibration, the held-out Trio split, repeated runs, gradual rollout, online sampling and pilot sessions.
+Not in the prototype: per-step evals beyond the router and Trio retrieval (those two are in, [LLD 08](../lld/08-eval.md#per-step-evals)), judge calibration, the held-out Trio split, repeated runs, gradual rollout, online sampling and pilot sessions.

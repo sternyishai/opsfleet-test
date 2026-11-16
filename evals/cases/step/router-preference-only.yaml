@@ -1,0 +1,11 @@
+case_id: router-preference-only
+suite: step
+category: router_action
+source: seed
+run_as: manager-b
+turns:
+  - From now on, always give me my answers as bullet points.
+expect:
+  kind: step
+  step: router
+  expected: {verdict: allowed, action: preference_only}
