@@ -80,7 +80,7 @@ The first start creates `data/app.db` (Users, Saved Reports, Persona, profiles, 
 **The web UI**, one process serving the built app and the API:
 
 ```bash
-make web                        # builds web/, then serves http://127.0.0.1:8000
+make web                        # builds web/, then serves http://127.0.0.1:8000; PORT=8080 if 8000 is taken
 ```
 
 Pick a User in the left panel and ask. For UI development, `make dev` runs the API and the Vite dev server with hot reload on http://localhost:5173.

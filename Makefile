@@ -9,6 +9,8 @@ check:
 
 
 
+PORT ?= 8000
+
 # --- web UI (optional, ADR 0010) --------------------------------------------------------------
 
 dev: ## the API (dev identity on, 127.0.0.1:8000) and the Vite dev server (http://localhost:5173)
@@ -25,10 +27,10 @@ types-check: ## fail when the committed OpenAPI document or TypeScript types are
 	$(MAKE) types
 	git diff --exit-code -- web/openapi.json web/src/api/schema.d.ts
 
-web: ## build the UI and serve it with the API on http://127.0.0.1:8000 (one process, dev identity on)
+web: ## build the UI and serve it with the API on http://127.0.0.1:$(PORT) (one process, dev identity on)
 	pnpm --dir web install --frozen-lockfile
 	pnpm --dir web build
-	WEB_DEV_IDENTITY=true WEB_UI_DIR=web/dist uv run --extra web agent web
+	WEB_DEV_IDENTITY=true WEB_UI_DIR=web/dist uv run --extra web agent web --port $(PORT)
 
 
 
@@ -38,7 +40,6 @@ web: ## build the UI and serve it with the API on http://127.0.0.1:8000 (one pro
 
 IMAGE ?= retail-agent
 AS ?= ceo
-PORT ?= 8000
 ADC ?= $(HOME)/.config/gcloud/application_default_credentials.json
 DOCKER_RUN = docker run --rm --env-file .env \
 	-e GOOGLE_APPLICATION_CREDENTIALS=/gcp/adc.json -v "$(ADC)":/gcp/adc.json:ro \
