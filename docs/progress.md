@@ -4,8 +4,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-16)
 
-**Phase:** 5 done (PR open on `docs/readme`). Next: merge it, then the end-of-Phase-4 retro, then Phase 6.
-**Branch:** `docs/readme`
+**Phase:** 5 merged (PR #33); end-of-Phase-4 retro done (PR open on `docs/phase-4-retro`). Next: the Customer ID fix in the PII filter, then Phase 6.
+**Branch:** `docs/phase-4-retro`
 
 | Step | Status |
 |---|---|
@@ -35,6 +35,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Slice 7c: User Profile notes (#13, branch `feat/13-profile`) | ✅ `SqliteProfileStore` (same file as the users; one row per User, JSON columns); one pure merge `merged` in `domain/profile.py` shared by the store and `apply_preferences` (explicit overwrites, unknown option skipped, duplicate note kept once, oldest notes dropped past 20); graph `router` → `apply_preferences` (+ `save_preferences` in parallel when there are standing statements) → branch, `acknowledge` for `preference_only`; every extracted value re-screened by the input rules; `<user_preferences>` data block in the analyst prompt; router prompt for preferences; store failures traced on `profile_load` / `profile_save` and the turn goes on; `/profile`, `/profile clear [n]` through `Views`. **Live demo not run yet** (7c rows in `docs/demo.md`); the router prompt changed, so the next `make eval` checks it |
 | Slice 8: web UI (#14, branch `feat/14-web-ui`) | ✅ FastAPI adapter `src/agent/adapters/web/` (`agent web`, extra `agent[web]`): `POST /api/messages` → SSE through `SseChannel` (worker thread, drops traced on disconnect), every feature-map route through `Views`, `ApiError` bodies; dev identity (`WEB_DEV_IDENTITY`, `X-Agent-User`, `GET /api/dev/users` from `SqliteUserDirectory.list_dev_users`, 127.0.0.1 only); `make types` / `types-check` (`web/openapi.json` → `schema.d.ts`), CI `web` job; React app in `web/` (Users panel, who-am-I header and chat bar, chat over SSE, Deletion Plan checkboxes, My reports, preferences, the CLI's slash commands); 735 offline tests. Live: `/api/dev/users`, a manager's reports, `stats_forbidden`, one real SSE turn (Nike refused for manager-a), and slash commands in a browser. Review fixed: large plans by checkbox, an untraced lost reply on disconnect, gate `detail` reaching the browser. **Live chat demo in the browser not run yet** (slice 8 rows in `docs/demo.md`). Deviations in `decision-log.md` § Slice 8 |
 | Phase 5: ship anywhere (`docs/readme`) | ✅ README (setup native and Docker, CLI and web UI, example run, requirement table linking the HLD, screenshots in `docs/screenshots/`), `.env.example`, `Dockerfile` (Node stage builds `web/`, Python stage on `uv:0.13.6-python3.12-trixie-slim`, non-root, `data/` and `traces/` volumes, secrets at run time), `.dockerignore`, `make web` / `docker-build` / `docker-chat` / `docker-web`. Code: `agent web` serves the built UI at `/` when `WEB_UI_DIR` is set (mounted after `/api`); `WEB_DEV_IDENTITY_ANY_HOST` lets the picker bind `0.0.0.0` inside a container, set only by `make docker-web` next to `-p 127.0.0.1:…` (user's choice over host networking, which is off by default on Docker Desktop); LLD 07 updated. Verified from a fresh clone following only the README: `uv sync` + CLI turn, `make web` + a browser turn, pip install + CLI, `make docker-build` + `docker-chat` + `docker-web` + a browser turn, and a container turn reaching Phoenix on the host |
+| End-of-Phase-4 retro (`docs/phase-4-retro`) | ✅ `other-managers-brand` also passes on an answer that names the Brand it left out (`or_answer_naming`, `prereg-20261116-named-refusal`; a silent drop still fails); **first PASS of `make eval`** (run `2026-11-16T10-57-16-2ab3`, now the baseline): safety 7/7, session 3/3, correctness 5/9, step 30/31, recall@3 9/10; `tests/test_layers.py` holds LLD 01's package rule; `tests/test_egress.py` plants an email in every store and calls every `Views` method (found `/trace` returning `outcome`/`action` unfiltered, fixed); CLAUDE.md: read by symbol; `evals/runs/` ignored; this file pruned |
 
 ## Decisions made this session, not yet written elsewhere
 
@@ -50,28 +51,15 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Read docs/work-plan.md and docs/progress.md, then run the end-of-Phase-4 retro (`/mattpocock-skills:retro`) over the whole build.
+> Read docs/work-plan.md and docs/progress.md, then fix the Customer ID false positive in the PII filter (branch `fix/pii-customer-id`), with the adversarial review CODING_STANDARDS §2 asks for.
 
 Notes for what comes next:
 
-- Phase 5 (PR on `docs/readme`): merge it first. The HLD 00 requirement map's "Prototype" column still says Reqs 1, 4 and 8 are not in the prototype; the README's table is current. Worth fixing in Phase 6.
-- The local `.env` has no `BIGQUERY_PROJECT` (native runs take the project from gcloud config); the container needs it, so `make docker-*` need it in `.env`. `.env.example` lists it as required.
-- Live in the container, "What was Nike revenue in 2025?" as manager-a was refused in the model's own words, not the `OUT_OF_SCOPE` catalog message: the same behaviour as the slice 6 `other-managers-brand` finding.
-
-- #14 merged (PR #32, screenshots attached). #20 (Ollama) is deferred: Phase 5 first, by the user's choice on 2026-11-16. The end-of-Phase-4 retro is still open.
-
-- Before merging #13: run the slice 7c live demo (`docs/demo.md`, 7c rows), screenshot it into the PR, then merge.
-- The regex PII filter reads "ID 48213" as an Idaho postal code ("ID" + 5 digits), so "Customer ID 48213" in an answer is redacted, and the analyst prompt asks for Customer IDs. Found in #12, not fixed there (the gate's PII case counts email hits only); a slice 2 filter fix with its adversarial review.
-
-- The step cap ends a turn with the `SELF_CORRECTION_EXHAUSTED` wording ("rephrase it with a specific time period"), even when every query worked. Not changed in 7a: a new message class, or a last model step with no tools, is a design decision.
-- `trios.scores` dropped from 0.92 to 0.79 when the router reworded the same question, just above the 0.75 threshold: one for the retrieval suite (#26).
-
-- Slice 6's first live scorecard points at two fixes worth a decision before more slices: the analyst's revenue definition (exclude Cancelled and Returned lines: in the schema description or the Persona emphasis?), and whether a model's own refusal of another Manager's Brand should count for `other-managers-brand` (a fixture change is a new pre-registration, per its rules). Correctness has no baseline yet: the first PASS run becomes it.
-- `make eval` takes ~10 minutes on the free tier (20 cases, ~70 model calls with the judge); traces of eval runs go to `traces/eval/`.
-
-- Phoenix seen live. With `PHOENIX_FULL_CONTENT=true` (set in the local `.env` only) it also shows full prompts, tool calls and tool results, rows included: a developer-machine switch, see LLD 06 § Tracer.
-- `MODEL_PRICES` is set in the local `.env` (list prices 2026-11-15: `gemini-3-flash-preview` $0.50/$3.00, `gemini-3.5-flash-lite` $0.30/$2.50 per million tokens); the code default stays empty.
-- Before #10: rebase-merge PR #24 (approve the Slice 5 deviations first), then start from `main`. #10 pushes scorecards to Phoenix experiments; Phoenix runs on port 6006.
-- Old trace lines (before slice 5) have no span IDs; `read` skips them.
-- The probe was not seen live: the AI Studio free-tier quota for the analyst model ran out during slice 3. Try "orders from Customers whose state is 'CA'" (thelook stores full state names) when quota allows.
-- `.env` sets `MODEL_ANALYST=gemini-3.6-flash` (stable; since 2026-11-16, because `gemini-3-flash-preview` hit the free-tier 429 on every call) and `MODEL_ANALYST_FALLBACK=gemini-3.5-flash-lite`; the fallback answered live when Flash hit its free-tier 429 (again in slice 5).
+- **Next fix (own branch, `fix/pii-customer-id`):** the regex PII filter reads "Customer ID 48213" as an Idaho postal code ("ID" + 5 digits) and redacts it, so "top customers" answers lose their IDs. Proposal: a state code counts as a postal code only in address form, after a comma ("Boise, ID 83702"); the guard already blocks `postal_code` by name, so the regex is the last layer. A safety change: adversarial Spec review (CODING_STANDARDS §2).
+- Correctness 5/9 on the baseline: `monthly-revenue-2025`, `data-date-range`, `return-rate-trend-my-brands`, `top-traffic-source-my-brands` fail execution match; earlier runs traced most misses to revenue counting Cancelled and Returned lines. Deciding where that definition lives (schema description or Persona emphasis) is open.
+- The step cap ends a turn with the `SELF_CORRECTION_EXHAUSTED` wording ("rephrase it with a specific time period") even when every query worked. A new message class, or a last model step with no tools, is a design decision.
+- Live demos not run yet: 7b, 7c and slice 8's chat in the browser (`docs/demo.md`).
+- Phase 6: the HLD 00 requirement map's "Prototype" column still says Reqs 1, 4 and 8 are not in the prototype (the README's table is current); make the repo public; submit.
+- #20 (Ollama) is deferred until Phase 6 is done.
+- Local `.env` (not in the repo): `MODEL_ANALYST=gemini-3.6-flash` with `MODEL_ANALYST_FALLBACK=gemini-3.5-flash-lite` (the preview model hit the free-tier 429 on every call); `MODEL_PRICES` set to list prices; `PHOENIX_FULL_CONTENT=true`. The container needs `BIGQUERY_PROJECT` in `.env`.
+- `make eval` takes ~10 minutes on the free tier; `evals/runs/` is local (ignored), so a fresh clone has no baseline until its first PASS.

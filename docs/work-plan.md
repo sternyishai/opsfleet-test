@@ -138,21 +138,21 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 |---|---|---|---|
 | 1 walking skeleton | #5 | ✅ done | First slice: tunes the process itself (context use, SDK gotchas, guardrails) |
 | 2 safety | #6 | ✅ done | The core guarantee; the spec review found guard holes the tests missed. Its PII filter and Brand scope are reused by #8 and #11 |
-| 3 resilience | #7 | **yes** | Sets the error, retry and fallback patterns every later slice follows; first slice tuned against real model behaviour |
-| 4 Saved Reports + Deletion Plan | #8 | **yes** | First SQLite store and first pause and resume (`interrupt()`); #12 and #13 reuse both |
+| 3 resilience | #7 | ✅ done | Sets the error, retry and fallback patterns every later slice follows; first slice tuned against real model behaviour |
+| 4 Saved Reports + Deletion Plan | #8 | ✅ done | First SQLite store and first pause and resume (`interrupt()`); #12 and #13 reuse both |
 | 5 observability | #9 | no | Adds to the tracer the earlier slices already call |
-| 6 eval | #10 | **yes** | First run against the real model: its scorecard sets the limits to tune and which stretch slices are worth doing |
+| 6 eval | #10 | ✅ in the end-of-Phase-4 retro | First run against the real model: its scorecard sets the limits to tune and which stretch slices are worth doing |
 | 7a–7c stretch | #11–#13 | no | Built on patterns already reviewed |
 | 6b per-step evals | #26 | no | Extends the #10 runner and bar, whose patterns its retro already reviewed |
 | 8 web UI (optional) | #14 | no | A separate front end over `ChatService`; nothing later builds on it |
 | dev aid: Ollama models (nice to have) | #20 | no | Deferred (2026-11-16): Phase 5 comes first, so a clean clone runs anywhere; picked up only if time remains |
-| end of Phase 4 | none | **yes** | One last retro over the whole build before Phase 5, while the problems are still fresh |
+| end of Phase 4 | none | ✅ done | One last retro over the whole build before Phase 5, while the problems are still fresh |
 
 **How to run one:** `/mattpocock-skills:retro`, then commit its fixes as `docs: record the slice N retro`.
 
 **Done when:**
-- [ ] slices 1–6 are merged (7 if time allows)
-- [ ] `uv run pytest` is green on `main`
+- [x] slices 1–6 are merged (7 if time allows): 1–8 and 6b merged; #20 deferred
+- [x] `uv run pytest` is green on `main`
 
 ## Phase 5: Ship anywhere (~1 h) — done, PR open
 
