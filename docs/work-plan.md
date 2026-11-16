@@ -173,9 +173,35 @@ The Dockerfile covers both channels (added after slice 8, #14): one image, a Nod
 **Prompt:** `/mock-interview both`
 
 **Done when:**
-- [x] the top gaps from the audit are fixed (the revenue definition is still open)
+- [x] the top gaps from the audit are fixed (the revenue definition: #38, merged)
 - [x] the repo is public
-- [ ] the link is submitted
+- [ ] the link is submitted (after Phase 7)
+
+## Phase 7: Close the remaining gaps (~2–3 h), one issue per session
+
+The full `make eval --trials 3` after #41 PASSED (run `2026-11-16T19-51-19-24ad`, the Baseline): safety 7/7 and session 3/3 on every trial, correctness 10/13, step 31/32. Every prototype requirement is met. What is left is in the design docs, plus measurement gaps.
+
+Work through these in order; the order follows the assessment focus (system design first):
+
+| # | Issue | Why | Needs a decision first |
+|---|---|---|---|
+| 1 | #37 docs(hld): close the design gaps found in the mock interview | the assessment is mainly the system design | no |
+| 2 | #42 `repeat-customer-share-2025` fails every trial | the one capability case that never passes | yes: does a cancelled order count as "placed"? |
+| 3 | #44 eval case: revenue by product to date | the last spec example with no case | no |
+| 4 | #43 cases that pass some trials and not others | so the Baseline gates on stable cases | no (diagnose, then decide per case) |
+| 5 | #40 `agent eval --parallel N` (optional) | a full 3-trial run is ~1 h one trial at a time; the worktree `../opsfleet-test-40` holds a start, rebase it on `main` | no |
+| — | #20 Ollama dev aid | deferred: not needed for submission | — |
+
+**Prompt (one per session):**
+
+> Read docs/work-plan.md and docs/progress.md, then build #N.
+
+A change to a case, a prompt or the scorer needs a new pre-registration id and a full run afterwards: `LLM_REQUESTS_PER_MINUTE=300 LLM_BURST=10 make eval ARGS="--trials 3"` (paid key; the free tier comes back CANNOT_MEASURE from `model_busy`).
+
+**Done when:**
+- [ ] #37, #42, #44 and #43 are merged (#40 optional)
+- [ ] a full `make eval --trials 3` PASSes with no correctness regression against the Baseline
+- [ ] then Phase 6's last box: submit the link
 
 ---
 
