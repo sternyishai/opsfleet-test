@@ -502,3 +502,12 @@ Choices made while building issue #14, to be confirmed in review:
 - **FastAPI, Uvicorn and httpx are also in the dev group**, so `uv run pytest` and pyright cover the web channel on a plain `uv sync`; the package keeps them in the `web` extra, and a test imports the core with them blocked.
 - **TypeScript 5, not 7**: openapi-typescript 7 uses the JavaScript compiler API that TypeScript 7 no longer ships.
 - **"all Brands" for an Executive is rendered by the UI from `role`**; `DevUser.brands` stays the Brand Assignments as stored (empty for the CEO).
+- **Slash commands in the browser** (asked for in review): the CLI's commands, each one the route of its feature-map row, rendered in `web/src/commands.ts` like the CLI. Adds `GET /api/traces` (no ID: the last turn), so `/trace` alone matches the CLI. `/persona edit` takes `field=value` pairs instead of the CLI's prompts.
+
+Fixed after the code review:
+
+- **A large plan by checkboxes**: the items past the 20 shown were sent as unticked, so unticking one box of 37 deleted 18 reports, not 36; and every box ticked could never be confirmed (the count was needed). Unshown items now stay selected, and "delete all" of a large plan asks for the count.
+- **A disconnect could lose the reply without a trace**: the stream took the message off the queue in a worker thread, and a cancel dropped it. The stream now waits without taking (`wait`, then `take`).
+- **`GateCheckResult.detail` (trace only) reached the browser** in `PUT /api/persona` responses; `Views.edit_persona` now clears it on both outcomes.
+- `assert` on the seeded directory in `build_web` became a `ValueError` (`-O` drops asserts); `_ok` replaces two copies of the `ToolError` mapping; the 403 text no longer names the header.
+

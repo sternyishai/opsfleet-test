@@ -1,7 +1,14 @@
 :root { font-family: system-ui, sans-serif; color: #1d1d1f; background: #f6f6f7; }
 body { margin: 0; }
 .app { display: grid; grid-template: "who who" auto "side main" 1fr / 320px 1fr; height: 100vh; }
-.who { grid-area: who; padding: 0.75rem 1rem; background: #1d3557; color: white; }
+.who { grid-area: who; display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 1rem; background: #1d3557; color: white; }
+.who .title { font-weight: 600; }
+.as { padding: 0.25rem 0.7rem; border-radius: 999px; font-size: 0.9rem; }
+.who .as { background: rgba(255, 255, 255, 0.15); }
+.chat-bar .as { background: #eef1f5; }
+.as.role-executive { box-shadow: inset 0 0 0 2px #e9c46a; }
+.as.role-manager { box-shadow: inset 0 0 0 2px #8ecae6; }
+.as.role-none { box-shadow: inset 0 0 0 2px #e76f51; }
 .side { grid-area: side; overflow-y: auto; padding: 0 1rem; border-right: 1px solid #ddd; background: white; }
 .side h2 { font-size: 0.9rem; text-transform: uppercase; color: #666; margin-top: 1.25rem; }
 .side ul, .side ol { padding-left: 0; list-style: none; }
@@ -9,7 +16,13 @@ body { margin: 0; }
 .users button.picked { font-weight: bold; }
 .main { grid-area: main; display: flex; flex-direction: column; min-height: 0; }
 .chat { display: flex; flex-direction: column; height: 100%; }
-.chat-bar { padding: 0.5rem 1rem; border-bottom: 1px solid #ddd; }
+.chat-bar { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 1rem; border-bottom: 1px solid #ddd; }
+.log .view { background: #f0f3f0; border: 1px dashed #9a9; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+.log .hint-line { color: #888; }
+.hints { list-style: none; margin: 0 1rem; padding: 0.5rem; background: white; border: 1px solid #ddd; border-radius: 6px; font-size: 0.85rem; }
+.hints code { color: #1d3557; }
+.plan .count { margin-top: 0.5rem; }
+.plan .count input { width: 5rem; }
 .log { flex: 1; overflow-y: auto; list-style: none; padding: 1rem; margin: 0; }
 .log li { white-space: pre-wrap; margin: 0.5rem 0; padding: 0.6rem 0.8rem; border-radius: 8px; max-width: 75ch; }
 .log .you { background: #dbe7f5; margin-left: auto; }

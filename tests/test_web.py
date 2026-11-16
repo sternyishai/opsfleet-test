@@ -38,6 +38,7 @@ from tests.fakes import (
     CollectingChannel,
     FakeLLMFactory,
     FakeTracer,
+    InMemoryReportRepository,
     ask,
     chat_service,
     fake_ports,
@@ -232,6 +233,7 @@ def test_every_feature_map_row_calls_the_same_views_method(tmp_path: Path) -> No
             {"json": {"tone.preset": "formal"}},
         ),
         (["/trace abc123"], "GET", "/api/traces/abc123", {}),
+        (["/trace"], "GET", "/api/traces", {}),
         (["/stats 24h"], "GET", "/api/stats?since=24h", {}),
         (["/profile clear"], "DELETE", "/api/profile", {}),  # last: it empties the profile
     ]
@@ -382,3 +384,82 @@ def test_the_dev_identity_refuses_to_start_off_loopback() -> None:
 
     with pytest.raises(ValueError, match="127.0.0.1"):
         build_web(settings, host="0.0.0.0")
+
+
+def test_opening_a_report_calls_views_report(tmp_path: Path) -> None:
+    """The one feature-map row with no CLI command ("ask in chat")."""
+    report_id = "00000000-0000-0000-0000-000000000007"
+
+    [call] = web_calls(feature_ports(tmp_path), "GET", f"/api/reports/{report_id}")
+
+    assert call == ("report", {"user_id": "ceo", "report_id": UUID(report_id)})
+
+
+def test_a_large_plan_unticked_by_box_deletes_what_yes_except_deletes() -> None:
+    """The UI shows the first 20 of 25 and sends every index but the unticked one."""
+    from tests.test_deletion import HERE, save, titles
+    from tests.test_deletion_flow import CK, say, service
+
+    def reports() -> Any:
+        repo = InMemoryReportRepository()
+        for n in range(1, 26):
+            save(repo, f"CK report {n:02}", mentions=("Calvin Klein",))
+        return repo
+
+    by_text = reports()
+    svc, _ = service(by_text, [DELETE], f=CK)
+    say(svc, "delete all reports mentioning Calvin Klein")
+    [cli_reply] = say(svc, "yes except 2")
+
+    by_box = reports()
+    svc, _ = service(by_box, [DELETE], f=CK)
+    web = TestClient(
+        create_app(svc, Views(fake_ports(MANAGER_A), LIMITS), FakeTracer(), dev_users=list)
+    )
+    asked = post_text(
+        web, "manager-a", "delete all reports mentioning Calvin Klein", conversation_id=str(HERE)
+    )
+    [(_, plan)] = events(asked)
+    assert (len(plan["items"]), plan["total"]) == (20, 25)
+    unticked = plan["items"][1]["index"]
+    confirm = {
+        "kind": "confirmation",
+        "conversation_id": str(HERE),
+        "request_id": plan["request_id"],
+        "approved": True,
+        "selected_indices": [i for i in range(1, 26) if i != unticked],
+    }
+    answered = web.post("/api/messages", json=confirm, headers={"X-Agent-User": "manager-a"})
+    [(_, web_reply)] = events(answered.text)
+
+    assert shown(web_reply) == shown(cli_reply)
+    assert len(titles(by_box)) == len(titles(by_text)) == 1
+
+
+def test_waiting_for_a_message_takes_nothing() -> None:
+    """A wait cut short by a disconnect leaves the message for ``close`` to trace."""
+    tracer = FakeTracer()
+    channel = SseChannel(tracer)
+    [reply] = ask(chat_service(revenue_ports())[0], "ceo", "revenue?")[0]
+    channel.deliver(reply)
+
+    channel.wait(0.01)
+    channel.wait(0.01)  # as if the first wait's result was lost to a cancel
+    channel.close()
+
+    assert [s.attributes["kind"] for s in tracer.spans if s.name == "channel.dropped"] == ["reply"]
+
+
+def test_a_direct_persona_edit_returns_no_check_detail(tmp_path: Path) -> None:
+    """``GateCheckResult.detail`` is for the trace; the gate here cannot run (no model)."""
+    ports = feature_ports(tmp_path)
+
+    out = (
+        client(ports)
+        .put("/api/persona", json={"tone.preset": "formal"}, headers={"X-Agent-User": "ceo"})
+        .json()
+    )
+
+    assert out["status"] == "rejected"
+    assert out["gate"]["checks"]
+    assert all(check["detail"] is None for check in out["gate"]["checks"])

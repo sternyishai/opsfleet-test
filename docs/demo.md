@@ -42,6 +42,7 @@ How to show a slice working against real Gemini and BigQuery: what to run, what 
 | 8 web UI | (browser) | `make dev` (needs `uv sync --extra web` and pnpm), open http://localhost:5173 → pick `manager-a` → What was Calvin Klein revenue in 2025? | the header reads "manager-a · Manager · Calvin Klein, Tommy Hilfiger"; progress lines, then $46,399.46, the same text the CLI prints |
 | 8 web UI | `manager-a` (browser) | What was Nike revenue in 2025? → pick `ceo` → What was total revenue in 2025? | told which Brands they can analyze; switching to ceo clears the chat (a new Conversation), the header reads "ceo · Executive · all Brands", then $2,358,149.49 |
 | 8 web UI | `manager-a` (browser) | save a Calvin Klein report twice (as in slice 4), then delete my Calvin Klein reports → untick item 2 → Delete | the plan as checkboxes; the reply names the kept report, as `yes except 2` does in the CLI; "My reports" updates |
+| 8 web UI | `manager-a`, then `ceo` (browser) | type `/` (the command list), `/reports`, `/trace`, `/stats`; switch to `ceo`, `/stats 24h`, `/persona` | the header and the chat bar name the connected User; `/stats` is refused for manager-a and shown for ceo; the same text the CLI prints, with no model call |
 | 8 web UI | `ceo` (browser) | New chat, then "and in 2024?" | a fresh Conversation: the follow-up has no earlier question to refer to |
 
 ## When something fails

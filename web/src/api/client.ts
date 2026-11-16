@@ -14,15 +14,30 @@ export type GetReportOk =
   paths["/api/reports/{report_id}"]["get"]["responses"][200]["content"]["application/json"];
 export type UserProfile =
   paths["/api/profile"]["get"]["responses"][200]["content"]["application/json"];
+export type PersonaVersion = Schemas["PersonaVersion"];
+export type PublishPersonaOutput = Schemas["PublishPersonaOutput"];
+export type PersonaRolledBack = Schemas["PersonaRolledBack"];
+export type PersonaChanges =
+  paths["/api/persona"]["put"]["requestBody"]["content"]["application/json"];
+export type TraceView = Schemas["TraceView"];
+export type SpanNode = Schemas["SpanNode"];
+export type StatsView = Schemas["StatsView"];
 
 const USER_HEADER = "X-Agent-User";
 
 /** A refused request, with the message to show (the catalog message for a view). */
 export class Refused extends Error {}
 
-async function call<T>(userId: string | null, method: string, url: string): Promise<T> {
+async function call<T>(
+  userId: string | null,
+  method: string,
+  url: string,
+  body?: unknown,
+): Promise<T> {
   const headers: Record<string, string> = userId ? { [USER_HEADER]: userId } : {};
-  const response = await fetch(url, { method, headers });
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const json = body === undefined ? undefined : JSON.stringify(body);
+  const response = await fetch(url, { method, headers, body: json });
   if (!response.ok) throw await refused(response);
   return (await response.json()) as T;
 }
@@ -42,6 +57,20 @@ export const api = {
   report: (userId: string, reportId: string) =>
     call<GetReportOk>(userId, "GET", `/api/reports/${reportId}`),
   profile: (userId: string) => call<UserProfile>(userId, "GET", "/api/profile"),
+  resetProfile: (userId: string) => call<UserProfile>(userId, "DELETE", "/api/profile"),
+  removeNote: (userId: string, noteId: string) =>
+    call<UserProfile>(userId, "DELETE", `/api/profile/notes/${noteId}`),
+  persona: (userId: string) => call<PersonaVersion>(userId, "GET", "/api/persona"),
+  personaVersions: (userId: string) =>
+    call<PersonaVersion[]>(userId, "GET", "/api/persona/versions"),
+  editPersona: (userId: string, changes: PersonaChanges) =>
+    call<PublishPersonaOutput>(userId, "PUT", "/api/persona", changes),
+  rollbackPersona: (userId: string) =>
+    call<PersonaRolledBack>(userId, "POST", "/api/persona/rollback"),
+  trace: (userId: string, traceId: string | null) =>
+    call<TraceView>(userId, "GET", traceId ? `/api/traces/${traceId}` : "/api/traces"),
+  stats: (userId: string, since: string) =>
+    call<StatsView>(userId, "GET", `/api/stats?since=${encodeURIComponent(since)}`),
 };
 
 /**

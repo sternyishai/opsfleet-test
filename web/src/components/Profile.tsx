@@ -1,12 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type UserProfile } from "../api/client";
-
-const FIELDS = [
-  ["format", "Format"],
-  ["depth", "Level of detail"],
-  ["charts", "Charts"],
-  ["language", "Language"],
-] as const;
+import { PROFILE_FIELDS } from "../commands";
 
 export function Profile(props: { userId: string; refresh: number }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -23,7 +17,7 @@ export function Profile(props: { userId: string; refresh: number }) {
   }, [props.userId, props.refresh]);
 
   const values = profile
-    ? FIELDS.flatMap(([name, label]) => {
+    ? PROFILE_FIELDS.flatMap(([name, label]) => {
         const v = profile[name];
         return v ? [`${label}: ${String(v.value).replaceAll("_", " ")}`] : [];
       })
