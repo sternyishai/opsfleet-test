@@ -216,7 +216,7 @@ flowchart LR
 | **Chat API** | R: Users and Brand Assignments, Golden Trios, Persona (cached). R/W: checkpoints, User Profiles (explicit). W: Saved Reports, deletion audit, Persona versions. D: Saved Reports | R: `run_sql` through the query guard, as the service account or the User | none | publishes `report.saved`, `report.deleted`, `turn.completed` | 1–4 |
 | **Admin UI** | W: Persona versions. R/W: Trio Candidates (review queue) | none | none | none | 4, 5 |
 | **Worker service** | R: Saved Reports, checkpoints. W: entities, Golden Trios, Trio Candidates, interaction store | dry run of Trio SQL | R: Trio files, also in the nightly sweep. D: chart images | push subscriber; DLQ after ~5 failures | 2, 3, 5, 6, 7 |
-| **Batch jobs** | R: interaction store, Golden Trios. W: inferred User Profile values, aggregates, retired Trios | dry run of every active Trio | none | none | 5, 6 |
+| **Batch jobs** | R: interaction store, Golden Trios, Brand Assignments. W: inferred User Profile values, aggregates, retired and `review_due` Trios | dry run of every active Trio; the scope auditor reads `INFORMATION_SCHEMA.JOBS` | none | none | 5, 6 |
 | **Cloud Scheduler** | none | none | none | publishes the nightly sweep message | 5 |
 | **People** | admins and a sync job write Users and Brand Assignments | data team loads it | analysts upload Trio files | AI-ops replays the DLQ | 5, 7 |
 

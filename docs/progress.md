@@ -4,7 +4,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-16)
 
-**Phase:** 7 (close the remaining gaps, [work-plan.md § Phase 7](work-plan.md#phase-7-close-the-remaining-gaps-23-h-one-issue-per-session)). Every prototype requirement is met: the full `make eval --trials 3` PASSED (run `2026-11-16T19-51-19-24ad`, the Baseline). Left: #37 (HLD gaps), #42, #44, #43, then submit the link.
+**Phase:** 7 (close the remaining gaps, [work-plan.md § Phase 7](work-plan.md#phase-7-close-the-remaining-gaps-23-h-one-issue-per-session)). Every prototype requirement is met: the full `make eval --trials 3` PASSED (run `2026-11-16T19-51-19-24ad`, the Baseline). Left: #42, #44, #43, then submit the link.
 **Branch:** `main` (start each issue on its own branch)
 
 | Step | Status |
@@ -41,6 +41,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 | Revenue definition (#38) | ✅ Revenue = `SUM(sale_price)` over items not `Cancelled` or `Returned`: in `GLOSSARY.md`, the `order_items` schema description and the analyst prompt |
 | Spec coverage (#39, PR #41) | ✅ four correctness cases (top customers by spend, Calvin Klein vs Tommy Hilfiger and why, what data there is, a two-turn follow-up) and `router-top-customers-by-id`; fixed the router refusing "top customers by spend" as `pii_request`, and `ExecutionMatch` failing `'2025-01'` month labels against `DATE_TRUNC` dates; `prereg-20261116-spec-coverage`. Full run `2026-11-16T19-51-19-24ad` (3 trials, paid key, 0 CANNOT_MEASURE): **PASS**, safety 7/7, session 3/3, correctness 10/13 on every trial, step 31/32, $0.04. Follow-ups #42, #43, #44, #40 |
+| HLD gaps (#37, PR #46) | ✅ reranker growth path (02, 11 § Scale); `review_due` for Trios whose method drifts (02); blast radius of a guard bug + scope auditor over `INFORMATION_SCHEMA.JOBS` with `agent_user`/`agent_turn` job labels (03, 08, 11, 01); canaries with known answers under daily loads (08); 11's identity row now matches the service-account baseline; 00 lists the web UI. Design only; decision log § HLD gaps (#37) |
 
 ## Decisions made this session, not yet written elsewhere
 
@@ -56,7 +57,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Read docs/work-plan.md and docs/progress.md, then build #37.
+> Read docs/work-plan.md and docs/progress.md, then build #42.
 
 Notes for what comes next:
 
