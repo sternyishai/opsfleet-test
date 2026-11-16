@@ -24,6 +24,10 @@ _Avoid_: User, shopper, buyer
 
 ### Data access
 
+**Revenue**:
+The sum of `order_items.sale_price` over items whose status is not `Cancelled` or `Returned`: money the company kept. Cancellations and returns are measured separately, never netted into Revenue.
+_Avoid_: Sales, gross sales, turnover
+
 **Brand Assignment**:
 The link between a Manager and one Brand they may analyze. A Manager can have several.
 _Avoid_: Ownership, partition
