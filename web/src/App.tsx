@@ -43,7 +43,7 @@ export function App() {
         <Prototype />
       </div>
       {page === "diagrams" && (
-        <div className="page">
+        <div className="page scroll">
           <Showcase
             kind="diagrams"
             title="Diagrams"
@@ -53,7 +53,7 @@ export function App() {
         </div>
       )}
       {page === "films" && (
-        <div className="page">
+        <div className="page scroll">
           <Showcase
             kind="films"
             title="Films"
