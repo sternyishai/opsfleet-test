@@ -31,7 +31,7 @@ flowchart TB
 | [`contracts/`](../../src/agent/contracts/) | `RouterDecision`, channel messages, every tool's input and output | `domain` |
 | [`ports/`](../../src/agent/ports/) | One `Protocol` per external dependency | `domain`, `contracts`, `langchain_core` types |
 | [`core/`](../../src/agent/core/) | Deep modules with no dependency of their own: `ChatService` (the inbound entry point), `Views` (model-free commands), `Outbound` (single exit), `parse_reply` (confirmation), `PersonaQualityGate` | `ports`; `Views` also calls the report and Persona functions in `tools/`, so the agent and every channel share one implementation ([07](07-web.md)); `PersonaQualityGate` builds its answers with the analyst prompt in `graph/prompts.py`, so the gate tests the prompt real turns use |
-| [`tools/`](../../src/agent/tools/) | The eleven tool functions and `TurnContext` | `ports`, `contracts` |
+| [`tools/`](../../src/agent/tools/) | The eleven tool functions and `TurnContext` | `ports`, `contracts`, `config` (`Limits`), and the `Ports` bundle type from `composition`; never `core` or `graph` |
 | [`graph/`](../../src/agent/graph/) | `AgentState`, the `Node` map, `build_graph` | all of the above |
 | [`evals/`](../../src/agent/evals/) | Eval runner, scorers, the bar and the fan-out sink ([08](08-eval.md)) | `core`, `contracts`, `ports`, `graph` (a trial builds its own graph over its fresh store) |
 | [`adapters/`](../../src/agent/adapters/) | Concrete adapters, added slice by slice | `ports`, provider SDKs |
@@ -39,7 +39,7 @@ flowchart TB
 | [`config`](../../src/agent/config.py) | `Settings`, `ModelSettings`, `Limits` from `.env` | `pydantic-settings` |
 | [`db/`](../../src/agent/db/) | DDL and the ER diagram ([02](02-data.md)) | nothing |
 
-**The dependency rule is enforced, not hoped for.** Ruff's `banned-api` rule rejects `google.cloud`, `google.genai` and `langchain_google_genai` outside `agent.adapters` ([pyproject.toml](../../pyproject.toml)), which is the review smell ADR 0006 names. The core depends only on `pydantic`, `langchain-core` and `langgraph`; adapter SDKs are added by the slice that needs them.
+**The dependency rule is enforced, not hoped for.** Ruff's `banned-api` rule rejects `google.cloud`, `google.genai` and `langchain_google_genai` outside `agent.adapters` ([pyproject.toml](../../pyproject.toml)), which is the review smell ADR 0006 names. Inside `agent`, [`tests/test_layers.py`](../../tests/test_layers.py) holds this table to the source: `errors` → `domain` → `contracts` → `ports` import only downward, `tools` and every adapter except the `web` channel stay below `core` and `graph`, and nothing imports `cli`. The core depends only on `pydantic`, `langchain-core` and `langgraph`; adapter SDKs are added by the slice that needs them.
 
 ## Where the seams are, and why
 

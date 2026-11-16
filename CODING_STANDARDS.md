@@ -1,6 +1,6 @@
 # Coding standards
 
-The rules `/code-review` checks every diff against. They are judgement calls a reviewer has to make by reading. Rules a machine can check live in tooling instead and are not repeated here: `ruff` (including the `banned-api` rule that keeps provider SDKs in `agent.adapters`), `pyright`, and the tests in `tests/test_skeleton.py`. The pre-commit hook in `.githooks/` runs all three.
+The rules `/code-review` checks every diff against. They are judgement calls a reviewer has to make by reading. Rules a machine can check live in tooling instead and are not repeated here: `ruff` (including the `banned-api` rule that keeps provider SDKs in `agent.adapters`), `pyright`, the package rule in `tests/test_layers.py`, and the tests in `tests/test_skeleton.py`. The pre-commit hook in `.githooks/` runs all three.
 
 Each rule names its source. If a rule and a design doc disagree, the doc wins and this file is fixed.
 
@@ -20,7 +20,7 @@ The package map and dependency rule are in [docs/lld/01-modules.md](docs/lld/01-
 From [HLD 03](docs/hld/03-safety-and-pii.md) and [ADR 0003](docs/adr/0003-layered-data-access-enforcement.md).
 
 - User, Author, role and Brand scope come from `TurnContext.user`, never from a tool input or model output.
-- Every message to a User leaves through `Outbound.emit`. Nothing writes to stdout, a socket or a queue around it. The one other way out is a `Views` result, which runs the PII filter on every text field before a channel renders it ([LLD 07](docs/lld/07-web.md)).
+- Every message to a User leaves through `Outbound.emit`. Nothing writes to stdout, a socket or a queue around it. The one other way out is a `Views` result, which runs the PII filter on every text field before a channel renders it ([LLD 07](docs/lld/07-web.md)); `tests/test_egress.py` plants an email in every store and calls every view, so a new view is added there.
 - No SQL reaches `QueryRunner` without `QueryGuard.check` first, probes included. Brands are bound as parameters, never formatted into SQL.
 - Result rows never enter `AgentState`, a trace or a log; only `ResultSummary` does ([LLD 03](docs/lld/03-graph-state.md#what-never-enters-state)).
 - Only the router opens a branch. A tool result never decides routing.

@@ -212,7 +212,13 @@ class Views:
         view = build_trace(spans, wanted, user_id)
         if view is None:
             return None
-        return view.model_copy(update={"root": [self._clean_node(n) for n in view.root]})
+        return view.model_copy(
+            update={
+                "action": self._clean(view.action) if view.action else None,
+                "outcome": self._clean(view.outcome),
+                "root": [self._clean_node(n) for n in view.root],
+            }
+        )
 
     def stats(self, user_id: UserId, since: str = "7d") -> StatsView:
         """Agent-level metrics since ``since`` (``7d``, ``24h``, ``30m``; else ``ValueError``).
