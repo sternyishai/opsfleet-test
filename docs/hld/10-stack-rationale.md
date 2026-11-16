@@ -85,10 +85,9 @@ The assignment asks for the author's level of experience with the chosen stack. 
 
 | Technology | Experience | Delivery risk and how it is covered |
 |---|---|---|
-| LangGraph | Hands-on; none with ADK or PydanticAI | Low |
-| Gemini / Vertex AI | Hands-on | Low |
-| BigQuery | Hands-on | Low |
-| GCP (Cloud Run, Pub/Sub, Cloud SQL) | Hands-on | Low |
-| Postgres + pgvector | Light | Low for the prototype, which uses SQLite cosine search behind the `TrioRetriever` port; pgvector is production-only ([02](02-hybrid-intelligence.md)) |
+| LangGraph | 2 years, in production at work and in side projects; none with ADK or PydanticAI | Low |
+| Gemini / Vertex AI | 1.5 years, in production at work and in side projects | Low |
+| GCP (BigQuery, Cloud Run, Pub/Sub, Cloud SQL) | 4 years in production at work, across several GCP service areas | Low |
+| Postgres + pgvector | None | Low for the prototype, which uses SQLite behind the same ports; Postgres and pgvector are production-only. The Postgres DDL was checked by loading it into `pgvector/pgvector:pg17` ([LLD 02](../lld/02-data.md)), and each production adapter would run the same port tests as its SQLite twin, as the Saved Reports store and its fake already do ([02](02-hybrid-intelligence.md)) |
 | sqlglot | Not used before | The guard's behavior is specified in [03](03-safety-and-pii.md) and pinned by the `pytest` safety suite, written before the guard (TDD), so any gap shows up as a failing test ([07](07-quality-assurance.md)) |
-| Phoenix / Langfuse | Phoenix hands-on; Langfuse new | Low: Phoenix in the prototype; Langfuse is a production option only, behind OpenTelemetry ([08](08-observability.md)) |
+| Phoenix / Langfuse | Phoenix 1 year, in side projects; Langfuse not used | Low: Phoenix in the prototype; Langfuse is a production option only, behind OpenTelemetry ([08](08-observability.md)) |

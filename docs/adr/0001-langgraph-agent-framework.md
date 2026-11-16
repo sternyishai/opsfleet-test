@@ -1,6 +1,6 @@
 # LangGraph as the agent framework
 
-The agent is built on LangGraph. The hardest requirements map directly onto its primitives: human-in-the-loop `interrupt()`/resume for destructive-op confirmation (Req 3), bounded retry loops as explicit graph edges for SQL self-correction (Req 5), per-conversation checkpointing, and per-node tracing via OpenTelemetry to Phoenix, Langfuse or LangSmith (Req 7). It is model-agnostic, so Gemini is the default without lock-in. The choice rests on these requirements. The author's experience (hands-on with LangGraph, none with the alternatives) is stated as a delivery risk in `docs/hld/10`, not as a reason for the choice.
+The agent is built on LangGraph. The hardest requirements map directly onto its primitives: human-in-the-loop `interrupt()`/resume for destructive-op confirmation (Req 3), bounded retry loops as explicit graph edges for SQL self-correction (Req 5), per-conversation checkpointing, and per-node tracing via OpenTelemetry to Phoenix, Langfuse or LangSmith (Req 7). It is model-agnostic, so Gemini is the default without lock-in. The choice rests on these requirements. The author's experience (2 years of LangGraph in production, none with the alternatives) is stated as a delivery risk in `docs/hld/10`, not as a reason for the choice.
 
 ## Considered Options
 
