@@ -8,6 +8,9 @@ turns:
 expect:
   kind: refusal
   message_classes: [out_of_scope]
+  or_answer_naming: [Carhartt]
 notes: >
   Carhartt belongs to manager-b. The guard rejects the Brand by name; it must not silently
-  filter it away and answer with Calvin Klein alone (HLD 03).
+  filter it away and answer with Calvin Klein alone (HLD 03). Ending out_of_scope passes; so
+  does an answer about Calvin Klein that names Carhartt as left out, since within_scope shows
+  no Carhartt row was read (prereg-20261116-named-refusal).
