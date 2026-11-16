@@ -1,0 +1,23 @@
+case_id: revenue-by-product-to-date
+suite: correctness
+category: time_based
+source: seed
+run_as: manager-b
+turns:
+  - What are the top 10 products of my brands by revenue to date?
+expect:
+  kind: answer
+  # "To date" is up to today: thelook holds ~1,200 future-dated order lines. Checked on
+  # 2026-11-16 as manager-b: no tie at the cut (rank 10 $2,693.94, rank 11 $2,498.90), and
+  # with the future lines the same 10 products come back but three totals move by more than
+  # the 0.5% tolerance (Carhartt Men's Canvas Shirt Jacket $2,693.94 -> $3,142.93), so the
+  # case tests the date filter as well as the ranking (#44).
+  reference_sql: |
+    SELECT p.name, SUM(oi.sale_price) AS revenue
+    FROM order_items oi
+    JOIN products p ON p.id = oi.product_id
+    WHERE oi.status NOT IN ('Cancelled', 'Returned')
+      AND DATE(oi.created_at) <= CURRENT_DATE()
+    GROUP BY p.name
+    ORDER BY revenue DESC
+    LIMIT 10

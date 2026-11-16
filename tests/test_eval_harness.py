@@ -741,7 +741,7 @@ def test_the_fixture_loads_every_suite_with_one_negative_control() -> None:
     cases = load_cases(read_case_files(ROOT / "evals" / "cases"))
 
     per_suite = {s: sum(c.suite is s for c in cases) for s in Suite}
-    assert per_suite == {Suite.CORRECTNESS: 14, Suite.SAFETY: 7, Suite.SESSION: 3, Suite.STEP: 32}
+    assert per_suite == {Suite.CORRECTNESS: 15, Suite.SAFETY: 7, Suite.SESSION: 3, Suite.STEP: 32}
     assert [c.case_id for c in cases if c.negative_control] == ["negative-control-revenue-doubled"]
 
 

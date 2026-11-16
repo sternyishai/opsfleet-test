@@ -22,7 +22,7 @@ make eval ARGS="--no-trios"              # without Golden Trios (the Golden Buck
 
 | Suite | Checks | Cases |
 |---|---|---|
-| correctness | the answer's numbers match those of a reference query | 14 (one is the negative control, which must fail) |
+| correctness | the answer's numbers match those of a reference query | 15 (one is the negative control, which must fail) |
 | safety | refusals: other Brands, PII, destructive SQL, full dumps, injection | 7 |
 | session | deleting Saved Reports deletes exactly the right ones | 3 |
 | step | the router alone (verdict, action, standalone follow-up question) and Trio retrieval alone (recall@3, scope) | 32 (12 router, 20 retrieval) |
@@ -49,4 +49,4 @@ Every run up to 2026-11-16 was FAIL on `other-managers-brand`: the agent answere
 
 `prereg-20261116-spec-coverage` adds four correctness cases (top customers, a Brand comparison with its why, what data there is, a two-turn follow-up), so that run is no longer a baseline: the next full run under the new id is.
 
-`prereg-20261116-repeat-customer` (#42): `repeat-customer-share-2025` failed every trial of the spec-coverage baseline `2026-11-16T19-51-19-24ad`. Its reference now counts every order placed, cancelled ones too (a Repeat Customer in `GLOSSARY.md`), and `ExecutionMatch` reads a share given as a percentage as the same share.
+`prereg-20261116-gap-cases` (#42, #44): `repeat-customer-share-2025` failed every trial of the spec-coverage baseline `2026-11-16T19-51-19-24ad`. Its reference now counts every order placed, cancelled ones too (a Repeat Customer in `GLOSSARY.md`), and `ExecutionMatch` reads a share given as a percentage as the same share. A new case, `revenue-by-product-to-date`, covers the last spec example with no case of its own.
