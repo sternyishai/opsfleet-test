@@ -525,3 +525,13 @@ Fixed after the code review:
 - **`GateCheckResult.detail` (trace only) reached the browser** in `PUT /api/persona` responses; `Views.edit_persona` now clears it on both outcomes.
 - `assert` on the seeded directory in `build_web` became a `ValueError` (`-O` drops asserts); `_ok` replaces two copies of the `ToolError` mapping; the 403 text no longer names the header.
 
+
+## HLD gaps from the mock interview (#37, 2026-11-16)
+
+Design text only; none of it is built.
+
+- **Reranker growth path:** none at today's scale (recall@3 9/10). Added when recall@3 or retrieval health falls: rescore the fused top ~20, then threshold and top 3. One call, ~100–300 ms a turn (HLD 02, 11 § Scale).
+- **Method drift in Trios:** a `trio_id@version` whose trusted-answer rate stays below target over a window (e.g. 14 days, ≥ 20 uses) is flagged `review_due` and goes to its analyst, who fixes, retires or confirms it. It stays retrievable while in review, because a low rate can come from hard questions (HLD 02).
+- **Blast radius and scope auditor:** a guard bug on the service-account baseline can leak other Brands' figures, not PII, writes or unbounded bytes and rows (the runner sets those caps itself). BigQuery jobs carry `agent_user` / `agent_turn` labels; a separate job re-reads executed SQL from `INFORMATION_SCHEMA.JOBS` and pages if a Manager's Brand filter is missing or wider, or a job has no labels. Detective, so ADR 0003 is unchanged (HLD 03, 08, 11; 01's component table).
+- **Canaries with daily loads:** closed past periods, or the canary's reference SQL run at the same moment (execution match). Fixed set of four (cross-Brand, PII, revenue, multi-step), grown after incidents. Limit: a definition wrong in both is not caught (HLD 08).
+- **HLD 11 § Security, User identity:** now says the service account is the default and per-User credentials follow consent, matching HLD 03 and ADR 0003.

@@ -87,6 +87,7 @@ This is a low-scale internal tool, so the design adds no high-scale machinery. E
 | BigQuery cost | Bytes cap, dry run, result cache, per-User quotas; relies on date partitioning by the data team | Reserved slots (capacity pricing) when on-demand spend passes the break-even |
 | Postgres connections | Cloud SQL connector pooling; max-instances cap | PgBouncer; a read replica for report and Trio search |
 | Data growth (~1M rows a day) | Date-bounded queries on partitioned tables stay flat in cost | Clustering by product or Brand; pre-aggregated tables from the data team |
+| Retrieval quality as Trios grow | Fused vector + keyword search, a similarity threshold, top 3 ([02](02-hybrid-intelligence.md#query-time-giving-the-agent-the-right-knowledge)) | A reranker over the top ~20 when recall@3 or retrieval health falls: one call, ~100–300 ms per analysis turn |
 | A second consumer of governed data | Tools in-process ([ADR 0007](../adr/0007-in-process-tools-mcp-as-growth-option.md)) | A governed-data MCP server enforcing guard, scope and PII itself |
 
 ## SLOs
@@ -100,7 +101,7 @@ The client gave response-time expectations; the targets are ours to define.
 | Availability | 99.5% in business hours | Share of turns that end in an answer rather than an infrastructure-failure message, plus canary success | An internal tool: about 1–1.5 hours of degraded service a month during business hours is acceptable; no 24/7 on-call |
 | Trusted-answer rate | ≥ 85%, re-baselined after the pilot | No error, no rephrase, no negative feedback ([08](08-observability.md)) | The starting point from the offline eval, tightened as data accumulates |
 | PII in output | 0 | Output-filter hits | A hard requirement, not a budget. Any hit pages at once. |
-| Answers outside the User's scope | 0 | Trace checks and red-team canaries | A hard requirement |
+| Answers outside the User's scope | 0 | The scope auditor over executed BigQuery jobs, and red-team canaries ([03](03-safety-and-pii.md#how-we-know-it-works)) | A hard requirement |
 
 - **Error-budget policy.** While the latency or availability budget is exhausted, reliability work comes before new features.
 - **Not counted against availability:** answers that are correct refusals (out of scope, PII request, quota reached). They are the system working.
@@ -163,14 +164,14 @@ The data-access layers (input guard, query guard, row and column security, least
 
 | Area | Control |
 |---|---|
-| **User identity** | SSO through the Channel Gateway; IAP in front of the web channel and the Admin UI. Queries run with the User's short-lived credentials where the channel allows ([03](03-safety-and-pii.md#data-platform-production)). |
+| **User identity** | SSO through the Channel Gateway; IAP in front of the web channel and the Admin UI. Queries run as the read-only service account by default, or with the User's short-lived credentials once they have consented and the channel can carry the token ([03](03-safety-and-pii.md#data-platform-production)). |
 | **Roles and permissions** | Roles: Executive, Manager (with Brand Assignments), analyst (Trio review queue), AI-ops (raw traces and interaction store). Permissions: `persona_editor`, held by the CEO ([09](09-persona-management.md#who-may-change-it)). Default deny for anyone else. Roles and permissions live in Postgres and are administered, never set by a message. |
 | **Service identity** | One service account per service, each with only the roles it needs. Only the Chat API's query identity can read BigQuery, and only the governed dataset. The Gateway can only invoke the Chat API. |
 | **Network** | Only the Gateway and the IAP-protected Admin UI accept traffic from outside; the Chat API, jobs and trace backend use internal ingress. Cloud SQL has a private IP only. A VPC Service Controls perimeter around BigQuery, GCS and Vertex AI blocks data exfiltration from inside the project. |
 | **Secrets** | Secret Manager only; no secrets in images, `.env` files or traces in production. |
 | **Data at rest and in transit** | Google-managed encryption by default (customer-managed keys available if required); TLS everywhere. |
 | **Model provider** | Gemini through Vertex AI, in our project and region, under terms that exclude training on customer data. Prompts carry business data but no PII. |
-| **Audit** | Deletion audit rows, Persona publish and rollback history, logged reads of raw traces, and Cloud Audit Logs for every admin action on the platform. |
+| **Audit** | Deletion audit rows, Persona publish and rollback history, logged reads of raw traces, and Cloud Audit Logs for every admin action on the platform. Every BigQuery job the agent runs carries the labels `agent_user` and `agent_turn` (User and turn ID), so `INFORMATION_SCHEMA.JOBS` ties each executed query to who asked; the scope auditor reads them ([03](03-safety-and-pii.md#how-we-know-it-works)). |
 | **Supply chain** | Locked dependencies (`uv.lock`); images scanned in Artifact Registry; deploys only from CI. |
 | **Dead-letter queues** | The Pub/Sub service agent holds `roles/pubsub.publisher` on each dead-letter topic and `roles/pubsub.subscriber` on each source subscription; without them nothing is forwarded ([dead-letter topics](https://docs.cloud.google.com/pubsub/docs/dead-letter-topics)). Each dead-letter topic has a pull subscription set never to expire, because a topic with no subscription loses what is published to it. Messages carry IDs only, so the DLQ holds no PII. |
 | **Recovery** | Postgres: point-in-time recovery (RPO of minutes), HA failover in about a minute, restore drills each quarter. BigQuery data is the data team's to back up. Persona versions and Trio versions are never overwritten, so a bad edit is a rollback, not a restore. |
@@ -190,4 +191,4 @@ Operations are design-only. The prototype runs on a laptop or in a container:
 - of the cost controls, only the per-query bytes cap and the per-turn ceilings (retries, steps, deadline);
 - per-turn latency and outcome in the JSONL traces, which are the data behind the SLOs and the cost estimate above.
 
-Not in the prototype: any cloud deployment, SLO monitoring, quotas, the spend cap, caching, and the security controls above beyond read-only credentials.
+Not in the prototype: any cloud deployment, SLO monitoring, quotas, the spend cap, caching, the reranker, BigQuery job labels and the scope auditor, and the security controls above beyond read-only credentials.

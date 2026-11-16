@@ -37,7 +37,7 @@ One Trio is one retrieval unit, never split into chunks. A Trio is a small, self
 | `parameters` | Payload: the method's definition values, with names and units (`churn_window_days: 90`). A number may appear in a Trio only as one of these. |
 | `brands[]` | The Brands the Trio's data covers. Used to filter retrieval. |
 | `tables_used[]`, `question_type` | Filtering and analytics: comparison, trend, churn, cohort, … |
-| `status` | `active`, `superseded` or `retired`. Only `active` Trios are retrieved. Trio Candidates live in their own table until approved. |
+| `status` | `active`, `superseded` or `retired`. Only `active` Trios are retrieved. An active Trio may also carry a `review_due` flag when its usage says its method may be out of date ([below](#updating-the-golden-bucket-over-time)). Trio Candidates live in their own table until approved. |
 | `source_uri`, `approved_by` | Provenance: the raw file in GCS and the analyst who approved it. |
 
 ## Ingestion: from expert files to searchable knowledge
@@ -91,6 +91,7 @@ sequenceDiagram
 - **The router writes the search question.** The same Flash-Lite call that picks the action returns a standalone question, so a follow-up such as "and NY?" is searched with its earlier context.
 - **The tool stays for re-search.** A multi-step question or a report may need a different method per part. The sub-agent calls `search_golden_trios` with its own wording for those; the filters and threshold are the same.
 - **Hybrid search.** Vector similarity catches paraphrases; keyword search catches exact terms such as metric names or a category. The two are fused by reciprocal rank fusion. Both run in the same Postgres query, so this needs no extra service.
+- **No reranker yet, and when to add one.** At today's scale (tens to a few hundred Trios) the fused search, the threshold and the top 3 are enough: the prototype's retrieval step evals score recall@3 at 9/10. A reranker is added when recall@3 in the step evals falls below target, or retrieval health (below) falls while Trios exist for the questions asked. Then the fused search returns the top ~20, a reranker rescores them against the question (the Vertex AI ranking API, or a cross-encoder), and the threshold and top 3 apply to the new scores. The cost is one extra call per analysis turn, ~100–300 ms ([11](11-operations.md#scale)).
 - **Access filter, as defense in depth.** A Trio is visible to a User when every Brand it covers is one of their Brands. Executives see all Trios. The figures are already stripped, so this filter is the second layer, not the main guarantee.
 - **A threshold, not "always top-k".** Weak matches teach the wrong method, so matches below the similarity threshold are dropped. If nothing passes, the agent works from the schema alone. If the turn then runs SQL, it is flagged as a **retrieval gap**, which feeds the learning loop below. Turns that only list or open reports, or ask about the schema, are not gaps.
 - **Injected as data.** Trio content is wrapped in a delimited reference block and never treated as instructions. Trios are analyst-approved, but the rule costs nothing and closes an injection path.
@@ -108,6 +109,11 @@ stateDiagram-v2
     Candidate --> [*]: analyst rejects, or the<br/>source Saved Report is deleted
     Active --> Superseded: new version published
     Active --> Retired: nightly SQL dry run fails<br/>(schema drift)
+    state "Active, review_due" as InReview
+    Active --> InReview: trusted-answer rate below<br/>target over a window (method drift)
+    InReview --> Superseded: analyst fixes it (new version)
+    InReview --> Retired: analyst retires it
+    InReview --> Active: analyst confirms it is still right
     Retired --> Active: analyst fixes it (new version)
     Superseded --> [*]
 ```
@@ -120,12 +126,13 @@ stateDiagram-v2
    - Deleting a Saved Report deletes any pending Candidate derived from it. A Trio already approved and rewritten by an analyst is company knowledge and stays ([04](04-destructive-ops.md)).
 3. **Maintenance.**
    - A nightly job dry-runs every active Trio's SQL. A Trio that no longer compiles (a renamed column, a dropped table) is retired, and its analyst is notified.
+   - A Trio can also go wrong while its SQL still runs: the business changes a definition, or a new status value makes its filter incomplete. The dry run cannot see that, so usage decides. When the trusted-answer rate of the turns that used a `trio_id@version` stays below target over a window (for example 14 days with at least 20 uses, both configuration), the Trio is flagged `review_due` and goes to its analyst's review queue. It stays retrievable while in review, because a low rate can also come from hard questions rather than a bad method. The analyst fixes it (a new version, which supersedes it), retires it, or confirms it, which restarts the window.
    - Approved Trios are activated in batches, and the offline correctness suite ([07](07-quality-assurance.md)) must pass before a batch goes live. A bad Trio can therefore not silently degrade answers.
 
 ## Knowing whether it helps
 
 - **Retrieval health:** the share of turns that run SQL with at least one Trio above the threshold, broken down by question type. A falling rate means the Golden Bucket is not keeping up with what executives ask.
-- **Trio usage:** how often each `trio_id@version` is retrieved, and the trusted-answer rate of the turns that used it. Unused and harmful Trios both become visible.
+- **Trio usage:** how often each `trio_id@version` is retrieved, and the trusted-answer rate of the turns that used it. Unused and harmful Trios both become visible, and a rate that stays low sends the Trio to review ([above](#updating-the-golden-bucket-over-time)).
 - **Ablation in the offline eval:** the correctness suite runs with retrieval on and off. The difference is the measured value of the Golden Bucket, and it must stay positive ([07](07-quality-assurance.md)).
 
 ## In the prototype
@@ -136,4 +143,4 @@ Hybrid Intelligence is design-only in the assignment. The prototype implements t
 - the `retrieve_trios` node and the `search_golden_trios` tool, both behind the `TrioRetriever` port, so the production pgvector adapter replaces it without touching the agent. `agent eval --no-trios` swaps in an adapter that returns nothing, with the graph unchanged, to measure what the Trios add;
 - step evals for retrieval (recall@3 over 20 cases, including unrelated questions that must retrieve nothing and Managers who must not see another Brand's Trio).
 
-There is no ingestion job, keyword search or Candidate pipeline in the prototype.
+There is no ingestion job, keyword search, reranker, Candidate pipeline, nightly dry run or usage-based Trio review in the prototype.

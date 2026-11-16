@@ -73,7 +73,7 @@ The SLOs are defined in [11](11-operations.md): p95 latency of 30 s for question
 | Alert | Fires when | Severity |
 |---|---|---|
 | PII in output | Any output-filter hit | Page immediately, at any hour |
-| Out-of-scope answer | Any red-team canary or trace check finds rows outside the User's Brands | Page immediately |
+| Out-of-scope answer | A red-team canary gets rows outside its User's Brands, or the scope auditor finds an executed BigQuery job without the User's Brand filter, or an agent job with no labels ([03](03-safety-and-pii.md#how-we-know-it-works)) | Page immediately |
 | Error-budget burn | Latency or availability budget burning fast (multi-window burn rate) | Page in business hours |
 | Canary failure | A synthetic canary fails twice in a row | Page in business hours |
 | Quality drop | Trusted-answer rate or online judge score falls below target over a day | Ticket |
@@ -82,7 +82,10 @@ The SLOs are defined in [11](11-operations.md): p95 latency of 30 s for question
 | Dead-letter message ageing | The oldest message in a DLQ subscription is older than 5 days, so the 7-day retention is about to drop it ([11](11-operations.md#running-it)) | Page in business hours |
 | Spend | Daily spend reaches 80% of the cap | Ticket |
 
-- **Synthetic canaries.** 4 known questions, with known answers, run end to end as a test User every 15 minutes in business hours and hourly outside them ([11](11-operations.md#cost-controls)). They catch outages and silent breakage (an expired credential, a schema change) before a User does.
+- **Synthetic canaries.** 4 known questions run end to end as test Users every 15 minutes in business hours and hourly outside them ([11](11-operations.md#cost-controls)). They catch outages and silent breakage (an expired credential, a schema change) before a User does.
+  - *Which four:* one cross-Brand probe as a Manager (must end out of scope), one PII probe (must be refused), one revenue question and one multi-step question. The set stays mostly fixed, so results compare over time; it grows when an incident shows a blind spot.
+  - *How the answer stays known while data loads daily:* a question about a closed past period (last quarter's revenue) has a fixed answer. For anything recent, the canary runs its own reference SQL at the same moment and compares the results, as the eval's execution match does ([07](07-quality-assurance.md)).
+  - *The limit:* a definition that is wrong in both the agent and the canary's reference SQL (for example, what counts as revenue) passes. That is caught by the offline correctness suite and analyst review, not by canaries.
 - **Online evals.** The LLM judge scores about 5% of production turns with the offline rubric, so a quality drift is visible within a day ([07](07-quality-assurance.md)).
 
 ## Knowing *why*: deep-dive debugging
@@ -148,4 +151,4 @@ by intent    analysis 131 turns, success 90%   delete_reports 9 turns, success 1
 
   Every number is computed from the trace fields in [What one trace holds](#what-one-trace-holds), so any line can be opened with `/trace <id>`. Cost uses the per-token prices in configuration. The north-star trusted-answer rate needs feedback signals the CLI does not collect, so `/stats` shows task success instead.
 
-Not in the prototype: the collector, dashboards, SLO alerting, canaries, online evals and replay tooling.
+Not in the prototype: the collector, dashboards, SLO alerting, canaries, the scope auditor, online evals and replay tooling.
