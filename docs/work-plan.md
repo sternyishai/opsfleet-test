@@ -143,6 +143,8 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 | 5 observability | #9 | no | Adds to the tracer the earlier slices already call |
 | 6 eval | #10 | **yes** | First run against the real model: its scorecard sets the limits to tune and which stretch slices are worth doing |
 | 7a–7c stretch | #11–#13 | no | Built on patterns already reviewed |
+| 6b per-step evals | #26 | no | Extends the #10 runner and bar, whose patterns its retro already reviewed |
+| dev aid: Ollama models | #20 | no | A second provider behind the #7 resilient chain; dev only, no new guarantee |
 | 8 web UI (optional) | #14 | no | A separate front end over `ChatService`; nothing later builds on it |
 | end of Phase 4 | none | **yes** | One last retro over the whole build before Phase 5, while the problems are still fresh |
 
