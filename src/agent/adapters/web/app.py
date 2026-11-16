@@ -56,6 +56,8 @@ _STATUS = {
     MessageClass.REPORT_NOT_FOUND: 404,
     MessageClass.PERSONA_NOTHING_TO_ROLL_BACK: 409,
 }
+_WAIT_S = 0.5
+"""How long one wait for the next message holds a worker thread; a disconnect abandons it."""
 
 
 def _resolve_user(
@@ -67,7 +69,7 @@ def _resolve_user(
     if not request.app.state.dev_identity:
         if x_agent_user is None:
             raise _refusal(401, "Sign in to use the assistant.")
-        raise _refusal(403, f"The {DEV_USER_HEADER} header is only accepted in development.")
+        raise _refusal(403, "Picking a User is only possible in development.")
     if not x_agent_user:
         raise _refusal(401, "Pick a User first.")
     return x_agent_user
@@ -86,6 +88,13 @@ class _Refused(Exception):
 
 def _refusal(status: int, message: str) -> _Refused:
     return _Refused(status, ApiError(message_class=None, message=message))
+
+
+def _ok[T](out: T | ToolError) -> T:
+    """A view's value, or its ``ToolError`` as the catalog message (``detail`` stays here)."""
+    if isinstance(out, ToolError):
+        raise _catalog(out.message_class, _STATUS.get(out.message_class, 403))
+    return out
 
 
 def _catalog(message_class: MessageClass, status: int) -> _Refused:
@@ -115,12 +124,13 @@ def create_app(
 
     @app.exception_handler(_Refused)
     async def _refused(_: Request, exc: _Refused) -> JSONResponse:
-        return JSONResponse(exc.error.model_dump(mode="json"), status_code=exc.status)
+        return _response(exc)
 
     @app.exception_handler(AgentError)
     async def _agent_error(_: Request, exc: AgentError) -> JSONResponse:
-        refused = _catalog(exc.message_class, 403 if isinstance(exc, PermanentError) else 503)
-        return await _refused(_, refused)
+        return _response(
+            _catalog(exc.message_class, 403 if isinstance(exc, PermanentError) else 503)
+        )
 
     @app.post("/api/messages", response_class=EventSourceResponse)
     async def messages(
@@ -140,12 +150,15 @@ def create_app(
         # Not a daemon: a turn whose browser left still finishes and is checkpointed.
         threading.Thread(target=run, name="web-turn").start()
         try:
-            while (sent := await anyio.to_thread.run_sync(channel.next)) is not None:
-                # The annotation documents the event data (OutboundMessage) in OpenAPI; the
-                # envelope sets `event:` to its kind. FastAPI does not re-validate envelopes.
-                yield ServerSentEvent(event=sent.kind, raw_data=sent.model_dump_json())  # pyright: ignore[reportReturnType]
-                if sent.kind != "progress":
-                    return
+            while not channel.finished:
+                # Waiting takes nothing, so a disconnect cancelling it loses no message.
+                await anyio.to_thread.run_sync(channel.wait, _WAIT_S, abandon_on_cancel=True)
+                while (sent := channel.take()) is not None:
+                    # The annotation documents the data (OutboundMessage) in OpenAPI; the
+                    # envelope sets `event:` to its kind. FastAPI does not re-validate it.
+                    yield ServerSentEvent(event=sent.kind, raw_data=sent.model_dump_json())  # pyright: ignore[reportReturnType]
+                    if sent.kind != "progress":
+                        return
         finally:
             channel.close()
 
@@ -157,10 +170,7 @@ def create_app(
 
     @app.get("/api/reports/{report_id}")
     def report(user_id: CurrentUser, report_id: UUID) -> GetReportOk:
-        out = views.report(user_id, report_id)
-        if isinstance(out, ToolError):
-            raise _catalog(out.message_class, _STATUS.get(out.message_class, 403))
-        return out
+        return _ok(views.report(user_id, report_id))
 
     @app.get("/api/profile")
     def profile(user_id: CurrentUser) -> UserProfile:
@@ -194,16 +204,21 @@ def create_app(
     def rollback_persona(
         user_id: CurrentUser, to_version: Annotated[int | None, Query(ge=1)] = None
     ) -> PersonaRolledBack:
-        out = views.rollback_persona(user_id, to_version)
-        if isinstance(out, ToolError):
-            raise _catalog(out.message_class, _STATUS.get(out.message_class, 403))
-        return out
+        return _ok(views.rollback_persona(user_id, to_version))
+
+    @app.get("/api/traces")
+    def last_trace(user_id: CurrentUser) -> TraceView:
+        """The User's last turn, as ``/trace`` with no ID."""
+        view = views.trace(user_id)
+        if view is None:
+            raise _refusal(404, "No turn to show yet.")
+        return view
 
     @app.get("/api/traces/{trace_id}")
     def trace(user_id: CurrentUser, trace_id: str) -> TraceView:
         view = views.trace(user_id, trace_id)
         if view is None:  # a missing turn and another User's look the same
-            raise _refusal(404, "No turn of yours has this ID.")
+            raise _refusal(404, f"No turn of yours has the ID {trace_id}.")
         return view
 
     @app.get("/api/stats")
@@ -214,14 +229,18 @@ def create_app(
             raise _refusal(400, "Give the window as 7d, 24h or 30m.") from None
 
     if dev_users is not None:
-        list_dev_users = dev_users
+        listed = dev_users  # a name the closure can keep narrowed
 
         @app.get("/api/dev/users")
         def users() -> list[DevUser]:
             """The seeded Users for the picker, with role and Brands from the directory."""
-            return list_dev_users()
+            return listed()
 
     return app
+
+
+def _response(refused: _Refused) -> JSONResponse:
+    return JSONResponse(refused.error.model_dump(mode="json"), status_code=refused.status)
 
 
 def _inbound(

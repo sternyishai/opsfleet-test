@@ -184,7 +184,8 @@ def build_web(settings: Settings, *, host: str) -> "FastAPI":
     ports, service, views = _build_app(settings)
     dev_users = None
     if settings.web_dev_identity:
-        assert isinstance(ports.users, SqliteUserDirectory)  # the seeded directory
+        if not isinstance(ports.users, SqliteUserDirectory):  # not `assert`: -O drops it
+            raise ValueError("WEB_DEV_IDENTITY needs the seeded User directory")
         dev_users = ports.users.list_dev_users
     return create_app(service, views, ports.tracer, dev_users=dev_users)
 

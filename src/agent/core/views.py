@@ -162,13 +162,17 @@ class Views:
         out = publish_persona(
             PublishPersonaInput(persona=persona, path=PersonaPath.DIRECT_EDIT), ctx, gate
         )
-        if isinstance(out, PersonaPublished):
-            return out.model_copy(update={"active": self._clean_version(out.active)})
+        # A check's ``detail`` is for the trace only: it never leaves through a view.
         checks = [
-            c.model_copy(update={"reason": self._clean(c.reason) if c.reason else None})
+            c.model_copy(
+                update={"reason": self._clean(c.reason) if c.reason else None, "detail": None}
+            )
             for c in out.gate.checks
         ]
-        return out.model_copy(update={"gate": out.gate.model_copy(update={"checks": checks})})
+        gate = out.gate.model_copy(update={"checks": checks})
+        if isinstance(out, PersonaPublished):
+            return out.model_copy(update={"active": self._clean_version(out.active), "gate": gate})
+        return out.model_copy(update={"gate": gate})
 
     def rollback_persona(
         self, user_id: UserId, to_version: int | None = None

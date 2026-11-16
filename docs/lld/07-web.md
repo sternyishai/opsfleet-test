@@ -30,6 +30,8 @@ flowchart LR
 
 A test in Phase 4 pins this: for each row below, the CLI command and the web endpoint must call the same method.
 
+The browser chat takes the same slash commands as `agent chat` (`/reports`, `/profile [clear [n]]`, `/persona [history|rollback]`, `/trace [id]`, `/stats [7d]`), plus `/new` and `/help`, in [`web/src/commands.ts`](../../web/src/commands.ts). Each one calls the route of its row below as the picked User, never the agent, and renders the result as the CLI does. `/persona edit` takes the changed fields inline (`/persona edit tone.preset=formal`) instead of asking field by field. Any other text, as on the CLI, goes to `ChatService`.
+
 ## Feature map
 
 | Feature | CLI | Web | Shared call |
@@ -44,7 +46,7 @@ A test in Phase 4 pins this: for each row below, the CLI command and the web end
 | Persona history | `/persona history` | `GET /api/persona/versions` | `Views.persona_history` |
 | Edit the Persona directly | `/persona edit` | `PUT /api/persona` (the changed fields) | `Views.edit_persona(user_id, changes)` → Quality Gate. `changes` maps a field (`emphasis`, `tone.preset`, `messages.model_busy`, …) to its new value, applied to the stored version, never to the PII-filtered one `/persona` shows |
 | Roll back the Persona | `/persona rollback` | `POST /api/persona/rollback` | `Views.rollback_persona` |
-| Step tree of a turn | `/trace [id]` | `GET /api/traces/{id}` | `Views.trace` |
+| Step tree of a turn | `/trace [id]` | `GET /api/traces[/{id}]` (none: the User's last turn) | `Views.trace` |
 | Agent metrics | `/stats [7d]`, `agent stats --as <id>` | `GET /api/stats` | `Views.stats` |
 | Who am I (prototype) | `--as <id>` | `GET /api/dev/users` + picker | `UserDirectory` |
 
@@ -55,8 +57,8 @@ A test in Phase 4 pins this: for each row below, the CLI command and the web end
 - **Request:** `POST /api/messages`, body `WebRequest` = `WebText(conversation_id?, text)` or `WebConfirmation(conversation_id, request_id, approved, selected_indices?)` ([`contracts/web.py`](../../src/agent/contracts/web.py)), told apart by `kind` (`text`, `confirmation`), which the body must carry. There is no `user_id` in the body, and both models forbid unknown fields, so a body that names a User is refused with 422.
 - **Response:** `text/event-stream`. One event per `OutboundMessage`, with `event:` set to its `kind` (`progress`, `confirmation`, `reply`) and `data:` its JSON. The stream closes after a `reply` or a `confirmation`.
 - **How it runs:** the handler builds an `InboundMessage` (channel `web`) or a `ConfirmationResponse`, creates an `SseChannel` ([`adapters/web/sse.py`](../../src/agent/adapters/web/sse.py)) that writes to a queue, and runs `ChatService.handle` in a worker thread (not a daemon). `Outbound` filters each message before the adapter sees it, so the browser gets exactly what the CLI would print. When `handle` returns, the worker ends the stream even if nothing was sent (the output filter failed closed).
-- **Disconnects:** if the browser closes the stream, `deliver` drops each later message and opens a `channel.dropped` span (`kind`, `channel=web`); messages queued but not yet streamed are traced the same way. The turn finishes and is checkpointed, and the reply is in the Conversation history next time.
-- **Checkboxes:** the UI ticks every item of the plan; unticking sends `selected_indices` without it, and all ticked sends `null` ("all items"). Unticking item 2 of 3 reaches the same `ConfirmationDecision` as `yes except 2`.
+- **Disconnects:** if the browser closes the stream, `deliver` drops each later message and opens a `channel.dropped` span (`kind`, `channel=web`); messages buffered but not yet streamed are traced the same way. The stream waits for a message without taking it (`SseChannel.wait`, then `take`), so a wait cancelled by the disconnect loses nothing; a wait holds a worker thread for at most 0.5 s. The turn finishes and is checkpointed, and the reply is in the Conversation history next time.
+- **Checkboxes:** the UI ticks every item of the plan; the items past the first 20 (not shown) stay selected. Unticking sends every index of the plan but the unticked ones, so unticking item 2 reaches the same `ConfirmationDecision` as `yes except 2`, on a plan of 3 or of 37. Deleting everything sends `null` ("all items"); a large plan (`require_count`) instead asks for the count and sends the CLI's text, "yes, delete all 37".
 
 ## Identity
 
@@ -68,7 +70,7 @@ A test in Phase 4 pins this: for each row below, the CLI command and the web end
 
 ## Errors
 
-Every refused request has an `ApiError(message_class?, message)` body. A classified error from `Views` is its catalog message, as the CLI prints it: `PermanentError` → 403, `TransientError` → 503. A `ToolError` result (`Views.report`, `Views.rollback_persona`) becomes the same body (404 for `REPORT_NOT_FOUND`, 409 for `PERSONA_NOTHING_TO_ROLL_BACK`, else 403), so its `detail` never leaves the server. A missing turn is 404, a bad `/api/stats?since=` 400; request validation keeps FastAPI's 422. `PUT /api/persona` takes the changed fields as a JSON object (`{"tone.preset": "formal"}`); `Views.edit_persona` gets it as is, and a rejection is a `PersonaRejected` value (200), as in chat.
+Every refused request has an `ApiError(message_class?, message)` body. A classified error from `Views` is its catalog message, as the CLI prints it: `PermanentError` → 403, `TransientError` → 503. A `GateCheckResult.detail` never leaves `Views`. A `ToolError` result (`Views.report`, `Views.rollback_persona`) becomes the same body (404 for `REPORT_NOT_FOUND`, 409 for `PERSONA_NOTHING_TO_ROLL_BACK`, else 403), so its `detail` never leaves the server. A missing turn is 404, a bad `/api/stats?since=` 400; request validation keeps FastAPI's 422. `PUT /api/persona` takes the changed fields as a JSON object (`{"tone.preset": "formal"}`); `Views.edit_persona` gets it as is, and a rejection is a `PersonaRejected` value (200), as in chat.
 
 ## Types for the UI
 

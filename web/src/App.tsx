@@ -32,13 +32,16 @@ export function App() {
   return (
     <div className="app">
       <header className="who">
-        {active ? (
-          <>
-            Signed in as <strong>{describe(active)}</strong>
-          </>
-        ) : (
-          "Pick a User to start"
-        )}
+        <span className="title">Retail Analysis Assistant</span>
+        <span className={`as role-${active?.role ?? "none"}`}>
+          {active ? (
+            <>
+              Connected as <strong>{describe(active)}</strong>
+            </>
+          ) : (
+            "Not connected: pick a User"
+          )}
+        </span>
       </header>
       <aside className="side">
         <UsersPanel users={users} active={active} error={usersError} onPick={switchUser} />
@@ -49,7 +52,7 @@ export function App() {
         {active ? (
           <Chat
             key={`${active.user_id}-${chatKey}`}
-            userId={active.user_id}
+            user={active}
             onNewChat={() => setChatKey((k) => k + 1)}
             onTurnEnded={turnEnded}
           />
