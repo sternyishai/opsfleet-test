@@ -948,6 +948,28 @@ def test_exec_match_reads_a_month_label_as_the_first_day_of_that_month() -> None
     )
 
 
+def test_exec_match_reads_a_percentage_as_the_reference_share() -> None:
+    """ROUND(100 * repeat / total, 2) against repeat / total: the same share (#42)."""
+    share = {"repeat_share": 0.31947}
+    assert outcome(exec_match(share), answer_case(), transcript([{"pct": 31.95}])) is (
+        Outcome.PASS
+    )
+    shares = [{"brand": "a", "share": 0.25}, {"brand": "b", "share": 0.75}]
+    pcts = [{"b": "b", "pct": 75.0}, {"b": "a", "pct": 25.0}]
+    assert outcome(exec_match(*shares), answer_case(), transcript(pcts)) is Outcome.PASS
+
+    assert outcome(exec_match(share), answer_case(), transcript([{"pct": 33.0}])) is (
+        Outcome.FAIL
+    )
+    # only a share is read as a percentage: not a count, not a whole 0 or 1
+    assert outcome(exec_match({"orders": 3.0}), answer_case(), transcript([{"n": 300.0}])) is (
+        Outcome.FAIL
+    )
+    assert outcome(exec_match({"flag": 1.0}), answer_case(), transcript([{"n": 100.0}])) is (
+        Outcome.FAIL
+    )
+
+
 # --- per-step evals (#26): selecting cases ------------------------------------------------------
 
 STEP_ROUTER = EvalCase.model_validate(

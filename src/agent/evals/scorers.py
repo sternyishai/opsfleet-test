@@ -62,8 +62,9 @@ class ExecutionMatch:
     guard and scope as the agent) and passes when the result of **any** statement the agent
     executed matches it: rows order-insensitive, column names ignored, each reference column
     matched by a distinct agent column (extra agent columns allowed), numbers within
-    ``rel_tolerance``. "Any", because in a multi-step "why" the headline fact is often computed
-    before the breakdown. A reference that fails to run is CANNOT_MEASURE.
+    ``rel_tolerance``, a share column also as a percentage (100 times it). "Any", because in
+    a multi-step "why" the headline fact is often computed before the breakdown. A
+    reference that fails to run is CANNOT_MEASURE.
 
     The reference result is computed once per case and reused across trials."""
 
@@ -127,7 +128,7 @@ def result_matches(reference: Table, agent: Table, rule: ResultMatch) -> bool:
     agent_values = [[_cell(r.get(c)) for c in agent_columns] for r in agent_rows]
     for mapping in _column_mappings(ref_columns, agent_columns, ref_values, agent_values, rule):
         ref = ref_values
-        got = [[row[j] for j in mapping] for row in agent_values]
+        got = [[_scaled(row[j], scale) for j, scale in mapping] for row in agent_values]
         if not rule.order_insensitive:
             if all(_row_equal(a, b, rule.rel_tolerance) for a, b in zip(ref, got, strict=True)):
                 return True
@@ -142,27 +143,47 @@ def _column_mappings(
     ref_values: list[list[Any]],
     agent_values: list[list[Any]],
     rule: ResultMatch,
-) -> list[list[int]]:
+) -> list[list[tuple[int, float]]]:
     """Every assignment of a distinct agent column to each reference column whose values
-    match as a multiset (a necessary condition for the rows to match)."""
-    candidates: list[list[int]] = []
+    match as a multiset (a necessary condition for the rows to match). Each agent column
+    comes with the scale that reads it: 1, or 100 for a share given as a percentage."""
+    candidates: list[list[tuple[int, float]]] = []
     for i, name in enumerate(ref_columns):
         column = sorted((row[i] for row in ref_values), key=_sort_key)
+        scales = (1.0, 100.0) if _is_share(column) else (1.0,)
         fits = [
-            j
+            (j, scale)
             for j, agent_name in enumerate(agent_columns)
-            if (rule.ignore_column_names or agent_name == name)
-            and _column_equal(column, sorted((r[j] for r in agent_values), key=_sort_key), rule)
+            if rule.ignore_column_names or agent_name == name
+            for scale in scales
+            if _column_equal(
+                column, sorted((_scaled(r[j], scale) for r in agent_values), key=_sort_key), rule
+            )
         ]
         if not fits:
             return []
         candidates.append(fits)
-    mappings: list[list[int]] = [[]]
+    mappings: list[list[tuple[int, float]]] = [[]]
     for fits in candidates:
-        mappings = [m + [j] for m in mappings for j in fits if j not in m]
+        mappings = [m + [f] for m in mappings for f in fits if f[0] not in (j for j, _ in m)]
         if len(mappings) > 10_000:  # a pathological result; the first assignments suffice
             mappings = mappings[:10_000]
     return mappings
+
+
+def _is_share(column: list[Any]) -> bool:
+    """A column of fractions: every value a number from 0 to 1, at least one not whole (so a
+    count or a 0/1 flag is never read as a percentage)."""
+    numbers = [v for v in column if isinstance(v, float)]
+    return (
+        len(numbers) == len(column)
+        and all(0.0 <= v <= 1.0 for v in numbers)
+        and any(not v.is_integer() for v in numbers)
+    )
+
+
+def _scaled(value: Any, scale: float) -> Any:
+    return value / scale if scale != 1.0 and isinstance(value, float) else value
 
 
 def _column_equal(a: list[Any], b: list[Any], rule: ResultMatch) -> bool:

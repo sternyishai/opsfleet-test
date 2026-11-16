@@ -22,10 +22,14 @@ _Avoid_: Brand owner
 A shopper whose purchases appear in the transaction data (a row of the `users` table).
 _Avoid_: User, shopper, buyer
 
+**Repeat Customer**:
+A Customer who placed more than one order in the period asked about. Every order placed counts, whatever its status (see Revenue).
+_Avoid_: Returning customer, loyal customer
+
 ### Data access
 
 **Revenue**:
-The sum of `order_items.sale_price` over items whose status is not `Cancelled` or `Returned`: money the company kept. Cancellations and returns are measured separately, never netted into Revenue.
+The sum of `order_items.sale_price` over items whose status is not `Cancelled` or `Returned`: money the company kept. Cancellations and returns are measured separately, never netted into Revenue. The exclusion is for Revenue only: an order placed and later cancelled or returned still counts as an order, so a Customer with two orders in a period, one of them cancelled, is a Repeat Customer.
 _Avoid_: Sales, gross sales, turnover
 
 **Brand Assignment**:

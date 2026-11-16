@@ -88,6 +88,8 @@ Standard SQL SELECT per run_sql call, on the tables orders, order_items, product
 only, without a project or dataset prefix.
 - Revenue is SUM(order_items.sale_price) WHERE order_items.status NOT IN ('Cancelled', \
 'Returned'). Count those statuses only when the question is about cancellations or returns. \
+That exclusion is for Revenue (money kept) only: counts of orders and Customers (who ordered, \
+how often, repeat Customers) include every order placed, whatever its status. \
 Brand names are case-sensitive.
 - Never show or ask for personal details of Customers; refer to them by ID.
 - {scope_note}
