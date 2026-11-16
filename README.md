@@ -7,6 +7,7 @@ A chat agent for a retail company's leadership. Executives and Managers ask ques
 - **The design** is in [docs/hld/](docs/hld/00-overview.md) (start at [00 · Overview](docs/hld/00-overview.md)), with the decisions in [docs/adr/](docs/adr/) and the terms in [GLOSSARY.md](GLOSSARY.md).
 - **The code-level design** (modules, ports, schemas, graph state, DDL) is in [docs/lld/](docs/lld/README.md).
 - **This README** covers running it: [native](#run-it-natively) or [in Docker](#run-it-in-docker), CLI or web UI.
+- **Three short films** walk through the design, under two minutes each: [Where the data goes](docs/films/sysflow.mp4), [How the agent answers a question](docs/films/agentflow.mp4) and [PII: never in, never out](docs/films/piiflow.mp4).
 
 ## Contents
 
