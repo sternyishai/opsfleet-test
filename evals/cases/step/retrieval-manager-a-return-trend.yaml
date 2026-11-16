@@ -1,0 +1,14 @@
+case_id: retrieval-manager-a-return-trend
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: manager-a
+turns:
+- Is the share of returned items for Calvin Klein and Tommy Hilfiger getting worse?
+expect:
+  kind: retrieval
+  must_include:
+  - return-rate-by-category
+  must_exclude:
+  - seasonal-revenue
+  k: 3

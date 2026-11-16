@@ -1,0 +1,14 @@
+case_id: retrieval-manager-b-peak-season
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: manager-b
+turns:
+- When is the busiest time of year for my Brands, so I can plan stock?
+expect:
+  kind: retrieval
+  must_include:
+  - seasonal-revenue
+  must_exclude:
+  - return-rate-by-category
+  k: 3

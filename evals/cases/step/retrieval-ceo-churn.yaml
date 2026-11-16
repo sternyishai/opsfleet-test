@@ -1,0 +1,13 @@
+case_id: retrieval-ceo-churn
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: ceo
+turns:
+- Why have more customers stopped buying from us recently?
+expect:
+  kind: retrieval
+  must_include:
+  - churn-monthly
+  must_exclude: []
+  k: 3

@@ -64,9 +64,11 @@ class ScriptedChatModel(GenericFakeChatModel):
 
     def with_structured_output(self, schema: Any, **kwargs: Any) -> Runnable:  # type: ignore[override]
         """``structured`` is the value, an exception to raise, or a list of either, used in
-        order (the last one repeats)."""
+        order (the last one repeats). The messages it was asked are kept in ``seen``."""
 
-        def answer(_: Any) -> Any:
+        def answer(prompt: Any) -> Any:
+            if isinstance(prompt, list):
+                self.seen.append(list(prompt))
             value = self.structured
             if isinstance(value, list):
                 value = _next(value)

@@ -1,0 +1,11 @@
+case_id: router-delete-reports
+suite: step
+category: router_action
+source: seed
+run_as: manager-a
+turns:
+  - Please delete the reports I saved about Calvin Klein.
+expect:
+  kind: step
+  step: router
+  expected: {verdict: allowed, action: delete_reports, search_question: null}

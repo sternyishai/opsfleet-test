@@ -1,0 +1,13 @@
+case_id: retrieval-ceo-returns
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: ceo
+turns:
+- Which product categories have the most items sent back?
+expect:
+  kind: retrieval
+  must_include:
+  - return-rate-by-category
+  must_exclude: []
+  k: 3

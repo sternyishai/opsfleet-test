@@ -1,0 +1,12 @@
+case_id: router-follow-up-period
+suite: step
+category: router_follow_up
+source: seed
+run_as: manager-a
+turns:
+  - What was revenue for my Brands in the first quarter of 2025?
+  - What about the second quarter?
+expect:
+  kind: step
+  step: router
+  expected: {verdict: allowed, action: analysis, search_question_contains: [revenue, "2025"]}

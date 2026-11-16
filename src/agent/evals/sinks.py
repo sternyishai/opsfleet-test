@@ -28,10 +28,16 @@ class FanOutSink:
                 self.failures.append(name)
                 _log.warning("%s did not take the run (%s); the others did", name, exc)
 
-    def baseline(self, run_id: str | None = None, *, fixture_hash: str) -> Scorecard | None:
+    def baseline(
+        self,
+        run_id: str | None = None,
+        *,
+        fixture_hash: str,
+        covering: frozenset[str] = frozenset(),
+    ) -> Scorecard | None:
         for sink in self._sinks:
             try:
-                found = sink.baseline(run_id, fixture_hash=fixture_hash)
+                found = sink.baseline(run_id, fixture_hash=fixture_hash, covering=covering)
             except Exception:
                 continue
             if found is not None:

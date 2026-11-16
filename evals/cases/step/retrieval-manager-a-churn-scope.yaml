@@ -1,0 +1,14 @@
+case_id: retrieval-manager-a-churn-scope
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: manager-a
+turns:
+- Why are my customers not coming back to buy again?
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude:
+  - churn-monthly
+  k: 3
+notes: 'Scope probe: the matching Trio is all_brands, Executives only (ADR 0005).'

@@ -1,0 +1,13 @@
+case_id: retrieval-ceo-category-drivers
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: ceo
+turns:
+- Which product categories were behind the drop in sales from last quarter to this one?
+expect:
+  kind: retrieval
+  must_include:
+  - category-revenue-change
+  must_exclude: []
+  k: 3

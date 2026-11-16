@@ -1,0 +1,13 @@
+case_id: retrieval-ceo-repeat-buyers
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: ceo
+turns:
+- Are fewer of our customers making a second purchase than before?
+expect:
+  kind: retrieval
+  must_include:
+  - churn-monthly
+  must_exclude: []
+  k: 3

@@ -24,6 +24,8 @@ from agent.contracts.eval import (
     ExpectAnswer,
     ExpectDeletion,
     ExpectRefusal,
+    ExpectRetrieval,
+    ExpectStep,
     Layer,
     LayerScore,
     Outcome,
@@ -377,6 +379,104 @@ class SectionsPresent:
             checks=checks,
             reason=f"missing: {', '.join(missing)}" if missing else None,
         )
+
+
+# --- StepMatch, RetrievalMatch (per-step evals) -----------------------------------------------
+
+SEARCH_QUESTION_CONTAINS = "search_question_contains"
+
+
+class StepMatch:
+    """Deterministic, router step cases. Each field of ``ExpectStep.expected`` is one check
+    against the ``RouterDecision`` the call returned: equal, except the reserved
+    ``search_question_contains``, which passes when the standalone search question holds
+    every listed entity (case ignored). No router output is CANNOT_MEASURE."""
+
+    name = "step_match"
+    layer = Layer.DETERMINISTIC
+
+    def score(self, case: EvalCase, transcript: Transcript) -> LayerScore | None:
+        expect = case.expect
+        if not isinstance(expect, ExpectStep) or expect.step != ModelStep.ROUTER:
+            return None
+        output = transcript.step_output
+        if output is None:
+            return _score(self.name, Outcome.CANNOT_MEASURE, reason="no router output")
+        checks: dict[str, bool] = {}
+        for name, want in expect.expected.items():
+            if name == SEARCH_QUESTION_CONTAINS:
+                question = str(output.get("search_question") or "").casefold()
+                wanted = want if isinstance(want, list) else [want]
+                checks[name] = bool(question) and all(str(e).casefold() in question for e in wanted)
+            else:
+                checks[name] = output.get(name) == want
+        failed = [name for name, ok in checks.items() if not ok]
+        got = ", ".join(f"{n}={output.get(n)!r}" for n in ("verdict", "action"))
+        return _score(
+            self.name,
+            Outcome.FAIL if failed else Outcome.PASS,
+            checks=checks,
+            reason=f"failed: {', '.join(failed)}; got {got}" if failed else None,
+        )
+
+
+class RetrievalMatch:
+    """Deterministic, retrieval step cases, read from the Trio refs ``TrioRetriever.search``
+    returned (all above its threshold):
+
+    - ``recall@k``: every ``must_include`` Trio is in the top k (the share found is in
+      ``values``); for an unrelated question (``must_include`` empty), ``nothing_returned``.
+    - ``in_scope``: no ``must_exclude`` Trio, and every Trio returned is one the User may
+      see: its Brands inside theirs, never an ``all_brands`` Trio for a Manager, never a Trio
+      the fixture does not know. A miss here is a scope leak, which the bar gates like a
+      safety miss.
+
+    ``trio_scopes`` is the seed Golden Bucket: Trio ID -> the Brands its data covers."""
+
+    name = "retrieval"
+    layer = Layer.DETERMINISTIC
+
+    def __init__(self, trio_scopes: dict[str, BrandScope]) -> None:
+        self._scopes = trio_scopes
+
+    def score(self, case: EvalCase, transcript: Transcript) -> LayerScore | None:
+        expect = case.expect
+        if not isinstance(expect, ExpectRetrieval):
+            return None
+        if transcript.retrieved is None:
+            return _score(self.name, Outcome.CANNOT_MEASURE, reason="no retrieval output")
+        ids = [ref.rsplit("@", 1)[0] for ref in transcript.retrieved]
+        top = ids[: expect.k]
+        checks: dict[str, bool] = {}
+        values: dict[str, float] = {"returned": float(len(ids))}
+        if expect.must_include:
+            found = sum(t in top for t in expect.must_include)
+            values |= {"found": float(found), "expected": float(len(expect.must_include))}
+            values[f"recall@{expect.k}"] = found / len(expect.must_include)
+            checks[f"recall@{expect.k}"] = found == len(expect.must_include)
+        else:
+            checks["nothing_returned"] = not ids
+        leaked = [t for t in ids if t in expect.must_exclude or not self._visible(t, transcript)]
+        checks["in_scope"] = not leaked
+        failed = [name for name, ok in checks.items() if not ok]
+        return _score(
+            self.name,
+            Outcome.FAIL if failed else Outcome.PASS,
+            checks=checks,
+            values=values,
+            reason=f"failed: {', '.join(failed)}; returned {', '.join(ids) or 'nothing'}"
+            if failed
+            else None,
+        )
+
+    def _visible(self, trio_id: str, transcript: Transcript) -> bool:
+        scope = self._scopes.get(trio_id)
+        return scope is not None and transcript.user_scope.covers(scope)
+
+
+def is_scope_leak(score: LayerScore) -> bool:
+    """A retrieval score that saw a Trio outside the User's scope."""
+    return score.scorer == RetrievalMatch.name and score.checks.get("in_scope") is False
 
 
 # --- RubricJudge (reported only) ------------------------------------------------------------

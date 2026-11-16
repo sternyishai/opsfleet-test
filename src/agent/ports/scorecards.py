@@ -13,11 +13,18 @@ class ScorecardSink(Protocol):
       versioned by ``manifest.fixture_hash``, the run becomes an **experiment** with the
       manifest as metadata, and each case's layer scores become its evaluations.
     - ``baseline`` returns the run a new run is compared with (by ID, or the latest run with
-      the same fixture hash). ``None`` when there is none: a regression gate then returns
+      the same fixture hash that ran every case in ``covering``, so a later subset run never
+      hides an earlier full one). ``None`` when there is none: a regression gate then returns
       CANNOT_MEASURE, never PASS.
     - Never fails the run: a Phoenix outage is reported, and the JSON file is still written.
     """
 
     def publish(self, cases: list[EvalCase], scorecard: Scorecard) -> None: ...
 
-    def baseline(self, run_id: str | None = None, *, fixture_hash: str) -> Scorecard | None: ...
+    def baseline(
+        self,
+        run_id: str | None = None,
+        *,
+        fixture_hash: str,
+        covering: frozenset[str] = frozenset(),
+    ) -> Scorecard | None: ...

@@ -1,0 +1,15 @@
+case_id: retrieval-manager-a-returns
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: manager-a
+turns:
+- Which of my categories get returned the most?
+expect:
+  kind: retrieval
+  must_include:
+  - return-rate-by-category
+  must_exclude:
+  - seasonal-revenue
+  - churn-monthly
+  k: 3

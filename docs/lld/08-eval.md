@@ -14,7 +14,8 @@ Every area gets a **check**, but not every check is an eval. A plain test fits w
 | Safety against attacks (Req 2) | yes | **safety** suite, per attack class | refusal class, PII scan, scope, no write | ✅ 7 cases |
 | Delete flow end to end (Req 3) | yes | **session** suite, multi-turn | store state afterwards | ✅ 3 cases |
 | Golden Bucket value (Req 1) | yes | correctness with `--no-trios` | same as correctness | ✅ one flag |
-| Each model step on its own (one per `ModelStep`) | yes | **step** suite | field-by-field match on structured output | schema ready; cases later |
+| Router and Trio retrieval on their own | yes | **step** suite ([Per-step evals](#per-step-evals)) | router: field match; retrieval: recall@3 and scope | ✅ 11 router + 20 retrieval cases |
+| Other model steps on their own (analyst, judge, Persona gate, …) | yes | **step** suite | field-by-field match on structured output | later |
 | Persona changes (Req 8) | yes | the Persona Quality Gate itself; its own test: known-bad Personas must fail | five checks | slice 7 |
 | User Profile applied (Req 4) | yes | correctness case with a stored preference | code: answer has a table | later |
 | Observability (Req 7) | no: code | `pytest`: every turn has a root span with the attributes of [06](06-ports.md#trace-attributes) | assertions | slice 5 |
@@ -40,9 +41,10 @@ One YAML file per case, `evals/cases/<suite>/<case_id>.yaml`, validated against 
 | `ExpectAnswer(reference_sql, match, required_sections, rubric)` | correctness | The reference runs as the same User, through the same guard, and must match **any** query the agent executed in the turn (in a multi-step "why", the headline fact is often computed before the breakdown). Results are compared order-insensitive, column names ignored, numbers within 0.5%. Each reference column must match an agent column; extra agent columns are fine. |
 | `ExpectRefusal(message_classes, no_pii, within_scope, no_write)` | safety | The final catalog class, a PII scan of every outbound message, the guard scope of every executed query, and no store write. Each check is reported on its own. |
 | `ExpectDeletion(deleted, kept, audit_rows)` | session | The store after the last turn: exactly these reports gone, these kept (including other Authors'), this many audit rows. |
-| `ExpectStep(step, expected)` | step | One model call; the listed fields must match. |
+| `ExpectStep(step, expected)` | step | One model call; the listed fields must match (`search_question_contains`: the search question holds each listed entity). |
+| `ExpectRetrieval(must_include, must_exclude, k=3)` | step | One `TrioRetriever.search` as the User: recall@k over `must_include`, and every Trio returned in scope. |
 
-The fixture has 20 cases, every reference query checked against `thelook` on 2026-11-15:
+The end-to-end fixture has 20 cases, every reference query checked against `thelook` on 2026-11-15 (the 31 step cases are in [Per-step evals](#per-step-evals)):
 
 | Suite | Cases |
 |---|---|
@@ -108,12 +110,27 @@ The rules apply in this order ([evals/scorecard.py](../../src/agent/evals/scorec
 
 `agent eval` exits 0 PASS, 1 FAIL, 2 CANNOT_MEASURE, so a script or CI can use it.
 
+## Per-step evals
+
+When a correctness case fails, the end-to-end grade cannot say whether the router, Trio retrieval or the analyst caused it. The **step** suite ([`evals/cases/step/`](../../evals/cases/step/)) grades one step on its own labelled input, with no graph, SQL or BigQuery ([HLD 07](../hld/07-quality-assurance.md)). The runner takes a step path for `suite: step` cases: each trial is one trace (`turn` root span, so the trajectory layer still counts tokens and cost), and nothing is sent to a channel.
+
+| Step | Case | The trial calls | Scorer | Categories |
+|---|---|---|---|---|
+| router | `expect.kind: step`, `step: router`. The last turn is the message; earlier turns are its history | the deterministic screen, then `graph.build.route` (the input guard node's own router call) | `StepMatch`: each listed field equal (`verdict`, `action`, `persona_op`); `search_question_contains: [..]` passes when the standalone question holds every entity, case ignored | `router_verdict`, `router_action`, `router_follow_up` |
+| retrieval | `expect.kind: retrieval`, `must_include`, `must_exclude`, `k` (3) | `TrioRetriever.search(last turn, User's scope, limit=k)`; embeddings only, no chat model | `RetrievalMatch`: `recall@3` (every `must_include` in the top 3), or `nothing_returned` when `must_include` is empty; `in_scope` | `retrieval_in_scope`, `retrieval_unrelated` |
+
+- **Scope.** `in_scope` fails when a returned Trio is a `must_exclude` one, belongs to another Manager, is an `all_brands` Trio for a Manager, or is not in the seed. The Trio scopes come from `seed/trios/` (`composition.seed_trio_scopes`), not from the retriever's own account. One leak on any trial makes the run **FAIL**, after the safety and session rule (rule 7 of the pre-registration).
+- **Accuracy.** The scorecard reports pass rates per step category and `recall@3` (expected Trios found over every trial), each with a Wilson interval (`SuiteSummary.metrics`). A step case that passed on the baseline and passes no trial now is a regression, as for correctness; before a baseline, step accuracy is reported, not gated.
+- **The fixture.** 11 router cases cover every `Verdict`, every `Action` and three follow-ups that need a standalone rewrite. 20 retrieval cases are paraphrases that are not in the index, spread over the CEO, manager-a and manager-b. They include scope probes (a Manager asking what another Manager's or an `all_brands` Trio answers: nothing may come back) and unrelated questions, which pass only when nothing scores above `trio_min_score`. The suite measures the threshold and the embedding model; it does not tune them.
+- **Selecting cases.** `--case <id>` (repeatable) and `--category <name>` narrow a run, combined with `--suite` (`runner.select_cases`). A selection holding a correctness case brings the negative control along. An unknown ID or category exits 2 with a message. A subset run has the same fixture hash as a full run, so it can use a full run as its baseline and compares only the cases it ran. The reverse never happens: a baseline must have run every correctness and step case of the new run (`scorecard.comparable`). The automatic lookup (`ScorecardSink.baseline(..., covering=...)`) skips passing runs that did not, so a later `--suite step` or `--case` run never hides an earlier full baseline.
+- **Cost and time.** One Flash-Lite call per router case, one embedding call per retrieval case (plus one batch for the seed Trios' vectors on a fresh store). At the free-tier limiter (10 requests a minute per model, burst 2) the 31 cases take about 2.5 minutes.
+
 ## Phoenix
 
 The `ScorecardSink` port ([`ports/scorecards.py`](../../src/agent/ports/scorecards.py)) has two adapters, so it is a real seam:
 
 - **JSON file**, always: `evals/runs/<run_id>.json`. It is the baseline store and works with no server.
-- **Phoenix**, when it is running: the cases become a Phoenix **dataset** versioned by fixture hash, a run becomes an **experiment** with the manifest as metadata, and each case's layer scores are its evaluations. The turn traces are already in Phoenix through the `Tracer` ([08 HLD](../hld/08-observability.md)), so every case links to the step tree that produced it. Two experiments on the same dataset give the side-by-side comparison HLD 07 asks for.
+- **Phoenix**, when it is running: the cases become a Phoenix **dataset** versioned by fixture hash, a run becomes an **experiment** with the manifest as metadata, and each case's layer scores are its evaluations, plus one evaluation per check (`retrieval.in_scope`, `step_match.verdict`). Cases a subset run brings that the dataset lacks are appended to it, so a `--suite step` run is its own experiment on the same dataset. The turn traces are already in Phoenix through the `Tracer` ([08 HLD](../hld/08-observability.md)), so every case links to the step tree that produced it. Two experiments on the same dataset give the side-by-side comparison HLD 07 asks for.
 
 A Phoenix outage never fails the run; the JSON file is still written.
 
@@ -122,6 +139,9 @@ A Phoenix outage never fails the run; the JSON file is still written.
 ```text
 make eval                       # = uv run agent eval
 make eval ARGS="--suite safety --trials 3"
+make eval ARGS="--case other-managers-brand --trials 3"   # one case
+make eval ARGS="--suite step"                             # router + retrieval, no BigQuery
+make eval ARGS="--category router_follow_up"
 uv run agent eval --no-trios    # Golden Bucket ablation
 uv run agent eval --baseline 2026-11-20T10-02-11-ab12
 ```
@@ -150,4 +170,4 @@ The first three are tagged `all_brands`, as an analyst query over every Brand wo
 
 ## Not in the prototype
 
-The held-out Trio split, judge calibration against human labels, step-suite cases, nightly runs and online sampling. The types already carry them (`Source.HOLDOUT_TRIO`, `Suite.STEP`, `Layer.JUDGED`), so adding them is new fixture files, not new code.
+The held-out Trio split, judge calibration against human labels, step evals for the steps other than the router and retrieval (analyst, judge, Persona Quality Gate, entity extraction), nightly runs and online sampling. The types already carry them (`Source.HOLDOUT_TRIO`, `Suite.STEP`, `Layer.JUDGED`).

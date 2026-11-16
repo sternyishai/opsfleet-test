@@ -70,7 +70,8 @@ class JsonScorecardSink:
     """``ScorecardSink`` over a folder of ``<run_id>.json`` files.
 
     ``baseline(run_id)`` reads that run; with no ID, the latest run on the same fixture hash
-    whose outcome was PASS, so a failed run never becomes the bar the next one is held to.
+    whose outcome was PASS and that ran every case in ``covering``, so a failed run never
+    becomes the bar the next one is held to, and a subset run never hides a full one.
     Unreadable files are skipped."""
 
     def __init__(self, runs_dir: Path) -> None:
@@ -85,14 +86,22 @@ class JsonScorecardSink:
     def path(self, run_id: str) -> Path:
         return self._dir / f"{run_id}.json"
 
-    def baseline(self, run_id: str | None = None, *, fixture_hash: str) -> Scorecard | None:
+    def baseline(
+        self,
+        run_id: str | None = None,
+        *,
+        fixture_hash: str,
+        covering: frozenset[str] = frozenset(),
+    ) -> Scorecard | None:
         if run_id is not None:
             return self._read(self.path(run_id))
         runs = [card for path in sorted(self._dir.glob("*.json")) if (card := self._read(path))]
         same = [
             card
             for card in runs
-            if card.manifest.fixture_hash == fixture_hash and card.outcome is Outcome.PASS
+            if card.manifest.fixture_hash == fixture_hash
+            and card.outcome is Outcome.PASS
+            and covering <= {c.case_id for c in card.cases}
         ]
         return max(same, key=lambda card: card.started_at) if same else None
 

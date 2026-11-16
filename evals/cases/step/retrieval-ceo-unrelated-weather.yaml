@@ -1,0 +1,12 @@
+case_id: retrieval-ceo-unrelated-weather
+suite: step
+category: retrieval_unrelated
+source: seed
+run_as: ceo
+turns:
+- What is the weather forecast for tomorrow?
+expect:
+  kind: retrieval
+  must_include: []
+  must_exclude: []
+  k: 3

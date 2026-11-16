@@ -57,6 +57,11 @@ class Category(StrEnum):
     # step
     ROUTER = "router"
     DELETION_FILTER = "deletion_filter"
+    ROUTER_VERDICT = "router_verdict"  # the guard's verdict on one message
+    ROUTER_ACTION = "router_action"  # the action of an allowed message
+    ROUTER_FOLLOW_UP = "router_follow_up"  # a follow-up's standalone search question
+    RETRIEVAL_IN_SCOPE = "retrieval_in_scope"  # a paraphrase that should find a Trio
+    RETRIEVAL_UNRELATED = "retrieval_unrelated"  # a question no Trio should answer
 
 
 class Source(StrEnum):
@@ -135,12 +140,28 @@ class ExpectStep(BaseModel):
     kind: Literal["step"] = "step"
     step: str = Field(description="A ModelStep value, e.g. 'router'.")
     expected: dict[str, object] = Field(
-        description="Fields that must equal; fields not listed are ignored."
+        description="Fields that must equal; fields not listed are ignored. The reserved key "
+        "``search_question_contains`` (a list of text) passes when the search question "
+        "contains every item, case ignored: a rewritten question never equals a fixed string."
     )
 
 
+class ExpectRetrieval(BaseModel):
+    """A per-step eval of Trio retrieval: one ``TrioRetriever.search`` as the case's User on
+    the last turn, no chat model. ``must_include`` empty: an unrelated question, which passes
+    only when nothing comes back above the threshold."""
+
+    kind: Literal["retrieval"] = "retrieval"
+    must_include: list[str] = Field(description="Trio IDs that must be in the top k.")
+    must_exclude: list[str] = Field(
+        default_factory=list, description="Trio IDs that must never come back (scope check)."
+    )
+    k: int = Field(default=3, ge=1, le=10)
+
+
 type Expectation = Annotated[
-    ExpectAnswer | ExpectRefusal | ExpectDeletion | ExpectStep, Field(discriminator="kind")
+    ExpectAnswer | ExpectRefusal | ExpectDeletion | ExpectStep | ExpectRetrieval,
+    Field(discriminator="kind"),
 ]
 
 
@@ -162,14 +183,15 @@ class EvalCase(BaseModel):
 
     @model_validator(mode="after")
     def _fits_suite(self) -> Self:
-        allowed = {
-            Suite.CORRECTNESS: ExpectAnswer,
-            Suite.SAFETY: ExpectRefusal,
-            Suite.SESSION: ExpectDeletion,
-            Suite.STEP: ExpectStep,
+        allowed: tuple[type[BaseModel], ...] = {
+            Suite.CORRECTNESS: (ExpectAnswer,),
+            Suite.SAFETY: (ExpectRefusal,),
+            Suite.SESSION: (ExpectDeletion,),
+            Suite.STEP: (ExpectStep, ExpectRetrieval),
         }[self.suite]
         if not isinstance(self.expect, allowed):
-            raise ValueError(f"a {self.suite} case expects {allowed.__name__}")
+            names = " or ".join(a.__name__ for a in allowed)
+            raise ValueError(f"a {self.suite} case expects {names}")
         if self.suite is not Suite.SESSION and self.setup_reports:
             raise ValueError("only session cases seed reports")
         return self
@@ -200,6 +222,7 @@ class Transcript(BaseModel):
     trial: int
     user_scope: BrandScope = Field(description="The case's User, as loaded for the trial.")
     outbound: list[OutboundMessage] = Field(description="What the channel got, after the filter.")
+    trace_ids: list[str] = Field(default_factory=list, description="One per turn, in order.")
     traces: list[SpanRecord] = Field(description="Every span of the trial's turns.")
     executed: list[ExecutedQuery] = Field(description="Every executed statement, in order.")
     store_report_ids: dict[str, bool] = Field(
@@ -208,6 +231,12 @@ class Transcript(BaseModel):
     audit_rows: int = Field(default=0, ge=0, description="deletion_audit rows after the turns.")
     store_changed: bool = Field(
         default=False, description="A Saved Report was written or deleted, or an audit row added."
+    )
+    step_output: dict[str, Any] | None = Field(
+        default=None, description="Router step cases: the RouterDecision, as JSON."
+    )
+    retrieved: list[str] | None = Field(
+        default=None, description="Retrieval step cases: the Trio refs returned, best first."
     )
 
     def final(self) -> AgentReply | None:
@@ -291,6 +320,10 @@ class SuiteSummary(BaseModel):
         description="Safety is reported per attack class, never blended."
     )
     cannot_measure: int
+    metrics: dict[str, Rate] = Field(
+        default_factory=dict,
+        description='Step suite: "recall@3", the expected Trios found over every trial.',
+    )
 
 
 class Scorecard(BaseModel):

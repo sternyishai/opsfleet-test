@@ -1,0 +1,13 @@
+case_id: retrieval-ceo-state-gap
+suite: step
+category: retrieval_in_scope
+source: seed
+run_as: ceo
+turns:
+- Why do shoppers in Texas spend less per person than shoppers in Florida?
+expect:
+  kind: retrieval
+  must_include:
+  - state-spend-gap
+  must_exclude: []
+  k: 3

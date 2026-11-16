@@ -18,12 +18,12 @@ beside it and ends there, and a preference-only turn goes to ``acknowledge``.
 """
 
 import functools
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph import END, START, StateGraph
@@ -51,7 +51,7 @@ from agent.graph.deletion import DeletionNodes
 from agent.graph.persona import PersonaNodes
 from agent.graph.prompts import router_messages
 from agent.graph.state import TURN_KEYS, AgentGraph, AgentState, TurnRuntime
-from agent.ports.llm import ModelStep
+from agent.ports.llm import LLMFactory, ModelStep
 from agent.ports.tracer import Tracer
 from agent.tools.analysis import traced_trio_search
 
@@ -296,6 +296,18 @@ def _last_text(state: AgentState) -> str:
     return state["messages"][-1].text
 
 
+def route(
+    llm: LLMFactory, history: Sequence[AnyMessage], text: str, *, turns: int
+) -> RouterDecision:
+    """The router call (``ModelStep.ROUTER``) on ``text`` with ``history`` as context: the
+    input guard node's model step, also run on its own by the router step eval."""
+    # json_schema: Gemini's native schema mode resolves the nested $defs of RouterDecision.
+    model = llm.chat(ModelStep.ROUTER).with_structured_output(RouterDecision, method="json_schema")
+    decision = model.invoke(router_messages(list(history), text, turns=turns))
+    assert isinstance(decision, RouterDecision)
+    return decision
+
+
 class _Nodes:
     def __init__(self, ports: Ports, limits: Limits) -> None:
         self._ports = ports
@@ -339,14 +351,9 @@ class _Nodes:
             return {"error_class": ErrorClass.PERMANENT, "message_class": MessageClass.PLAN_EXPIRED}
         if verdict := screen(_last_text(state), max_chars=self._limits.input_max_chars):
             return {"error_class": ErrorClass.PERMANENT, "message_class": _BLOCKED[verdict]}
-        # json_schema: Gemini's native schema mode resolves the nested $defs of RouterDecision.
-        model = self._ports.llm.chat(ModelStep.ROUTER).with_structured_output(
-            RouterDecision, method="json_schema"
+        decision = route(
+            self._ports.llm, messages[:-1], _last_text(state), turns=self._limits.verbatim_turns
         )
-        decision = model.invoke(
-            router_messages(messages[:-1], _last_text(state), turns=self._limits.verbatim_turns)
-        )
-        assert isinstance(decision, RouterDecision)
         update: dict[str, Any] = {"router": decision, "deferred_request": decision.deferred_request}
         if decision.verdict in _BLOCKED:
             update |= {
