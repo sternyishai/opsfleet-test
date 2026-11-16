@@ -6,6 +6,7 @@ type Schemas = components["schemas"];
 export type DevUser = Schemas["DevUser"];
 export type OutboundMessage = Schemas["OutboundMessage"];
 export type ConfirmationRequest = Schemas["ConfirmationRequest"];
+export type AgentReply = Schemas["AgentReply"];
 export type WebRequest = Schemas["WebRequest"];
 export type ApiError = Schemas["ApiError"];
 export type ListReportsOutput =
@@ -89,21 +90,26 @@ export async function send(
   });
   if (!response.ok || !response.body) throw await refused(response);
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  const emit = (block: string) => {
+    const data = block
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => line.slice("data: ".length))
+      .join("\n");
+    if (data) onMessage(JSON.parse(data) as OutboundMessage);
+  };
   let buffer = "";
   for (;;) {
     const { value, done } = await reader.read();
-    if (done) return;
+    if (done) {
+      emit(buffer); // a last event with no blank line after it still counts
+      return;
+    }
     buffer += value;
     let end: number;
     while ((end = buffer.indexOf("\n\n")) >= 0) {
-      const block = buffer.slice(0, end);
+      emit(buffer.slice(0, end));
       buffer = buffer.slice(end + 2);
-      const data = block
-        .split("\n")
-        .filter((line) => line.startsWith("data: "))
-        .map((line) => line.slice("data: ".length))
-        .join("\n");
-      if (data) onMessage(JSON.parse(data) as OutboundMessage);
     }
   }
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ConfirmationRequest } from "../api/client";
+import { Icon } from "./Icon";
 
 /**
  * The Deletion Plan as checkboxes. The plan shows at most its first 20 items; the ones not
@@ -24,10 +25,9 @@ export function DeletionPlan(props: {
     });
   const kept = plan.total - unticked.size;
   const all = unticked.size === 0;
-  const selected = Array.from({ length: plan.total }, (_, i) => i + 1).filter(
-    (i) => !unticked.has(i),
-  );
+  const selected = Array.from({ length: plan.total }, (_, i) => i + 1).filter((i) => !unticked.has(i));
   const needsCount = all && plan.require_count;
+  const hidden = plan.total - plan.items.length;
 
   const confirm = () => {
     if (needsCount) props.onAnswer(true, null, `yes, delete all ${count.trim()}`);
@@ -35,35 +35,53 @@ export function DeletionPlan(props: {
   };
 
   return (
-    <fieldset className="plan" disabled={props.disabled}>
-      <legend>
-        Deletion Plan: {plan.total} report{plan.total === 1 ? "" : "s"}
-        {plan.total > plan.items.length &&
-          ` (first ${plan.items.length} shown; the other ${plan.total - plan.items.length} are included)`}
-      </legend>
-      {plan.items.map((item) => (
-        <label key={item.index}>
-          <input
-            type="checkbox"
-            checked={!unticked.has(item.index)}
-            onChange={() => toggle(item.index)}
-          />
-          {item.index}. {item.label}
-          {item.reason && <span className="reason"> ({item.reason})</span>}
-        </label>
-      ))}
+    <section className="plan">
+      <header>
+        <span className="plan-icon">
+          <Icon name="trash" />
+        </span>
+        <div>
+          <h3>Delete {plan.total} saved report{plan.total === 1 ? "" : "s"}?</h3>
+          <p className="muted">Untick any you want to keep. Nothing is deleted until you confirm.</p>
+        </div>
+      </header>
+      <ul>
+        {plan.items.map((item) => (
+          <li key={item.index}>
+            <label className={unticked.has(item.index) ? "kept" : ""}>
+              <input
+                type="checkbox"
+                checked={!unticked.has(item.index)}
+                onChange={() => toggle(item.index)}
+                disabled={props.disabled}
+              />
+              <span className="grow">
+                <span className="plan-label">{item.label}</span>
+                {item.reason && <span className="muted"> · {item.reason}</span>}
+              </span>
+            </label>
+          </li>
+        ))}
+        {hidden > 0 && <li className="muted plan-more">…and {hidden} more, included unless you type “yes except …”.</li>}
+      </ul>
       {needsCount && (
-        <label className="count">
-          To delete all of them, type how many there are:{" "}
-          <input value={count} onChange={(e) => setCount(e.target.value)} inputMode="numeric" />
+        <label className="plan-count">
+          This deletes all {plan.total}. Type the number to confirm:
+          <input value={count} onChange={(e) => setCount(e.target.value)} inputMode="numeric" disabled={props.disabled} />
         </label>
       )}
-      <div className="plan-actions">
-        <button onClick={confirm} disabled={kept === 0 || (needsCount && !count.trim())}>
-          Delete {all ? "all" : kept}
+      <footer>
+        <button className="ghost" onClick={() => props.onAnswer(false, null)} disabled={props.disabled}>
+          Keep all
         </button>
-        <button onClick={() => props.onAnswer(false, null)}>Cancel</button>
-      </div>
-    </fieldset>
+        <button
+          className="danger"
+          onClick={confirm}
+          disabled={props.disabled || kept === 0 || (needsCount && !count.trim())}
+        >
+          Delete {all ? `all ${plan.total}` : kept}
+        </button>
+      </footer>
+    </section>
   );
 }
