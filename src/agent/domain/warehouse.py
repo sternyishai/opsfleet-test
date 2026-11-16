@@ -58,7 +58,10 @@ ALLOWLIST: tuple[TableSpec, ...] = (
     ),
     TableSpec(
         name="order_items",
-        description="One row per item sold. Revenue is SUM(sale_price) over this table.",
+        description=(
+            "One row per item sold. Revenue is SUM(sale_price) over items whose status is not "
+            "Cancelled or Returned."
+        ),
         columns=[
             _c("id", "INTEGER", "Order item ID."),
             _c("order_id", "INTEGER", "The order (orders.order_id)."),
