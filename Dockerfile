@@ -11,6 +11,10 @@ WORKDIR /web
 COPY web/package.json web/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
+# The navigator's diagrams and films, imported from ../docs (web/src/showcase.ts).
+COPY docs/hld/diagrams/*.png /docs/hld/diagrams/
+COPY docs/lld/diagrams/*.png /docs/lld/diagrams/
+COPY docs/films/ /docs/films/
 RUN pnpm build
 
 # --- 2. the agent: Python 3.12 + uv, the web extra, no dev dependencies -----------------------
