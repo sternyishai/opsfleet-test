@@ -81,7 +81,7 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `Sq
 - **Depends on:** nothing. Called by `Outbound.emit` and `save_report` only.
 - **Safety:** ADR 0003 layer 3. Never skipped; falls back to regex.
 - **Failures:** never raises; a managed-detector outage is recorded as `detectors = "regex"`.
-- **Regex detectors** ([adapters/pii_regex.py](../../src/agent/adapters/pii_regex.py)), applied in order email, coordinates, phone, street address, postal code; a hit becomes `[REDACTED:<type>]`. Tuned so an answer's figures are not hits: a bare 5-digit number (a Customer ID) is a postal code only after a label (`ZIP`, `postal code`) or a US state code, or in ZIP+4 form; a bare coordinate pair needs five decimals; a phone needs separators.
+- **Regex detectors** ([adapters/pii_regex.py](../../src/agent/adapters/pii_regex.py)), applied in order email, coordinates, phone, street address, postal code; a hit becomes `[REDACTED:<type>]`. Tuned so an answer's figures are not hits: a bare 5-digit number (a Customer ID) is a postal code only after a label (`ZIP`, `postal code`), in ZIP+4 form, or in address form: a word, a comma and a US state code, with a code in that state's ZIP range (`Boise, ID 83702`, and `Lakewood, NJ 8701` since the warehouse drops leading zeros), so `Customer ID 48213` stays; a bare coordinate pair needs five decimals; a phone needs separators.
 - **Trace:** `pii.hits` (types only), `pii.detectors`, `pii.fallback`.
 - **Tests** · slice 2 · `tests/test_pii.py`: each detector; redaction format; every `OutboundMessage` kind passes `Outbound.emit`; a saved report is filtered before the write.
 
