@@ -4,8 +4,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-16)
 
-**Phase:** 5 merged (PR #33); end-of-Phase-4 retro merged; Customer ID fix in the PII filter done on `fix/pii-customer-id` (PR not opened yet). Next: Phase 6.
-**Branch:** `fix/pii-customer-id`
+**Phase:** 6 in progress: audit done, HLD prototype sections corrected, first `/mock-interview` rehearsal done (stopped after the Requirements round). Repo is public. Next: submit the link; the interview's doc gaps are a follow-up issue.
+**Branch:** `docs/final-check`
 
 | Step | Status |
 |---|---|
@@ -37,6 +37,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Phase 5: ship anywhere (`docs/readme`) | ✅ README (setup native and Docker, CLI and web UI, example run, requirement table linking the HLD, screenshots in `docs/screenshots/`), `.env.example`, `Dockerfile` (Node stage builds `web/`, Python stage on `uv:0.13.6-python3.12-trixie-slim`, non-root, `data/` and `traces/` volumes, secrets at run time), `.dockerignore`, `make web` / `docker-build` / `docker-chat` / `docker-web`. Code: `agent web` serves the built UI at `/` when `WEB_UI_DIR` is set (mounted after `/api`); `WEB_DEV_IDENTITY_ANY_HOST` lets the picker bind `0.0.0.0` inside a container, set only by `make docker-web` next to `-p 127.0.0.1:…` (user's choice over host networking, which is off by default on Docker Desktop); LLD 07 updated. Verified from a fresh clone following only the README: `uv sync` + CLI turn, `make web` + a browser turn, pip install + CLI, `make docker-build` + `docker-chat` + `docker-web` + a browser turn, and a container turn reaching Phoenix on the host |
 | Customer ID fix in the PII filter (`fix/pii-customer-id`) | ✅ a US state counts toward a postal code only in address form (a word, a comma, the state code or name) and with a code in that state's ZIP range, so "Customer ID 48213" and "Calvin Klein, ID 48213" keep their IDs; 4-digit codes after a state (thelook stores ZIPs as integers: "Lakewood, NJ 8701" leaked before); full state names ("Boise, Idaho 83702" leaked before). Checked against all 22,542 US Users in thelook, codes and names: all redacted. Adversarial Spec review (~80 hostile inputs, old vs new) fixed: non-ASCII cities, ")" or "." before the comma, a full-width comma, a redacted street before the state, NY 063. Accepted: no-comma addresses leak ("Boise ID 83702"). 862 offline tests. Detail in `decision-log.md` § Safety & PII |
 | End-of-Phase-4 retro (`docs/phase-4-retro`) | ✅ `other-managers-brand` also passes on an answer that names the Brand it left out (`or_answer_naming`, `prereg-20261116-named-refusal`; a silent drop still fails); **first PASS of `make eval`** (run `2026-11-16T10-57-16-2ab3`, now the baseline): safety 7/7, session 3/3, correctness 5/9, step 30/31, recall@3 9/10; `tests/test_layers.py` holds LLD 01's package rule; `tests/test_egress.py` plants an email in every store and calls every `Views` method (found `/trace` returning `outcome`/`action` unfiltered, fixed); CLAUDE.md: read by symbol; `evals/runs/` ignored; this file pruned |
+| Phase 6: final check (`docs/final-check`) | ✅ `/mock-interview both`. Audit: every requirement met; fixed the stale HLD (00 requirement map, the In-the-prototype sections of 02/05/07/09/11, the compose and multi-arch claims in 08/11), the author's experience in years (HLD 10, ADR 0001), the client's answer that `requirements.txt` is not required (HLD 12); ADR 0004 + decision log § Analysis loop (hand-written loop, not `create_agent`). Interview (coached, Requirements round only): 8 of 12 answers `weak`, mostly one-sentence answers; rehearse the walkthrough, Req 2/3/5/7/8 and the eval numbers. Doc gaps found (reranker growth path, drifted Trios, independent scope auditor, canary answers) filed as an issue |
 
 ## Decisions made this session, not yet written elsewhere
 
@@ -52,14 +53,14 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Read docs/work-plan.md and docs/progress.md, then start Phase 6 (`/mock-interview both`).
+> Read docs/work-plan.md and docs/progress.md, then fix the mock-interview doc gaps issue, then decide the revenue definition and rerun `make eval`.
 
 Notes for what comes next:
 
 - Correctness 5/9 on the baseline: `monthly-revenue-2025`, `data-date-range`, `return-rate-trend-my-brands`, `top-traffic-source-my-brands` fail execution match; earlier runs traced most misses to revenue counting Cancelled and Returned lines. Deciding where that definition lives (schema description or Persona emphasis) is open.
 - The step cap ends a turn with the `SELF_CORRECTION_EXHAUSTED` wording ("rephrase it with a specific time period") even when every query worked. A new message class, or a last model step with no tools, is a design decision.
 - Live demos not run yet: 7b, 7c and slice 8's chat in the browser (`docs/demo.md`).
-- Phase 6: the HLD 00 requirement map's "Prototype" column still says Reqs 1, 4 and 8 are not in the prototype (the README's table is current); make the repo public; submit.
+- Rehearsal before the real interview: the debrief's top 5 (walkthrough in five beats; Req 2 layers and blast radius; Req 5's three cases; the eval and cost numbers; Req 8 and Req 3 as "the model proposes, code decides"). The later rounds (Scale, Trade-offs, Curveballs, Estimates, Prototype, Experience, Close) are not rehearsed yet: `/mock-interview interview system-design`.
 - #20 (Ollama) is deferred until Phase 6 is done.
 - Local `.env` (not in the repo): `MODEL_ANALYST=gemini-3.6-flash` with `MODEL_ANALYST_FALLBACK=gemini-3.5-flash-lite` (the preview model hit the free-tier 429 on every call); `MODEL_PRICES` set to list prices; `PHOENIX_FULL_CONTENT=true`. The container needs `BIGQUERY_PROJECT` in `.env`.
 - `make eval` takes ~10 minutes on the free tier; `evals/runs/` is local (ignored), so a fresh clone has no baseline until its first PASS.
