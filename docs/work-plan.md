@@ -173,8 +173,8 @@ The Dockerfile covers both channels (added after slice 8, #14): one image, a Nod
 **Prompt:** `/mock-interview both`
 
 **Done when:**
-- [ ] the top gaps from the audit are fixed
-- [ ] the repo is public
+- [x] the top gaps from the audit are fixed (the revenue definition is still open)
+- [x] the repo is public
 - [ ] the link is submitted
 
 ---
