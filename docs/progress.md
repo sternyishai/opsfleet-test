@@ -48,7 +48,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> /mattpocock-skills:implement #26
+> /mattpocock-skills:implement #14
 
 Notes for what comes next:
 
