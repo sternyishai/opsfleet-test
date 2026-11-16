@@ -14,7 +14,28 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-      - run: uv sync --locked
+      - run: uv sync --locked --extra web
       - run: uv run ruff check
       - run: uv run pyright
       - run: uv run pytest -q
+
+  # The web UI (ADR 0010): the generated types are current and the app type-checks.
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: uv sync --locked --extra web
+      - run: pnpm --dir web install --frozen-lockfile
+      - run: make types-check
+      - run: pnpm --dir web build

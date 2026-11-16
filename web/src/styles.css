@@ -1,0 +1,26 @@
+:root { font-family: system-ui, sans-serif; color: #1d1d1f; background: #f6f6f7; }
+body { margin: 0; }
+.app { display: grid; grid-template: "who who" auto "side main" 1fr / 320px 1fr; height: 100vh; }
+.who { grid-area: who; padding: 0.75rem 1rem; background: #1d3557; color: white; }
+.side { grid-area: side; overflow-y: auto; padding: 0 1rem; border-right: 1px solid #ddd; background: white; }
+.side h2 { font-size: 0.9rem; text-transform: uppercase; color: #666; margin-top: 1.25rem; }
+.side ul, .side ol { padding-left: 0; list-style: none; }
+.users button, .reports button { background: none; border: none; padding: 0.3rem 0; text-align: left; cursor: pointer; color: #1d3557; }
+.users button.picked { font-weight: bold; }
+.main { grid-area: main; display: flex; flex-direction: column; min-height: 0; }
+.chat { display: flex; flex-direction: column; height: 100%; }
+.chat-bar { padding: 0.5rem 1rem; border-bottom: 1px solid #ddd; }
+.log { flex: 1; overflow-y: auto; list-style: none; padding: 1rem; margin: 0; }
+.log li { white-space: pre-wrap; margin: 0.5rem 0; padding: 0.6rem 0.8rem; border-radius: 8px; max-width: 75ch; }
+.log .you { background: #dbe7f5; margin-left: auto; }
+.log .reply, .log .confirmation { background: white; border: 1px solid #ddd; }
+.log .progress { color: #777; padding: 0 0.8rem; }
+.plan { margin: 0 1rem; background: white; border: 1px solid #c33; border-radius: 8px; }
+.plan label { display: block; margin: 0.3rem 0; }
+.plan-actions { margin-top: 0.5rem; display: flex; gap: 0.5rem; }
+.ask { display: flex; gap: 0.5rem; padding: 1rem; }
+.ask input { flex: 1; padding: 0.6rem; font-size: 1rem; }
+.reason, .date { color: #777; font-size: 0.85rem; }
+.error { color: #b00020; }
+.empty { padding: 2rem; color: #666; }
+.report pre { white-space: pre-wrap; font-family: inherit; }

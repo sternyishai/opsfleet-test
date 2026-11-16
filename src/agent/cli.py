@@ -11,7 +11,8 @@ web UI makes.
 - ``agent eval [--suite S] [--case ID] [--category C] [--trials K] [--no-trios]
   [--baseline RUN]``: the eval harness (docs/lld/08-eval.md); ``make eval`` calls it. Exit 0
   PASS, 1 FAIL, 2 CANNOT_MEASURE (also an unknown case ID or category).
-- ``agent web``: serves the HTTP API for the UI (needs the ``web`` extra, ADR 0010).
+- ``agent web [--host H] [--port P]``: serves the HTTP API for the UI (needs the ``web``
+  extra, ADR 0010); ``make dev`` runs it with the Vite dev server.
 """
 
 import argparse
@@ -68,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--no-trios", action="store_true", help="the Golden Bucket ablation")
     ev.add_argument("--baseline", help="run ID to compare against")
     web = sub.add_parser("web", help="serve the HTTP API for the web UI")
+    web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
@@ -82,7 +84,25 @@ def main(argv: list[str] | None = None) -> int:
             trios=not args.no_trios,
             baseline=args.baseline,
         )
-    raise NotImplementedError(f"`agent {args.command}` is built in a later slice")
+    return _web(args.host, args.port)
+
+
+def _web(host: str, port: int) -> int:
+    from agent.composition import build_web
+    from agent.config import Settings
+
+    try:
+        import uvicorn
+    except ImportError:
+        print("agent web needs the web extra: uv sync --extra web", file=sys.stderr)
+        return 2
+    try:
+        app = build_web(Settings(), host=host)
+    except ValueError as exc:
+        print(f"agent web: {exc}", file=sys.stderr)
+        return 2
+    uvicorn.run(app, host=host, port=port)
+    return 0
 
 
 def _chat(user_id: str) -> int:

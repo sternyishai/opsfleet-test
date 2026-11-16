@@ -52,29 +52,37 @@ A test in Phase 4 pins this: for each row below, the CLI command and the web end
 
 ## The chat stream
 
-- **Request:** `POST /api/messages`, body `WebRequest` = `WebText(conversation_id?, text)` or `WebConfirmation(conversation_id, request_id, approved, selected_indices?)` ([`contracts/web.py`](../../src/agent/contracts/web.py)). There is no `user_id` in the body.
+- **Request:** `POST /api/messages`, body `WebRequest` = `WebText(conversation_id?, text)` or `WebConfirmation(conversation_id, request_id, approved, selected_indices?)` ([`contracts/web.py`](../../src/agent/contracts/web.py)), told apart by `kind` (`text`, `confirmation`), which the body must carry. There is no `user_id` in the body, and both models forbid unknown fields, so a body that names a User is refused with 422.
 - **Response:** `text/event-stream`. One event per `OutboundMessage`, with `event:` set to its `kind` (`progress`, `confirmation`, `reply`) and `data:` its JSON. The stream closes after a `reply` or a `confirmation`.
-- **How it runs:** the handler builds an `InboundMessage`, creates an SSE `ChannelAdapter` that writes to a queue, and runs `ChatService.handle` in a worker thread. `Outbound` filters each message before the adapter sees it, so the browser gets exactly what the CLI would print.
-- **Disconnects:** if the browser closes the stream, `deliver` drops messages and traces it. The turn finishes and is checkpointed, and the reply is in the Conversation history next time.
+- **How it runs:** the handler builds an `InboundMessage` (channel `web`) or a `ConfirmationResponse`, creates an `SseChannel` ([`adapters/web/sse.py`](../../src/agent/adapters/web/sse.py)) that writes to a queue, and runs `ChatService.handle` in a worker thread (not a daemon). `Outbound` filters each message before the adapter sees it, so the browser gets exactly what the CLI would print. When `handle` returns, the worker ends the stream even if nothing was sent (the output filter failed closed).
+- **Disconnects:** if the browser closes the stream, `deliver` drops each later message and opens a `channel.dropped` span (`kind`, `channel=web`); messages queued but not yet streamed are traced the same way. The turn finishes and is checkpointed, and the reply is in the Conversation history next time.
+- **Checkboxes:** the UI ticks every item of the plan; unticking sends `selected_indices` without it, and all ticked sends `null` ("all items"). Unticking item 2 of 3 reaches the same `ConfirmationDecision` as `yes except 2`.
 
 ## Identity
 
-- **Prototype:** `GET /api/dev/users` lists the seeded Users (`DevUser`), and the UI sends the choice in an `X-Agent-User` header. The equivalent of `--as`, enabled only when `WEB_DEV_IDENTITY=true` and bound to `127.0.0.1`.
+- **Prototype:** `GET /api/dev/users` lists the seeded Users (`DevUser`: `user_id`, `role`, `brands` from the Brand Assignments, empty for an Executive), from `SqliteUserDirectory.list_dev_users`. The UI sends the choice in an `X-Agent-User` header. The equivalent of `--as`, enabled only when `WEB_DEV_IDENTITY=true`; `agent web` then refuses to start on any host but `127.0.0.1`. `list_dev_users` is on the seeded adapter only, not the `UserDirectory` port: production never lists Users to a browser.
+- **With dev identity off** there is no `/api/dev/users` (404), a request with the header is refused (403) and one without has no identity (401): the prototype has no IAP.
+- **Switching User** in the picker starts a new Conversation (a Conversation belongs to one User) and reloads "My reports" and the profile. **New chat** drops the `conversation_id`, so the next `WebText` sends `null`, as on the CLI.
 - **Production:** IAP or the Channel Gateway's SSO sets the identity; the dev header is never accepted ([03](../hld/03-safety-and-pii.md#identity-and-roles)).
 - Either way, the adapter resolves `user_id` before calling `ChatService` or `Views`, and those two load role, permissions and Brands themselves. Nothing in a request body can change them.
+
+## Errors
+
+Every refused request has an `ApiError(message_class?, message)` body. A classified error from `Views` is its catalog message, as the CLI prints it: `PermanentError` → 403, `TransientError` → 503. A `ToolError` result (`Views.report`, `Views.rollback_persona`) becomes the same body (404 for `REPORT_NOT_FOUND`, 409 for `PERSONA_NOTHING_TO_ROLL_BACK`, else 403), so its `detail` never leaves the server. A missing turn is 404, a bad `/api/stats?since=` 400; request validation keeps FastAPI's 422. `PUT /api/persona` takes the changed fields as a JSON object (`{"tone.preset": "formal"}`); `Views.edit_persona` gets it as is, and a rejection is a `PersonaRejected` value (200), as in chat.
 
 ## Types for the UI
 
 - FastAPI generates the OpenAPI document from the same Pydantic models. The SSE route declares `OutboundMessage` as its `text/event-stream` schema, so the event types are generated too.
-- `make types` runs `openapi-typescript` into `web/src/api/schema.d.ts`; a check fails when the committed file is stale. No TypeScript type is written by hand.
+- `make types` writes the document to `web/openapi.json` (`python -m agent.adapters.web.openapi`, no ports or `.env` needed) and runs `openapi-typescript` into `web/src/api/schema.d.ts`. Two checks fail on a stale file: `tests/test_web.py` compares `web/openapi.json` with the routes (no Node needed), and `make types-check` (CI job `web`) regenerates both and diffs them. No TypeScript type is written by hand; `web/src/api/client.ts` only names generated ones.
 - In development, Vite proxies `/api` to `agent web`, so there is no CORS setup.
 
 ## Layout
 
 ```
-pyproject.toml           # unchanged; web deps are the optional extra `agent[web]`
-src/agent/adapters/web/  # FastAPI app, SSE ChannelAdapter, dev identity
-web/                     # React + Vite + pnpm
+pyproject.toml           # web deps are the optional extra `agent[web]` (and in the dev group)
+src/agent/adapters/web/  # app.py (routes, dev identity), sse.py (SseChannel), openapi.py
+web/                     # React + Vite + pnpm (TypeScript 5: openapi-typescript needs its API)
+  openapi.json           # generated
   src/api/schema.d.ts    # generated
-Makefile                 # make dev (API + Vite), make types, make test
+Makefile                 # make dev (API + Vite), make types, make types-check, make test
 ```

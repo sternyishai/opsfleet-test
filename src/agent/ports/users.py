@@ -4,6 +4,9 @@ Not in ADR 0006's original list; added in the LLD because the "load context" nod
 between the graph and the ``users`` / ``user_permissions`` / ``brand_assignments`` tables.
 Two adapters are real: the seeded ``seed/users.yaml`` + SQLite (prototype) and Postgres kept
 in step by the admin sync job (production).
+
+The seeded adapter also lists its Users for the web prototype's picker (``list_dev_users``,
+LLD 07 § Identity). That is not part of this port: production never lists Users to a channel.
 """
 
 from typing import Protocol

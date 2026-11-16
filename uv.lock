@@ -34,10 +34,13 @@ web = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "fastapi" },
+    { name = "httpx" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pyyaml" },
     { name = "ruff" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -62,10 +65,13 @@ provides-extras = ["web"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "pyright", specifier = ">=1.1.414" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff", specifier = ">=0.8" },
+    { name = "uvicorn", specifier = ">=0.32" },
 ]
 
 [[package]]

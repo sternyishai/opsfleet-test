@@ -489,3 +489,16 @@ Deviations from issue #13, approved after the code review:
 - **No chat path for "what are my preferences?" or "reset my preferences"**, only `/profile` (HLD 05 § In the prototype). Adding it means two router actions, a contract change in LLD 04 and new eval cases: a follow-up issue if wanted.
 - **Extracted values are filtered once, before they are applied, saved or acknowledged**: the input guard's rules again (the model wrote them) and `is_option` (a value must be one of its field's options), so the acknowledgement names nothing the merge would skip. A preference-only turn with nothing left is refused as `INJECTION`. A repeated note is kept once.
 - **`PROFILE_MAX_NOTES` is bounded at 20 by config**, matching the DDL CHECK, instead of being capped silently in the merge.
+
+## Slice 8: web UI (2026-11-16)
+
+Choices made while building issue #14, to be confirmed in review:
+
+- **`list_dev_users` is on `SqliteUserDirectory`, not the `UserDirectory` port.** It is dev only; `build_web` asserts the seeded adapter. Putting it on the port would make the production Postgres adapter list Users to a browser.
+- **A body that names a User is refused (422)**: `WebText` and `WebConfirmation` forbid unknown fields, instead of ignoring a `user_id`. `kind` is required on the wire: it is the union's discriminator.
+- **One error body, `ApiError`**: catalog messages for classified errors and `ToolError` results (so `ToolError.detail`, meant for the trace, never reaches the browser), plain text for no identity (401), a disabled dev header (403), a missing turn (404) and a bad stats window (400).
+- **`WEB_DEV_IDENTITY` on a host other than `127.0.0.1` stops `agent web`** with exit 2, instead of quietly turning the picker off.
+- **`web/openapi.json` is committed next to `schema.d.ts`**, so pytest catches Python-side drift without Node, and the CI `web` job runs `make types-check` and the build for the TypeScript side.
+- **FastAPI, Uvicorn and httpx are also in the dev group**, so `uv run pytest` and pyright cover the web channel on a plain `uv sync`; the package keeps them in the `web` extra, and a test imports the core with them blocked.
+- **TypeScript 5, not 7**: openapi-typescript 7 uses the JavaScript compiler API that TypeScript 7 no longer ships.
+- **"all Brands" for an Executive is rendered by the UI from `role`**; `DevUser.brands` stays the Brand Assignments as stored (empty for the CEO).
