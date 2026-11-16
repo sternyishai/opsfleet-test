@@ -62,7 +62,7 @@ The browser chat takes the same slash commands as `agent chat` (`/reports`, `/pr
 
 ## Identity
 
-- **Prototype:** `GET /api/dev/users` lists the seeded Users (`DevUser`: `user_id`, `role`, `brands` from the Brand Assignments, empty for an Executive), from `SqliteUserDirectory.list_dev_users`. The UI sends the choice in an `X-Agent-User` header. The equivalent of `--as`, enabled only when `WEB_DEV_IDENTITY=true`; `agent web` then refuses to start on any host but `127.0.0.1`. `list_dev_users` is on the seeded adapter only, not the `UserDirectory` port: production never lists Users to a browser.
+- **Prototype:** `GET /api/dev/users` lists the seeded Users (`DevUser`: `user_id`, `role`, `brands` from the Brand Assignments, empty for an Executive), from `SqliteUserDirectory.list_dev_users`. The UI sends the choice in an `X-Agent-User` header. The equivalent of `--as`, enabled only when `WEB_DEV_IDENTITY=true`; `agent web` then refuses to start on any host but `127.0.0.1`, unless `WEB_DEV_IDENTITY_ANY_HOST=true`: the Docker image listens on `0.0.0.0` inside the container, so the README's `docker run` sets it and publishes the port on the host's loopback only (`-p 127.0.0.1:8000:8000`). The image itself does not set it. `list_dev_users` is on the seeded adapter only, not the `UserDirectory` port: production never lists Users to a browser.
 - **With dev identity off** there is no `/api/dev/users` (404), a request with the header is refused (403) and one without has no identity (401): the prototype has no IAP.
 - **Switching User** in the picker starts a new Conversation (a Conversation belongs to one User) and reloads "My reports" and the profile. **New chat** drops the `conversation_id`, so the next `WebText` sends `null`, as on the CLI.
 - **Production:** IAP or the Channel Gateway's SSO sets the identity; the dev header is never accepted ([03](../hld/03-safety-and-pii.md#identity-and-roles)).
@@ -76,7 +76,7 @@ Every refused request has an `ApiError(message_class?, message)` body. A classif
 
 - FastAPI generates the OpenAPI document from the same Pydantic models. The SSE route declares `OutboundMessage` as its `text/event-stream` schema, so the event types are generated too.
 - `make types` writes the document to `web/openapi.json` (`python -m agent.adapters.web.openapi`, no ports or `.env` needed) and runs `openapi-typescript` into `web/src/api/schema.d.ts`. Two checks fail on a stale file: `tests/test_web.py` compares `web/openapi.json` with the routes (no Node needed), and `make types-check` (CI job `web`) regenerates both and diffs them. No TypeScript type is written by hand; `web/src/api/client.ts` only names generated ones.
-- In development, Vite proxies `/api` to `agent web`, so there is no CORS setup.
+- In development, Vite proxies `/api` to `agent web`, so there is no CORS setup. Built (`pnpm --dir web build`), the app is served by `agent web` itself at `/` when `WEB_UI_DIR=web/dist`, mounted after every `/api` route: one origin again. The Docker image does this.
 
 ## Layout
 

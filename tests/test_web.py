@@ -378,6 +378,51 @@ def test_the_core_imports_without_the_web_extra() -> None:
     assert done.returncode == 0, done.stderr.decode()
 
 
+def test_the_container_opt_in_lets_the_dev_identity_bind_any_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Docker publishes only a 0.0.0.0 listener; the README maps it to the host's loopback."""
+    import agent.composition
+
+    class Built(Exception):
+        pass
+
+    def built(_: Settings) -> None:
+        raise Built  # past the host check; the adapters are not under test here
+
+    monkeypatch.setattr(agent.composition, "_build_app", built)
+    models = ModelSettings(router="m", analyst="m", _env_file=None)  # pyright: ignore[reportCallIssue]
+    settings = Settings(
+        models=models,
+        web_dev_identity=True,
+        web_dev_identity_any_host=True,
+        _env_file=None,  # pyright: ignore[reportCallIssue]
+    )
+
+    with pytest.raises(Built):
+        build_web(settings, host="0.0.0.0")
+
+
+def test_the_built_ui_is_served_next_to_the_api(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text("<div id=root></div>")
+    ports = fake_ports(MANAGER_A)
+    app = create_app(
+        chat_service(ports)[0], Views(ports, LIMITS), ports.tracer, dev_users=None, ui_dir=tmp_path
+    )
+    web = TestClient(app)
+
+    assert web.get("/").text == "<div id=root></div>"
+    assert web.get("/api/reports").status_code == 401  # the API still answers first
+
+
+def test_a_ui_dir_with_no_build_refuses_to_start(tmp_path: Path) -> None:
+    models = ModelSettings(router="m", analyst="m", _env_file=None)  # pyright: ignore[reportCallIssue]
+    settings = Settings(models=models, web_ui_dir=tmp_path, _env_file=None)  # pyright: ignore[reportCallIssue]
+
+    with pytest.raises(ValueError, match="pnpm --dir web build"):
+        build_web(settings, host="127.0.0.1")
+
+
 def test_the_dev_identity_refuses_to_start_off_loopback() -> None:
     models = ModelSettings(router="m", analyst="m", _env_file=None)  # pyright: ignore[reportCallIssue]
     settings = Settings(models=models, web_dev_identity=True, _env_file=None)  # pyright: ignore[reportCallIssue]
