@@ -10,7 +10,7 @@
 ## Commands
 
 ```
-make eval                                # all 55 cases, about 15 min on the free tier
+make eval                                # all 56 cases, about 15 min on the free tier
 make eval ARGS="--suite safety"          # one suite: correctness, safety, session or step
 make eval ARGS="--suite step"            # router + Trio retrieval only, no BigQuery, ~2.5 min
 make eval ARGS="--case other-managers-brand --trials 3"   # one case (repeatable)
@@ -25,7 +25,7 @@ make eval ARGS="--no-trios"              # without Golden Trios (the Golden Buck
 | correctness | the answer's numbers match those of a reference query | 14 (one is the negative control, which must fail) |
 | safety | refusals: other Brands, PII, destructive SQL, full dumps, injection | 7 |
 | session | deleting Saved Reports deletes exactly the right ones | 3 |
-| step | the router alone (verdict, action, standalone follow-up question) and Trio retrieval alone (recall@3, scope) | 31 (11 router, 20 retrieval) |
+| step | the router alone (verdict, action, standalone follow-up question) and Trio retrieval alone (recall@3, scope) | 32 (12 router, 20 retrieval) |
 
 `--case` and `--category` narrow a run and combine with `--suite`; a correctness case brings the negative control along. A subset run can be compared with a full run, never the other way round.
 

@@ -14,7 +14,7 @@ Every area gets a **check**, but not every check is an eval. A plain test fits w
 | Safety against attacks (Req 2) | yes | **safety** suite, per attack class | refusal class, PII scan, scope, no write | ✅ 7 cases |
 | Delete flow end to end (Req 3) | yes | **session** suite, multi-turn | store state afterwards | ✅ 3 cases |
 | Golden Bucket value (Req 1) | yes | correctness with `--no-trios` | same as correctness | ✅ one flag |
-| Router and Trio retrieval on their own | yes | **step** suite ([Per-step evals](#per-step-evals)) | router: field match; retrieval: recall@3 and scope | ✅ 11 router + 20 retrieval cases |
+| Router and Trio retrieval on their own | yes | **step** suite ([Per-step evals](#per-step-evals)) | router: field match; retrieval: recall@3 and scope | ✅ 12 router + 20 retrieval cases |
 | Other model steps on their own (analyst, judge, Persona gate, …) | yes | **step** suite | field-by-field match on structured output | later |
 | Persona changes (Req 8) | yes | the Persona Quality Gate itself; its own test: known-bad Personas must fail | five checks | slice 7 |
 | User Profile applied (Req 4) | yes | correctness case with a stored preference | code: answer has a table | later |
@@ -44,7 +44,7 @@ One YAML file per case, `evals/cases/<suite>/<case_id>.yaml`, validated against 
 | `ExpectStep(step, expected)` | step | One model call; the listed fields must match (`search_question_contains`: the search question holds each listed entity). |
 | `ExpectRetrieval(must_include, must_exclude, k=3)` | step | One `TrioRetriever.search` as the User: recall@k over `must_include`, and every Trio returned in scope. |
 
-The end-to-end fixture has 24 cases, every reference query checked against `thelook` on 2026-11-15 or, for the last four correctness cases, 2026-11-16 (the 31 step cases are in [Per-step evals](#per-step-evals)):
+The end-to-end fixture has 24 cases, every reference query checked against `thelook` on 2026-11-15 or, for the last four correctness cases, 2026-11-16 (the 32 step cases are in [Per-step evals](#per-step-evals)):
 
 | Suite | Cases |
 |---|---|
@@ -121,9 +121,9 @@ When a correctness case fails, the end-to-end grade cannot say whether the route
 
 - **Scope.** `in_scope` fails when a returned Trio is a `must_exclude` one, belongs to another Manager, is an `all_brands` Trio for a Manager, or is not in the seed. The Trio scopes come from `seed/trios/` (`composition.seed_trio_scopes`), not from the retriever's own account. One leak on any trial makes the run **FAIL**, after the safety and session rule (rule 7 of the pre-registration).
 - **Accuracy.** The scorecard reports pass rates per step category and `recall@3` (expected Trios found over every trial), each with a Wilson interval (`SuiteSummary.metrics`). A step case that passed on the baseline and passes no trial now is a regression, as for correctness; before a baseline, step accuracy is reported, not gated.
-- **The fixture.** 11 router cases cover every `Verdict`, every `Action` and three follow-ups that need a standalone rewrite. 20 retrieval cases are paraphrases that are not in the index, spread over the CEO, manager-a and manager-b. They include scope probes (a Manager asking what another Manager's or an `all_brands` Trio answers: nothing may come back) and unrelated questions, which pass only when nothing scores above `trio_min_score`. The suite measures the threshold and the embedding model; it does not tune them.
+- **The fixture.** 12 router cases cover every `Verdict`, every `Action`, three follow-ups that need a standalone rewrite, and a ranking of Customers by ID that must stay `allowed`. 20 retrieval cases are paraphrases that are not in the index, spread over the CEO, manager-a and manager-b. They include scope probes (a Manager asking what another Manager's or an `all_brands` Trio answers: nothing may come back) and unrelated questions, which pass only when nothing scores above `trio_min_score`. The suite measures the threshold and the embedding model; it does not tune them.
 - **Selecting cases.** `--case <id>` (repeatable) and `--category <name>` narrow a run, combined with `--suite` (`runner.select_cases`). A selection holding a correctness case brings the negative control along. An unknown ID or category exits 2 with a message. A subset run has the same fixture hash as a full run, so it can use a full run as its baseline and compares only the cases it ran. The reverse never happens: a baseline must have run every correctness and step case of the new run (`scorecard.comparable`). The automatic lookup (`ScorecardSink.baseline(..., covering=...)`) skips passing runs that did not, so a later `--suite step` or `--case` run never hides an earlier full baseline.
-- **Cost and time.** One Flash-Lite call per router case, one embedding call per retrieval case (plus one batch for the seed Trios' vectors on a fresh store). At the free-tier limiter (10 requests a minute per model, burst 2) the 31 cases take about 2.5 minutes.
+- **Cost and time.** One Flash-Lite call per router case, one embedding call per retrieval case (plus one batch for the seed Trios' vectors on a fresh store). At the free-tier limiter (10 requests a minute per model, burst 2) the 32 cases take about 2.5 minutes.
 
 ## Phoenix
 
