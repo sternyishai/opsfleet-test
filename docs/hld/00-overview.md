@@ -34,14 +34,14 @@ Two companion views are in [01](01-architecture.md): the [agent flow](01-archite
 
 | # | Requirement | How it is met (one line) | Detail | Prototype |
 |---|---|---|---|:---:|
-| 1 | Hybrid Intelligence | Figure-stripped Trios in pgvector, retrieved for every analysis question by a fixed graph step, with `search_golden_trios` for re-search. Grown through analyst-approved Trio Candidates. | [02](02-hybrid-intelligence.md) | — (stretch) |
+| 1 | Hybrid Intelligence | Figure-stripped Trios in pgvector, retrieved for every analysis question by a fixed graph step, with `search_golden_trios` for re-search. Grown through analyst-approved Trio Candidates. | [02](02-hybrid-intelligence.md) | partial |
 | 2 | Safety & PII | Input guard, an AST query guard that forces Brand scope, a PII-free schema, an output PII filter and a least-privilege account. | [03](03-safety-and-pii.md) | ✅ |
 | 3 | Destructive ops | A deterministic delete branch: Deletion Plan, then `interrupt()`, then deletion of confirmed IDs only. Hard delete and audit row in one transaction. | [04](04-destructive-ops.md) | ✅ |
-| 4 | Continuous Improvement | A structured User Profile (explicit, then inferred). System learning through aggregation, analyst review and an eval gate. | [05](05-learning-loop.md) | — |
+| 4 | Continuous Improvement | A structured User Profile (explicit, then inferred). System learning through aggregation, analyst review and an eval gate. | [05](05-learning-loop.md) | partial |
 | 5 | Resilience | Dry run, then bounded retries, then one empty-result diagnosis, then a graceful answer. Timeouts, backoff, model fallback and circuit breakers. | [06](06-resilience.md) | ✅ |
 | 6 | Quality Assurance | Three offline suites (correctness, a safety red team gated at 100%, UX). Online LLM-judge sampling and canaries. | [07](07-quality-assurance.md) | partial |
 | 7 | Observability | OpenTelemetry spans per node and tool. Quality, safety, cost and reliability metrics. SLOs with alerts. | [08](08-observability.md) | ✅ |
-| 8 | Persona Management | Only the CEO changes the Persona, in chat or by direct edit. An automated quality gate, no manual approval, versioned in Postgres, live within ~60 s. No redeploy. | [09](09-persona-management.md) | — (stretch) |
+| 8 | Persona Management | Only the CEO changes the Persona, in chat or by direct edit. An automated quality gate, no manual approval, versioned in Postgres, live within ~60 s. No redeploy. | [09](09-persona-management.md) | ✅ |
 
 ## Key decisions
 
@@ -67,7 +67,7 @@ Smaller decisions are explained in the section they affect.
 | Identity | Seeded Users in `seed/users.yaml` | SSO identity mapped to roles and Brand Assignments |
 | Analytics data | `bigquery-public-data.thelook_ecommerce` | Our own copy with row access policies and column-level security |
 | App state | SQLite | Cloud SQL Postgres + pgvector |
-| Golden Bucket | 5–10 hand-written seed Trios (stretch) | GCS, then an ingestion job, then pgvector, with analyst approval |
+| Golden Bucket | 5 hand-written seed Trios in SQLite with Gemini embeddings, no ingestion job | GCS, then an ingestion job, then pgvector, with analyst approval |
 | Persona | Chat or `/persona edit`, quality gate, versions in SQLite, read every turn; `persona.yaml` is version 1 | Chat or Admin UI, quality gate, versions in Postgres, ~60 s cache |
 | Observability | JSONL traces, `/trace`, `/stats`, optional local Phoenix | OTel to self-hosted Phoenix or Langfuse, plus Cloud Monitoring and SLO alerts |
 | Models | Gemini Flash (free-tier limits) | Tiered Gemini (Flash-Lite, Flash, Pro), with a fallback provider |

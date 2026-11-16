@@ -130,9 +130,10 @@ stateDiagram-v2
 
 ## In the prototype
 
-Hybrid Intelligence is design-only in the assignment. The prototype includes a **stretch** slice, cut first if time runs short:
-- 5–10 hand-written seed Trios in `seed/trios/`, already in stored form (question, paraphrases, SQL, method summary with results removed, parameters, Brands);
+Hybrid Intelligence is design-only in the assignment. The prototype implements the query-time half:
+- 5 hand-written seed Trios in `seed/trios/`, already in stored form (question, paraphrases, SQL, method summary with results removed, parameters, Brands);
 - embeddings from the Gemini embedding model, stored in SQLite and searched by cosine similarity in Python, with the same Brand filter and threshold;
-- the `retrieve_trios` node and the `search_golden_trios` tool, both behind the `TrioRetriever` port, so the production pgvector adapter replaces it without touching the agent. If the slice is cut, the node calls an adapter that returns nothing, and the graph stays the same.
+- the `retrieve_trios` node and the `search_golden_trios` tool, both behind the `TrioRetriever` port, so the production pgvector adapter replaces it without touching the agent. `agent eval --no-trios` swaps in an adapter that returns nothing, with the graph unchanged, to measure what the Trios add;
+- step evals for retrieval (recall@3 over 20 cases, including unrelated questions that must retrieve nothing and Managers who must not see another Brand's Trio).
 
 There is no ingestion job, keyword search or Candidate pipeline in the prototype.

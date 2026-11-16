@@ -14,6 +14,7 @@ Every assumption the design rests on, every point the client has already confirm
 | 2026-11-12 | Prototype observability: agent-level metrics plus local tracing for deep dives; production tooling is described in the HLD. | [08](08-observability.md) |
 | 2026-11-12 | Persona changes: a non-technical User such as the CEO updates the agent's instructions without editing code and without a redeploy. The mechanism is ours to choose. Every change passes an automated quality gate before it goes live, with no manual approval step. | [09](09-persona-management.md) |
 | 2026-11-12 | Data is out of scope for the agent: another team owns ETL, modeling and connectors. The agent only reads, and writes only its own state. | [01](01-architecture.md#where-data-lives-and-how-it-is-handled) |
+| 2026-11-16 | Setup tooling is our choice: a `requirements.txt` is not required; a uv project or Docker is fine. What matters is a README with clear, accurate setup instructions and an example run, so the team can run it on another machine with their own credentials. | [README](../../README.md) |
 
 ## Assumptions
 

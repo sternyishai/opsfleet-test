@@ -185,7 +185,7 @@ The data-access layers (input guard, query guard, row and column security, least
 
 Operations are design-only. The prototype runs on a laptop or in a container:
 
-- `uv sync && uv run agent chat`, or the multi-arch Docker image, with Google credentials from a mounted ADC file; compose adds the optional Phoenix container;
+- `uv sync && uv run agent chat --as <id>` (or `agent web`), or the Docker image, with Google credentials from a mounted ADC file; Phoenix runs next to it on the host;
 - SQLite for all app state, Gemini on the Google AI Studio free tier with a client-side rate limiter sized to its limits, `bigquery-public-data.thelook_ecommerce` read with the developer's own credentials;
 - of the cost controls, only the per-query bytes cap and the per-turn ceilings (retries, steps, deadline);
 - per-turn latency and outcome in the JSONL traces, which are the data behind the SLOs and the cost estimate above.

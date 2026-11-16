@@ -105,8 +105,8 @@ The findings report covers new topics, recurring SQL errors, low-satisfaction ar
 
 ## In the prototype
 
-Continuous Improvement is design-only in the assignment. The prototype lays the groundwork and adds one **stretch** slice, after Golden Trios:
+Continuous Improvement is design-only in the assignment. The prototype implements the explicit half of the user level:
 
-- **Already in the prototype:** the router extracts preference statements on every turn, and every turn is written to the JSONL traces, which are the raw material for the system loop.
-- **Stretch:** standing preferences are saved as **notes** in SQLite behind the `ProfileStore` port and injected into the next turn's prompt; `/profile` shows and clears them.
-- **Not in the prototype:** inference, aggregation and the review tooling.
+- **Groundwork:** the router extracts preference statements on every turn, and every turn is written to the JSONL traces, which are the raw material for the system loop.
+- **User Profile notes:** standing preferences ("always give me tables") are saved as **notes** in SQLite behind the `ProfileStore` port and injected into the next turn's prompt; `/profile` shows and clears them.
+- **Not in the prototype:** preferences inferred from behavior, and the system loop's aggregation and review tooling.

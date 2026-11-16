@@ -118,7 +118,7 @@ Every publish, rejection and rollback records who, when, which path and what cha
 
 ## In the prototype
 
-Persona management is design-only in the assignment. The prototype has a **stretch** slice with both paths, the permission check and the gate:
+Persona management is design-only in the assignment. The prototype implements both paths, the permission check and the gate:
 
 **In chat**, as the CEO:
 

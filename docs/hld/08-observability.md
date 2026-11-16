@@ -125,7 +125,7 @@ turn 7f3a91  analysis  14.2 s  1,840 tokens  ok
 └─ output PII filter      0 hits
 ```
 
-- **Optional Arize Phoenix.** The same OpenTelemetry/OpenInference spans go to Phoenix when it is running (`uvx arize-phoenix serve`, or one container in compose), and `make eval` pushes its scorecard to Phoenix experiments. Phoenix was picked for the reviewer experience: one process on SQLite, no sign-up, and it covers traces, datasets and experiments. Langfuse was the first candidate, but self-hosting it takes about six containers.
+- **Optional Arize Phoenix.** The same OpenTelemetry/OpenInference spans go to Phoenix when it is running (`uvx arize-phoenix serve`), and `make eval` pushes its scorecard to Phoenix experiments. Phoenix was picked for the reviewer experience: one process on SQLite, no sign-up, and it covers traces, datasets and experiments. Langfuse was the first candidate, but self-hosting it takes about six containers.
 - **Agent-level metrics: `/stats`.** A CLI command (also `uv run agent stats --as ceo --since 7d` outside the chat; Executives only, since it spans every User) reads the JSONL traces and prints the metric families above, so the prototype answers "is the agent failing, and where?" without any dashboard:
 
 ```text
