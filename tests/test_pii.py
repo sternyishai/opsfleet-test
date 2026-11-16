@@ -57,6 +57,10 @@ CEO = UserContext(user_id="ceo", role=Role.EXECUTIVE, access_version=1)
             PiiType.POSTAL_CODE,
             "San Francisco, CA [REDACTED:postal_code]",
         ),
+        ("Boise, ID 83702", PiiType.POSTAL_CODE, "Boise, ID [REDACTED:postal_code]"),
+        ("St. Louis,MO 63101", PiiType.POSTAL_CODE, "St. Louis,MO [REDACTED:postal_code]"),
+        ("Lakewood, NJ 8701", PiiType.POSTAL_CODE, "Lakewood, NJ [REDACTED:postal_code]"),
+        ("Boise, ID 48213-1234", PiiType.POSTAL_CODE, "Boise, ID [REDACTED:postal_code]"),
         ("London SW1A 1AA", PiiType.POSTAL_CODE, "London [REDACTED:postal_code]"),
         ("Toronto M5V 3L9", PiiType.POSTAL_CODE, "Toronto [REDACTED:postal_code]"),
         ("at 37.774929, -122.419418", PiiType.COORDINATES, "at [REDACTED:coordinates]"),
@@ -82,6 +86,11 @@ def test_each_detector_redacts_with_its_type(text: str, kind: PiiType, redacted:
         "Return rate 0.1234 in Q3, ratio 12.3456, 7.8901.",
         "SKU EBD58B8A3F1D72F4206201DA62FB1204 in Jeans, distribution center 3.",
         "California 12,345 Customers; Texas 9,876.",
+        "Customer ID 48213 spent $1,020.50.",
+        "Top Customers: ID 48213, ID 99871, ID 10442.",
+        "Customer 1: $1,020.50, ID 48213; Customer 2: 14 orders, ID 99871.",
+        "ID 48213 returned 3 items (OK 12345 of them were Jeans, OR 23456 in Tops).",
+        "Calvin Klein, ID 48213 spent $1,020.50; Levi's, ID 8370 spent $987.10.",
     ],
 )
 def test_analysis_figures_are_not_hits(text: str) -> None:
