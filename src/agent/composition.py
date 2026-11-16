@@ -175,19 +175,25 @@ DEV_IDENTITY_HOST = "127.0.0.1"
 def build_web(settings: Settings, *, host: str) -> "FastAPI":
     """The web channel over the same ``ChatService`` and ``Views`` as the CLI (needs the
     ``web`` extra). The dev identity is served only when ``WEB_DEV_IDENTITY`` is on and the
-    server is bound to ``127.0.0.1``; on any other host it refuses to start (ValueError)."""
+    server is bound to ``127.0.0.1`` (or ``WEB_DEV_IDENTITY_ANY_HOST``, for a container
+    published on the host's loopback); on any other host it refuses to start (ValueError), as
+    it does when ``WEB_UI_DIR`` names no built UI."""
     from agent.adapters.users_sqlite import SqliteUserDirectory
     from agent.adapters.web import create_app
 
-    if settings.web_dev_identity and host != DEV_IDENTITY_HOST:
+    loopback_only = not settings.web_dev_identity_any_host
+    if settings.web_dev_identity and loopback_only and host != DEV_IDENTITY_HOST:
         raise ValueError(f"WEB_DEV_IDENTITY needs --host {DEV_IDENTITY_HOST}, not {host}")
+    ui = settings.web_ui_dir
+    if ui is not None and not (ui / "index.html").is_file():
+        raise ValueError(f"WEB_UI_DIR={ui} has no index.html; build it: pnpm --dir web build")
     ports, service, views = _build_app(settings)
     dev_users = None
     if settings.web_dev_identity:
         if not isinstance(ports.users, SqliteUserDirectory):  # not `assert`: -O drops it
             raise ValueError("WEB_DEV_IDENTITY needs the seeded User directory")
         dev_users = ports.users.list_dev_users
-    return create_app(service, views, ports.tracer, dev_users=dev_users)
+    return create_app(service, views, ports.tracer, dev_users=dev_users, ui_dir=settings.web_ui_dir)
 
 
 def build_cli_channel() -> "StdoutChannel":

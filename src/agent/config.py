@@ -154,6 +154,17 @@ class Settings(BaseSettings):
         "the X-Agent-User header. `agent web` refuses it unless bound to 127.0.0.1; never on "
         "in production, where IAP or the Channel Gateway's SSO sets the identity (LLD 07).",
     )
+    web_dev_identity_any_host: bool = Field(
+        default=False,
+        description="Lets the dev identity bind a host other than 127.0.0.1. Only for a "
+        "container whose port is published on the host's loopback (`docker run -p "
+        "127.0.0.1:8000:8000`): inside the container the server must listen on 0.0.0.0.",
+    )
+    web_ui_dir: Path | None = Field(
+        default=None,
+        description="The built web UI (`pnpm --dir web build` writes web/dist). `agent web` "
+        "serves it at / next to /api; unset serves the API only.",
+    )
     phoenix_endpoint: str | None = Field(
         default="http://127.0.0.1:6006",
         description="Where `uvx arize-phoenix serve` listens. Spans go there only if it "

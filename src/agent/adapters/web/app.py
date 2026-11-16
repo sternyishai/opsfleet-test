@@ -8,6 +8,7 @@ message. Identity is resolved here, before either is called, and never read from
 import threading
 from collections.abc import AsyncIterable, Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -15,6 +16,7 @@ import anyio.to_thread
 from fastapi import Body, Depends, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
+from fastapi.staticfiles import StaticFiles
 
 from agent.contracts.channel import (
     Channel,
@@ -114,11 +116,16 @@ def create_app(
     tracer: Tracer,
     *,
     dev_users: Callable[[], list[DevUser]] | None,
+    ui_dir: Path | None = None,
 ) -> FastAPI:
     """``dev_users`` is the dev identity (``WEB_DEV_IDENTITY``): the picker's list, and with
     it the ``X-Agent-User`` header is accepted. None, the default in production, refuses
     the header and serves no ``/api/dev/users``; the identity would come from IAP or the
-    Channel Gateway's SSO, which the prototype does not have, so every request is 401."""
+    Channel Gateway's SSO, which the prototype does not have, so every request is 401.
+
+    ``ui_dir`` is the built React app (``web/dist``, ``WEB_UI_DIR``), served at ``/`` next
+    to ``/api`` so one origin needs no CORS; None serves the API only (``make dev`` runs
+    Vite instead)."""
     app = FastAPI(title="Retail Analysis Assistant", responses=_ERRORS)
     app.state.dev_identity = dev_users is not None
 
@@ -235,6 +242,10 @@ def create_app(
         def users() -> list[DevUser]:
             """The seeded Users for the picker, with role and Brands from the directory."""
             return listed()
+
+    if ui_dir is not None:
+        # Mounted last: every /api route above is matched first.
+        app.mount("/", StaticFiles(directory=ui_dir, html=True), name="ui")
 
     return app
 
