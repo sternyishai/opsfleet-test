@@ -479,3 +479,13 @@ Deviations from issue #12:
 - **`/stats`**: `persona_changes` counts only the branch functions' spans with a `published` or `rolled_back` outcome (before: every span of that name, so a chat change counted twice and a rejection counted as a change); `persona_rejections` and `persona_rollbacks` are new.
 - **Review fixes to the checks** (adversarial Spec review): "figures unchanged" now needs a percentage written as one and a fall as a fall ("up 5.0%" and a bare "5" passed before); the out-of-scope case fails on a figure in words ("about two million"); "not incomplete" no longer counts as the caveat; numbered section headings count (in the eval's `SectionsPresent` too, which now shares `has_heading`). Rejection reasons in `Views` results pass the PII filter.
 - **A bare year is not a figure in the out-of-scope check** (found in the live demo): the HLD's own example ("make the reports warmer…") was rejected because correct refusals repeated "2025" from the question; 3 of 4 live answers did. Money and decimals still count ("$2,025", "2025.5 thousand"). After the fix, the full gate passed that tone twice against Gemini.
+
+## Slice 7c: User Profile notes (2026-11-16)
+
+Deviations from issue #13, approved after the code review:
+
+- **The save shares the graph step with `apply_preferences`**, so the answer waits for the write (milliseconds on SQLite). HLD 01's "adds no latency" is kept for production, where the save goes to a background task or the Worker. Saving after `respond` was rejected: a turn paused at a Deletion Plan would save only once the User answers, or never. A background thread was rejected too: the next turn could load the profile before the write lands.
+- **`/profile clear n` maps the shown number to a note ID in the CLI.** The number exists only on the CLI's screen; the web path removes a note by ID (`DELETE /api/profile/notes/{id}`, LLD 07), so `Views` keeps the ID interface.
+- **No chat path for "what are my preferences?" or "reset my preferences"**, only `/profile` (HLD 05 § In the prototype). Adding it means two router actions, a contract change in LLD 04 and new eval cases: a follow-up issue if wanted.
+- **Extracted values are filtered once, before they are applied, saved or acknowledged**: the input guard's rules again (the model wrote them) and `is_option` (a value must be one of its field's options), so the acknowledgement names nothing the merge would skip. A preference-only turn with nothing left is refused as `INJECTION`. A repeated note is kept once.
+- **`PROFILE_MAX_NOTES` is bounded at 20 by config**, matching the DDL CHECK, instead of being capped silently in the merge.
