@@ -61,6 +61,25 @@ CEO = UserContext(user_id="ceo", role=Role.EXECUTIVE, access_version=1)
         ("St. Louis,MO 63101", PiiType.POSTAL_CODE, "St. Louis,MO [REDACTED:postal_code]"),
         ("Lakewood, NJ 8701", PiiType.POSTAL_CODE, "Lakewood, NJ [REDACTED:postal_code]"),
         ("Boise, ID 48213-1234", PiiType.POSTAL_CODE, "Boise, ID [REDACTED:postal_code]"),
+        ("San José, CA 95112", PiiType.POSTAL_CODE, "San José, CA [REDACTED:postal_code]"),
+        ("Boise (Ada), ID 83702", PiiType.POSTAL_CODE, "Boise (Ada), ID [REDACTED:postal_code]"),
+        ("Boise， ID 83702", PiiType.POSTAL_CODE, "Boise， ID [REDACTED:postal_code]"),
+        (
+            "Fishers Island, NY 06390",
+            PiiType.POSTAL_CODE,
+            "Fishers Island, NY [REDACTED:postal_code]",
+        ),
+        ("Boise, Idaho 83702", PiiType.POSTAL_CODE, "Boise, Idaho [REDACTED:postal_code]"),
+        (
+            "Lakewood, New Jersey 8701",
+            PiiType.POSTAL_CODE,
+            "Lakewood, New Jersey [REDACTED:postal_code]",
+        ),
+        (
+            "Charleston, west virginia 25301",
+            PiiType.POSTAL_CODE,
+            "Charleston, west virginia [REDACTED:postal_code]",
+        ),
         ("London SW1A 1AA", PiiType.POSTAL_CODE, "London [REDACTED:postal_code]"),
         ("Toronto M5V 3L9", PiiType.POSTAL_CODE, "Toronto [REDACTED:postal_code]"),
         ("at 37.774929, -122.419418", PiiType.COORDINATES, "at [REDACTED:coordinates]"),
@@ -98,6 +117,13 @@ def test_analysis_figures_are_not_hits(text: str) -> None:
 
     assert scan.text == text
     assert scan.hits == []
+
+
+def test_a_state_after_a_redacted_street_still_marks_its_postal_code() -> None:
+    scan = PII.scan("Lives at 1019 Mitchell Street, ID 83702")
+
+    assert scan.text == "Lives at [REDACTED:street_address], ID [REDACTED:postal_code]"
+    assert scan.hits == [PiiType.STREET_ADDRESS, PiiType.POSTAL_CODE]
 
 
 def test_every_hit_is_counted_and_types_only_are_returned() -> None:
