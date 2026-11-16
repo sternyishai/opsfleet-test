@@ -72,6 +72,10 @@ The browser chat takes the same slash commands as `agent chat` (`/reports`, `/pr
 
 Every refused request has an `ApiError(message_class?, message)` body. A classified error from `Views` is its catalog message, as the CLI prints it: `PermanentError` → 403, `TransientError` → 503. A `GateCheckResult.detail` never leaves `Views`. A `ToolError` result (`Views.report`, `Views.rollback_persona`) becomes the same body (404 for `REPORT_NOT_FOUND`, 409 for `PERSONA_NOTHING_TO_ROLL_BACK`, else 403), so its `detail` never leaves the server. A missing turn is 404, a bad `/api/stats?since=` 400; request validation keeps FastAPI's 422. `PUT /api/persona` takes the changed fields as a JSON object (`{"tone.preset": "formal"}`); `Views.edit_persona` gets it as is, and a rejection is a `PersonaRejected` value (200), as in chat.
 
+## The navigator
+
+A bar over the app switches between three pages: **Prototype** (the chat above), **Diagrams** (the HLD and LLD PNGs) and **Films** (`docs/films/`). The page lives in the URL hash (`#/diagrams`), so a link opens it. The prototype is hidden, not unmounted, so a Conversation survives a look at the diagrams. [`web/src/showcase.ts`](../../web/src/showcase.ts) imports each file from `docs/`, the only copy: Vite fingerprints it into `dist/assets`, the dev server may read `../docs` (`server.fs.allow`), and the Dockerfile's web stage copies the PNGs and films in. Neither page calls the API.
+
 ## Types for the UI
 
 - FastAPI generates the OpenAPI document from the same Pydantic models. The SSE route declares `OutboundMessage` as its `text/event-stream` schema, so the event types are generated too.

@@ -7,6 +7,7 @@ A chat agent for a retail company's leadership. Executives and Managers ask ques
 - **The design** is in [docs/hld/](docs/hld/00-overview.md) (start at [00 · Overview](docs/hld/00-overview.md)), with the decisions in [docs/adr/](docs/adr/) and the terms in [GLOSSARY.md](GLOSSARY.md).
 - **The code-level design** (modules, ports, schemas, graph state, DDL) is in [docs/lld/](docs/lld/README.md).
 - **This README** covers running it: [native](#run-it-natively) or [in Docker](#run-it-in-docker), CLI or web UI.
+- **Three short films** walk through the design, under two minutes each: [Where the data goes](docs/films/sysflow.mp4), [How the agent answers a question](docs/films/agentflow.mp4) and [PII: never in, never out](docs/films/piiflow.mp4). The web UI plays them too, in its **Films** tab, next to the diagrams in **Diagrams**.
 
 ## Contents
 
@@ -83,7 +84,7 @@ The first start creates `data/app.db` (Users, Saved Reports, Persona, profiles, 
 make web                        # builds web/, then serves http://127.0.0.1:8000; PORT=8080 if 8000 is taken
 ```
 
-Pick a User in the left panel and ask. For UI development, `make dev` runs the API and the Vite dev server with hot reload on http://localhost:5173.
+Pick a User in the left panel and ask. The bar at the top switches to **Diagrams** (the HLD and LLD diagrams) and **Films** (the three design films); a conversation in progress stays where it was. For UI development, `make dev` runs the API and the Vite dev server with hot reload on http://localhost:5173.
 
 The picker (`WEB_DEV_IDENTITY=true`) is a development stand-in for single sign-on. `agent web` refuses to start with it on any host but `127.0.0.1` ([LLD 07](docs/lld/07-web.md#identity)).
 
