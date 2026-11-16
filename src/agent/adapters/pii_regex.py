@@ -2,13 +2,14 @@
 fallback behind Sensitive Data Protection.
 
 Tuned against what an answer is made of: money with thousands separators, percentages, dates,
-5-digit Customer IDs, SKUs. So a bare 5-digit number is never a postal code on its own; it
-needs a label ("ZIP"), the ZIP+4 form, or a US state code in address form: after a word and a
-comma, with a code in that state's ZIP range ("Boise, ID 83702"), 4 digits included: the
-warehouse stores ZIPs as integers, so "Lakewood, NJ 8701" lost its zero. A state code alone is not
-enough, since "ID", "OK" and "OR" are words too: "Customer ID 48213" is a Customer, and so is
-"Calvin Klein, ID 48213" (482 is a Michigan prefix, not Idaho's). Bare coordinate pairs need five
-decimals, which no figure the analyst writes has.
+5-digit Customer IDs, SKUs. So a bare 5-digit number is never a postal code on its own. It
+needs a label ("ZIP"), the ZIP+4 form, or a US state in address form: a word, a comma, the state
+(code or name), then a code in that state's ZIP range ("Boise, ID 83702", "Boise, Idaho 83702").
+
+A state code alone is not enough, since "ID", "OK" and "OR" are words too: "Customer ID 48213" is
+a Customer, and so is "Calvin Klein, ID 48213" (482 is a Michigan prefix, not Idaho's). After a
+state, 4 digits count too: the warehouse stores ZIPs as integers, so "Lakewood, NJ 8701" lost its
+leading zero. Bare coordinate pairs need five decimals, which no figure the analyst writes has.
 """
 
 import re
@@ -25,7 +26,8 @@ _ZIP_PREFIXES: dict[str, tuple[tuple[int, int], ...]] = {
     "ME": ((39, 49),), "MD": ((206, 219),), "MA": ((10, 27), (55, 55)), "MI": ((480, 499),),
     "MN": ((550, 567),), "MS": ((386, 397),), "MO": ((630, 658),), "MT": ((590, 599),),
     "NE": ((680, 693),), "NV": ((889, 898),), "NH": ((30, 38),), "NJ": ((70, 89),),
-    "NM": ((870, 884),), "NY": ((5, 5), (100, 149)), "NC": ((270, 289),), "ND": ((580, 588),),
+    "NM": ((870, 884),), "NY": ((5, 5), (63, 63), (100, 149)), "NC": ((270, 289),),
+    "ND": ((580, 588),),
     "OH": ((430, 459),), "OK": ((730, 749),), "OR": ((970, 979),), "PA": ((150, 196),),
     "RI": ((28, 29),), "SC": ((290, 299),), "SD": ((570, 577),), "TN": ((370, 385),),
     "TX": ((733, 733), (750, 799), (885, 885)), "UT": ((840, 847),), "VT": ((50, 59),),
@@ -33,10 +35,33 @@ _ZIP_PREFIXES: dict[str, tuple[tuple[int, int], ...]] = {
     "WI": ((530, 549),), "WY": ((820, 831),),
 }  # fmt: skip
 """First three ZIP digits each state's codes start with (USPS ranges, widened over gaps)."""
+_STATE_NAMES: dict[str, str] = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR", "california": "CA",
+    "colorado": "CO", "connecticut": "CT", "delaware": "DE", "district of columbia": "DC",
+    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID", "illinois": "IL",
+    "indiana": "IN", "iowa": "IA", "kansas": "KS", "kentucky": "KY", "louisiana": "LA",
+    "maine": "ME", "maryland": "MD", "massachusetts": "MA", "michigan": "MI", "minnesota": "MN",
+    "mississippi": "MS", "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+    "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK", "oregon": "OR",
+    "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC", "south dakota": "SD",
+    "tennessee": "TN", "texas": "TX", "utah": "UT", "vermont": "VT", "virginia": "VA",
+    "washington": "WA", "west virginia": "WV", "wisconsin": "WI", "wyoming": "WY",
+}  # fmt: skip
+"""Full state names, lowercased, to their codes: the warehouse stores `state` as a name."""
 _STREET_SUFFIX = (
     "Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl|"
     "Terrace|Parkway|Pkwy|Circle|Cir|Highway|Hwy"
 )
+
+_STATE_ALTERNATION = "|".join(
+    [*_ZIP_PREFIXES]
+    + [
+        "(?i:" + r"\s+".join(name.split()) + ")"
+        for name in sorted(_STATE_NAMES, key=len, reverse=True)
+    ]
+)
+"""Codes are case-sensitive ("or", "me" and "in" are words); names are not."""
 
 _DETECTORS: list[tuple[PiiType, re.Pattern[str]]] = [
     (PiiType.EMAIL, re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
@@ -64,7 +89,9 @@ _DETECTORS: list[tuple[PiiType, re.Pattern[str]]] = [
         PiiType.POSTAL_CODE,
         re.compile(
             r"(?:(?i:\b(?:zip(?:\s*code)?|postal\s*code|postcode)\b)\s*[:#]?\s*"
-            rf"|(?<=[A-Za-z]),\s*(?P<state>{'|'.join(_ZIP_PREFIXES)})\s+)"
+            # Address form: a letter, ")" or "." (or a redaction tag's "]") before the comma.
+            rf"|(?:(?<=[^\W\d_])|(?<=[.)\]]))\s*[,，]\s*(?P<state>{_STATE_ALTERNATION})\s+)"
+            # After a state, 4 digits too (a ZIP stored as an integer); after a label, 5.
             r"(?P<code>(?(state)\d{4,5}|\d{5})(?:-\d{4})?)\b"
             r"|(?P<zip4>\b\d{5}-\d{4}\b)"
             r"|(?P<uk>\b[A-Z]{1,2}\d[A-Z\d]?\s+\d[A-Z]{2}\b)"
@@ -91,6 +118,7 @@ def _redact(kind: PiiType, hits: list[PiiType]) -> Callable[[re.Match[str]], str
     def replace(match: re.Match[str]) -> str:
         groups = match.groupdict()
         code, state = groups.get("code"), groups.get("state")
+        # A ZIP+4 this branch consumed is never rescanned by the zip4 branch, so it is redacted.
         if state and code and "-" not in code and not _in_state(state, code):
             return match.group()
         hits.append(kind)
@@ -104,5 +132,6 @@ def _redact(kind: PiiType, hits: list[PiiType]) -> Callable[[re.Match[str]], str
 
 
 def _in_state(state: str, code: str) -> bool:
+    abbreviation = _STATE_NAMES.get(" ".join(state.lower().split()), state)
     prefix = int(code.zfill(5)[:3])
-    return any(low <= prefix <= high for low, high in _ZIP_PREFIXES[state])
+    return any(low <= prefix <= high for low, high in _ZIP_PREFIXES[abbreviation])
