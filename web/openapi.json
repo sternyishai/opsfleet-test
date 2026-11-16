@@ -1,0 +1,2957 @@
+{
+  "components": {
+    "schemas": {
+      "AgentReply": {
+        "description": "The final message of a turn.",
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "data_as_of": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data As Of"
+          },
+          "kind": {
+            "const": "reply",
+            "default": "reply",
+            "title": "Kind",
+            "type": "string"
+          },
+          "markdown": {
+            "title": "Markdown",
+            "type": "string"
+          },
+          "message_class": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MessageClass"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when the reply is a catalog message (refusal or error)."
+          },
+          "sent_at": {
+            "format": "date-time",
+            "title": "Sent At",
+            "type": "string"
+          },
+          "trace_id": {
+            "description": "Also the reference ID shown with errors.",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "trace_id",
+          "sent_at",
+          "markdown"
+        ],
+        "title": "AgentReply",
+        "type": "object"
+      },
+      "AnswerFormat": {
+        "enum": [
+          "table",
+          "bullets",
+          "prose"
+        ],
+        "title": "AnswerFormat",
+        "type": "string"
+      },
+      "ApiError": {
+        "description": "The body of every refused request. A refused view carries its catalog message, as the\nCLI prints it; a request with no identity, a missing turn or a bad window has none.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "message_class": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MessageClass"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "Brand": {
+        "type": "string"
+      },
+      "BrandScope": {
+        "description": "The Brands a query or a Trio may touch.\n\n``all_brands=True`` is an Executive's scope; otherwise ``brands`` is the exact set.\nAn empty Manager scope is legal and means \"no data\" (default deny).",
+        "properties": {
+          "all_brands": {
+            "default": false,
+            "title": "All Brands",
+            "type": "boolean"
+          },
+          "brands": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Brand"
+            },
+            "title": "Brands",
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "title": "BrandScope",
+        "type": "object"
+      },
+      "Charts": {
+        "enum": [
+          "never",
+          "when_helpful",
+          "always"
+        ],
+        "title": "Charts",
+        "type": "string"
+      },
+      "ConfirmationItem": {
+        "properties": {
+          "index": {
+            "minimum": 1.0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "index",
+          "label"
+        ],
+        "title": "ConfirmationItem",
+        "type": "object"
+      },
+      "ConfirmationRequest": {
+        "description": "The graph is paused at ``interrupt()``. Today only the Deletion Plan uses it.",
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "items": {
+            "description": "At most the first 20.",
+            "items": {
+              "$ref": "#/components/schemas/ConfirmationItem"
+            },
+            "maxItems": 20,
+            "title": "Items",
+            "type": "array"
+          },
+          "kind": {
+            "const": "confirmation",
+            "default": "confirmation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "request_id": {
+            "description": "The Deletion Plan ID.",
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "require_count": {
+            "description": "Large plan: confirming all needs the count (\"yes, delete all 37\").",
+            "title": "Require Count",
+            "type": "boolean"
+          },
+          "sent_at": {
+            "format": "date-time",
+            "title": "Sent At",
+            "type": "string"
+          },
+          "text": {
+            "description": "Intro and how to answer.",
+            "title": "Text",
+            "type": "string"
+          },
+          "total": {
+            "minimum": 1.0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "trace_id": {
+            "description": "Also the reference ID shown with errors.",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "trace_id",
+          "sent_at",
+          "request_id",
+          "text",
+          "items",
+          "total",
+          "require_count"
+        ],
+        "title": "ConfirmationRequest",
+        "type": "object"
+      },
+      "ConversationId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "Depth": {
+        "enum": [
+          "headline",
+          "standard",
+          "deep_dive"
+        ],
+        "title": "Depth",
+        "type": "string"
+      },
+      "DevUser": {
+        "description": "One seeded User for the prototype's identity picker. Never served in production.",
+        "properties": {
+          "brands": {
+            "description": "Brand Assignments; empty for an Executive (all).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Brands",
+            "type": "array"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        },
+        "required": [
+          "user_id",
+          "role",
+          "brands"
+        ],
+        "title": "DevUser",
+        "type": "object"
+      },
+      "GateCheck": {
+        "description": "The five checks, in the order they run. Cheap code checks first.",
+        "enum": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "title": "GateCheck",
+        "type": "integer"
+      },
+      "GateCheckResult": {
+        "properties": {
+          "check": {
+            "$ref": "#/components/schemas/GateCheck"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For the trace only.",
+            "title": "Detail"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Plain words, with a hint, on failure.",
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "check",
+          "passed"
+        ],
+        "title": "GateCheckResult",
+        "type": "object"
+      },
+      "GetReportOk": {
+        "properties": {
+          "label": {
+            "description": "\"data as of <saved date>\"",
+            "title": "Label",
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/components/schemas/SavedReport"
+          },
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report",
+          "label"
+        ],
+        "title": "GetReportOk",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ListReportsOutput": {
+        "properties": {
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/ReportListItem"
+            },
+            "title": "Reports",
+            "type": "array"
+          },
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reports",
+          "total"
+        ],
+        "title": "ListReportsOutput",
+        "type": "object"
+      },
+      "MessageClass": {
+        "description": "Keys of the message catalog. Each maps to one plain-language message with a next step.",
+        "enum": [
+          "data_source_down",
+          "model_busy",
+          "self_correction_exhausted",
+          "query_too_large",
+          "out_of_scope",
+          "quota_reached",
+          "unavailable",
+          "unclassified",
+          "off_topic",
+          "pii_request",
+          "injection",
+          "no_role",
+          "persona_forbidden",
+          "persona_gate_failed",
+          "persona_nothing_to_roll_back",
+          "nothing_matched",
+          "plan_expired",
+          "plan_answer_invalid",
+          "report_not_found",
+          "report_out_of_scope",
+          "stats_forbidden"
+        ],
+        "title": "MessageClass",
+        "type": "string"
+      },
+      "OutboundMessage": {
+        "discriminator": {
+          "mapping": {
+            "confirmation": "#/components/schemas/ConfirmationRequest",
+            "progress": "#/components/schemas/ProgressEvent",
+            "reply": "#/components/schemas/AgentReply"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ProgressEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ConfirmationRequest"
+          },
+          {
+            "$ref": "#/components/schemas/AgentReply"
+          }
+        ]
+      },
+      "Persona": {
+        "description": "The editable layer of the prompt. Locked layers (safety rules, tool and output contracts)\nlive in code and cannot be overridden by anything here.",
+        "properties": {
+          "emphasis": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Emphasis",
+            "type": "string"
+          },
+          "examples": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "Examples",
+            "type": "array"
+          },
+          "messages": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Catalog wording overrides. Missing classes use the bundled wording.",
+            "propertyNames": {
+              "$ref": "#/components/schemas/MessageClass"
+            },
+            "title": "Messages",
+            "type": "object"
+          },
+          "report_sections": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Report Sections",
+            "type": "array"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/Tone"
+          },
+          "vocabulary": {
+            "$ref": "#/components/schemas/Vocabulary"
+          }
+        },
+        "required": [
+          "tone",
+          "report_sections"
+        ],
+        "title": "Persona",
+        "type": "object"
+      },
+      "PersonaGateResult": {
+        "description": "Pass or fail, and the result and reason of each check that ran.\n\nChecks stop at the first failure, so a failed result may list fewer than five checks.",
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/GateCheckResult"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "could_not_run": {
+            "default": false,
+            "description": "The gate could not run (e.g. model down): fail closed.",
+            "title": "Could Not Run",
+            "type": "boolean"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "passed",
+          "checks"
+        ],
+        "title": "PersonaGateResult",
+        "type": "object"
+      },
+      "PersonaPath": {
+        "enum": [
+          "seed",
+          "chat",
+          "direct_edit"
+        ],
+        "title": "PersonaPath",
+        "type": "string"
+      },
+      "PersonaPublished": {
+        "properties": {
+          "active": {
+            "$ref": "#/components/schemas/PersonaVersion"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/PersonaGateResult"
+          },
+          "previous_version": {
+            "title": "Previous Version",
+            "type": "integer"
+          },
+          "status": {
+            "const": "published",
+            "default": "published",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "active",
+          "previous_version",
+          "gate"
+        ],
+        "title": "PersonaPublished",
+        "type": "object"
+      },
+      "PersonaRejected": {
+        "properties": {
+          "current_version": {
+            "title": "Current Version",
+            "type": "integer"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/PersonaGateResult"
+          },
+          "message_class": {
+            "$ref": "#/components/schemas/MessageClass",
+            "description": "PERSONA_GATE_FAILED, or MODEL_BUSY when the gate could not run."
+          },
+          "status": {
+            "const": "rejected",
+            "default": "rejected",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gate",
+          "current_version",
+          "message_class"
+        ],
+        "title": "PersonaRejected",
+        "type": "object"
+      },
+      "PersonaRolledBack": {
+        "properties": {
+          "active": {
+            "$ref": "#/components/schemas/PersonaVersion"
+          },
+          "from_version": {
+            "title": "From Version",
+            "type": "integer"
+          },
+          "status": {
+            "const": "rolled_back",
+            "default": "rolled_back",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "active",
+          "from_version"
+        ],
+        "title": "PersonaRolledBack",
+        "type": "object"
+      },
+      "PersonaVersion": {
+        "properties": {
+          "changed_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Fields",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserId"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None for the seed."
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "path": {
+            "$ref": "#/components/schemas/PersonaPath"
+          },
+          "persona": {
+            "$ref": "#/components/schemas/Persona"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "persona",
+          "created_by",
+          "created_at",
+          "path",
+          "is_active"
+        ],
+        "title": "PersonaVersion",
+        "type": "object"
+      },
+      "ProfileNote": {
+        "description": "A short free-text preference. Passes the input guard; injected as data.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "note_id": {
+            "format": "uuid",
+            "title": "Note Id",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "text": {
+            "maxLength": 200,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "note_id",
+          "text",
+          "source",
+          "created_at"
+        ],
+        "title": "ProfileNote",
+        "type": "object"
+      },
+      "ProfileValue_AnswerFormat_": {
+        "properties": {
+          "confidence": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "value": {
+            "$ref": "#/components/schemas/AnswerFormat"
+          }
+        },
+        "required": [
+          "value",
+          "source",
+          "confirmed_at"
+        ],
+        "title": "ProfileValue[AnswerFormat]",
+        "type": "object"
+      },
+      "ProfileValue_Any_": {
+        "properties": {
+          "confidence": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "source",
+          "confirmed_at"
+        ],
+        "title": "ProfileValue[Any]",
+        "type": "object"
+      },
+      "ProfileValue_Charts_": {
+        "properties": {
+          "confidence": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Charts"
+          }
+        },
+        "required": [
+          "value",
+          "source",
+          "confirmed_at"
+        ],
+        "title": "ProfileValue[Charts]",
+        "type": "object"
+      },
+      "ProfileValue_Depth_": {
+        "properties": {
+          "confidence": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Depth"
+          }
+        },
+        "required": [
+          "value",
+          "source",
+          "confirmed_at"
+        ],
+        "title": "ProfileValue[Depth]",
+        "type": "object"
+      },
+      "ProfileValue_str_": {
+        "properties": {
+          "confidence": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "source",
+          "confirmed_at"
+        ],
+        "title": "ProfileValue[str]",
+        "type": "object"
+      },
+      "ProgressEvent": {
+        "description": "A templated phrase plus tool and table names, never free model text.\n\nPasses the regex detectors only, so it adds no Sensitive Data Protection call (HLD 03).",
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "progress",
+            "default": "progress",
+            "title": "Kind",
+            "type": "string"
+          },
+          "sent_at": {
+            "format": "date-time",
+            "title": "Sent At",
+            "type": "string"
+          },
+          "template": {
+            "description": "Catalog key, e.g. \"comparing_by\".",
+            "title": "Template",
+            "type": "string"
+          },
+          "text": {
+            "description": "Rendered: \"Comparing spend by state\u2026\"",
+            "maxLength": 200,
+            "title": "Text",
+            "type": "string"
+          },
+          "trace_id": {
+            "description": "Also the reference ID shown with errors.",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "trace_id",
+          "sent_at",
+          "template",
+          "text"
+        ],
+        "title": "ProgressEvent",
+        "type": "object"
+      },
+      "PublishPersonaOutput": {
+        "discriminator": {
+          "mapping": {
+            "published": "#/components/schemas/PersonaPublished",
+            "rejected": "#/components/schemas/PersonaRejected"
+          },
+          "propertyName": "status"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/PersonaPublished"
+          },
+          {
+            "$ref": "#/components/schemas/PersonaRejected"
+          }
+        ]
+      },
+      "ReportId": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "ReportListItem": {
+        "description": "One row of ``list_my_reports``. Content is withheld when the scope check fails.",
+        "properties": {
+          "accessible": {
+            "description": "False when the report covers a Brand the User no longer has (HLD 04).",
+            "title": "Accessible",
+            "type": "boolean"
+          },
+          "conversation_id": {
+            "$ref": "#/components/schemas/ConversationId"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/ReportId"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "title",
+          "created_at",
+          "conversation_id",
+          "accessible"
+        ],
+        "title": "ReportListItem",
+        "type": "object"
+      },
+      "ReportStructured": {
+        "description": "The structured part of a Saved Report (``saved_reports.structured``).",
+        "properties": {
+          "action_items": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Action Items",
+            "type": "array"
+          },
+          "insights": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Insights",
+            "type": "array"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Free text, e.g. \"Q1 2026\".",
+            "title": "Period"
+          },
+          "summary": {
+            "description": "Short summary, written by the analysis model at save time (ADR 0009).",
+            "maxLength": 1000,
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "summary"
+        ],
+        "title": "ReportStructured",
+        "type": "object"
+      },
+      "Role": {
+        "enum": [
+          "executive",
+          "manager"
+        ],
+        "title": "Role",
+        "type": "string"
+      },
+      "SavedReport": {
+        "description": "A question, the SQL that answered it and the answer, saved on the User's explicit request.\n\nPrivate to its Author. Every field has already passed the output PII filter (ADR 0003).",
+        "properties": {
+          "author_id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "conversation_id": {
+            "$ref": "#/components/schemas/ConversationId"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_as_of": {
+            "description": "Shown as \"data as of <date>\" when the report is opened.",
+            "format": "date",
+            "title": "Data As Of",
+            "type": "string"
+          },
+          "markdown": {
+            "description": "The exact text the User saw.",
+            "title": "Markdown",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/ReportId"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/BrandScope",
+            "description": "Brands the data covers, from the query guard."
+          },
+          "sql": {
+            "description": "The SQL the model wrote, before the guard's scope rewrite.",
+            "title": "Sql",
+            "type": "string"
+          },
+          "structured": {
+            "$ref": "#/components/schemas/ReportStructured"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "turn_id": {
+            "description": "With conversation_id, the idempotency key of save_report.",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "author_id",
+          "conversation_id",
+          "turn_id",
+          "created_at",
+          "title",
+          "question",
+          "sql",
+          "markdown",
+          "structured",
+          "scope",
+          "data_as_of"
+        ],
+        "title": "SavedReport",
+        "type": "object"
+      },
+      "Source": {
+        "enum": [
+          "explicit",
+          "inferred"
+        ],
+        "title": "Source",
+        "type": "string"
+      },
+      "SpanNode": {
+        "description": "One line of the ``/trace`` step tree.",
+        "properties": {
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/SpanNode"
+            },
+            "title": "Children",
+            "type": "array"
+          },
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Node or tool name, e.g. \"run_sql #2\".",
+            "title": "Name",
+            "type": "string"
+          },
+          "summary": {
+            "description": "\"guard: rewritten (scope: 2 Brands)  rows: 12\"",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "duration_ms",
+          "summary"
+        ],
+        "title": "SpanNode",
+        "type": "object"
+      },
+      "StatsView": {
+        "description": "The metric families of HLD 08, computed from trace attributes only.",
+        "properties": {
+          "families": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "description": "{\"quality\": {\"task_success\": 0.91, ...}, \"safety\": {...}, ...}",
+            "title": "Families",
+            "type": "object"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "turns": {
+            "title": "Turns",
+            "type": "integer"
+          },
+          "users": {
+            "title": "Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "since",
+          "turns",
+          "users",
+          "families"
+        ],
+        "title": "StatsView",
+        "type": "object"
+      },
+      "Tone": {
+        "properties": {
+          "notes": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Notes",
+            "type": "string"
+          },
+          "preset": {
+            "$ref": "#/components/schemas/TonePreset"
+          }
+        },
+        "required": [
+          "preset"
+        ],
+        "title": "Tone",
+        "type": "object"
+      },
+      "TonePreset": {
+        "enum": [
+          "direct",
+          "warm",
+          "formal"
+        ],
+        "title": "TonePreset",
+        "type": "string"
+      },
+      "TraceView": {
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "duration_ms": {
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "root": {
+            "items": {
+              "$ref": "#/components/schemas/SpanNode"
+            },
+            "title": "Root",
+            "type": "array"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "tokens": {
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "trace_id": {
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trace_id",
+          "started_at",
+          "action",
+          "duration_ms",
+          "tokens",
+          "outcome",
+          "root"
+        ],
+        "title": "TraceView",
+        "type": "object"
+      },
+      "UserId": {
+        "type": "string"
+      },
+      "UserProfile": {
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProfileValue_Any_"
+            },
+            "description": "Extensible kinds, e.g. default_period.",
+            "title": "Attributes",
+            "type": "object"
+          },
+          "charts": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileValue_Charts_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileValue_Depth_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "format": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileValue_AnswerFormat_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "language": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileValue_str_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/ProfileNote"
+            },
+            "maxItems": 20,
+            "title": "Notes",
+            "type": "array"
+          },
+          "user_id": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "UserProfile",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "Vocabulary": {
+        "properties": {
+          "avoid": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Avoid",
+            "type": "array"
+          },
+          "prefer": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Replace key with value: {\"users\": \"Customers\"}.",
+            "title": "Prefer",
+            "type": "object"
+          }
+        },
+        "title": "Vocabulary",
+        "type": "object"
+      },
+      "WebConfirmation": {
+        "additionalProperties": false,
+        "description": "The Deletion Plan's checkboxes and buttons.",
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "confirmation",
+            "default": "confirmation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "selected_indices": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Indices"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "request_id",
+          "approved"
+        ],
+        "title": "WebConfirmation",
+        "type": "object"
+      },
+      "WebRequest": {
+        "discriminator": {
+          "mapping": {
+            "confirmation": "#/components/schemas/WebConfirmation",
+            "text": "#/components/schemas/WebText"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/WebText"
+          },
+          {
+            "$ref": "#/components/schemas/WebConfirmation"
+          }
+        ]
+      },
+      "WebText": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None starts a Conversation.",
+            "title": "Conversation Id"
+          },
+          "kind": {
+            "const": "text",
+            "default": "text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "WebText",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Retail Analysis Assistant",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/dev/users": {
+      "get": {
+        "description": "The seeded Users for the picker, with role and Brands from the directory.",
+        "operationId": "users_api_dev_users_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DevUser"
+                  },
+                  "title": "Response Users Api Dev Users Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Users"
+      }
+    },
+    "/api/messages": {
+      "post": {
+        "description": "One turn: ``event:`` is the message's ``kind``, ``data:`` its JSON. The stream\ncloses after a ``reply`` or a ``confirmation``.",
+        "operationId": "messages_api_messages_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "properties": {
+                    "data": {
+                      "contentMediaType": "application/json",
+                      "contentSchema": {
+                        "$ref": "#/components/schemas/OutboundMessage"
+                      },
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Messages"
+      }
+    },
+    "/api/persona": {
+      "get": {
+        "operationId": "persona_api_persona_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonaVersion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Persona"
+      },
+      "put": {
+        "description": "``changes`` maps a field (``emphasis``, ``tone.preset``, ``messages.model_busy``,\n``report_sections``) to its new value; the Quality Gate judges it.",
+        "operationId": "edit_persona_api_persona_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  ]
+                },
+                "title": "Changes",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishPersonaOutput"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Edit Persona"
+      }
+    },
+    "/api/persona/rollback": {
+      "post": {
+        "operationId": "rollback_persona_api_persona_rollback_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "to_version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonaRolledBack"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Rollback Persona"
+      }
+    },
+    "/api/persona/versions": {
+      "get": {
+        "operationId": "persona_versions_api_persona_versions_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PersonaVersion"
+                  },
+                  "title": "Response Persona Versions Api Persona Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Persona Versions"
+      }
+    },
+    "/api/profile": {
+      "delete": {
+        "operationId": "reset_profile_api_profile_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Reset Profile"
+      },
+      "get": {
+        "operationId": "profile_api_profile_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Profile"
+      }
+    },
+    "/api/profile/notes/{note_id}": {
+      "delete": {
+        "operationId": "remove_note_api_profile_notes__note_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Note Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Remove Note"
+      }
+    },
+    "/api/reports": {
+      "get": {
+        "operationId": "reports_api_reports_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListReportsOutput"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Reports"
+      }
+    },
+    "/api/reports/{report_id}": {
+      "get": {
+        "operationId": "report_api_reports__report_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetReportOk"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Report"
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "operationId": "stats_api_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "default": "7d",
+              "title": "Since",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Stats"
+      }
+    },
+    "/api/traces/{trace_id}": {
+      "get": {
+        "operationId": "trace_api_traces__trace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trace_id",
+            "required": true,
+            "schema": {
+              "title": "Trace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Agent-User",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Agent-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TraceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Trace"
+      }
+    }
+  }
+}

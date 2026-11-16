@@ -21,6 +21,7 @@ ProfileStore        SQLite notes (stretch)                                7
 PersonaStore        SQLite versions, ``persona.yaml`` as version 1 and    1, 7
                     the cold-start default; same file as the users
 ChannelAdapter      CLI (stdout); web SSE stream (optional, ADR 0010)     1, 8
+                    ``build_web``: FastAPI over the same ``build_app``
 Tracer              JSONL in ``./traces/``; OTel -> Phoenix if it answers 1, 5
                     at start-up (``PHOENIX_ENDPOINT``)
 Delivery            not wired (ADR 0009)                                  -
@@ -52,6 +53,7 @@ from agent.ports import (
 )
 
 if TYPE_CHECKING:
+    from fastapi import FastAPI
     from langgraph.checkpoint.sqlite import SqliteSaver
 
     from agent.adapters.channel_stdout import StdoutChannel
@@ -153,13 +155,38 @@ def build_checkpointer(settings: Settings) -> "SqliteSaver":
 
 def build_app(settings: Settings) -> tuple["ChatService", "Views"]:
     """The two shared entry points every channel calls, over one set of ports (LLD 07)."""
+    _, service, views = _build_app(settings)
+    return service, views
+
+
+def _build_app(settings: Settings) -> tuple[Ports, "ChatService", "Views"]:
     from agent.core.chat import ChatService
     from agent.core.views import Views
     from agent.graph.build import build_graph
 
     ports = build_ports(settings)
     graph = build_graph(ports, settings.limits, build_checkpointer(settings))
-    return ChatService(ports, graph), Views(ports, settings.limits, settings.models.prices)
+    return ports, ChatService(ports, graph), Views(ports, settings.limits, settings.models.prices)
+
+
+DEV_IDENTITY_HOST = "127.0.0.1"
+
+
+def build_web(settings: Settings, *, host: str) -> "FastAPI":
+    """The web channel over the same ``ChatService`` and ``Views`` as the CLI (needs the
+    ``web`` extra). The dev identity is served only when ``WEB_DEV_IDENTITY`` is on and the
+    server is bound to ``127.0.0.1``; on any other host it refuses to start (ValueError)."""
+    from agent.adapters.users_sqlite import SqliteUserDirectory
+    from agent.adapters.web import create_app
+
+    if settings.web_dev_identity and host != DEV_IDENTITY_HOST:
+        raise ValueError(f"WEB_DEV_IDENTITY needs --host {DEV_IDENTITY_HOST}, not {host}")
+    ports, service, views = _build_app(settings)
+    dev_users = None
+    if settings.web_dev_identity:
+        assert isinstance(ports.users, SqliteUserDirectory)  # the seeded directory
+        dev_users = ports.users.list_dev_users
+    return create_app(service, views, ports.tracer, dev_users=dev_users)
 
 
 def build_cli_channel() -> "StdoutChannel":

@@ -10,7 +10,7 @@ ADR 0006 lists ten ports. The LLD adds three: **`UserDirectory`**, the seam betw
 | [`QueryGuard`](../../src/agent/ports/query.py) | `check(sql, scope, row_limit)` | `sqlglot`, BigQuery dialect | same |
 | [`QueryRunner`](../../src/agent/ports/query.py) | `dry_run(...)`, `execute(...)` | BigQuery, `bigquery-public-data` | BigQuery, governed copy; optionally as the User |
 | [`PiiFilter`](../../src/agent/ports/pii.py) | `scan(text, templated)` | regex | Sensitive Data Protection, regex fallback |
-| [`UserDirectory`](../../src/agent/ports/users.py) | `load(user_id)` | `seed/users.yaml` → SQLite | Postgres, kept in step by the admin sync |
+| [`UserDirectory`](../../src/agent/ports/users.py) | `load(user_id)` | `seed/users.yaml` → SQLite (+ `list_dev_users()` for the web picker) | Postgres, kept in step by the admin sync |
 | [`ReportRepository`](../../src/agent/ports/reports.py) | `save`, `find`, `get`, `match`, `delete_with_audit` | SQLite + FTS5 | Postgres + `tsvector` |
 | [`TrioRetriever`](../../src/agent/ports/trios.py) | `search(query, scope, limit)` | SQLite + cosine over the seed Trios; Null when off | pgvector + full text, RRF |
 | [`ProfileStore`](../../src/agent/ports/profile.py) | `load`, `save_standing`, `remove` | SQLite notes (stretch) | Postgres |
@@ -92,7 +92,8 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `Sq
 - **Safety:** the only source of role, permissions and Brands. Default deny for no role; unknown User → `NO_ROLE`.
 - **Failures:** `TransientError(UNAVAILABLE)`: without identity, the turn fails closed.
 - **Trace:** `user.id`, `user.role`, `user.access_version` (never a name).
-- **Tests** · slice 1 · `tests/test_identity.py`: seeded Users load; a Manager with no Brands has an empty scope; an unknown User is refused.
+- **Dev only:** the seeded adapter also has `list_dev_users() -> list[DevUser]` for the web prototype's picker ([07](07-web.md#identity)). It is not on the port: production never lists Users to a channel.
+- **Tests** · slice 1 · `tests/test_identity.py`: seeded Users load; a Manager with no Brands has an empty scope; an unknown User is refused. Slice 8 · `tests/test_web.py`: `list_dev_users` reports each User's role and Brands.
 
 ### `ReportRepository`
 
@@ -147,7 +148,7 @@ In `Ports` ([composition.py](../../src/agent/composition.py)), `profiles` is `Sq
 - **Safety:** receives only filtered messages.
 - **Failures:** `deliver` never raises to the graph.
 - **Trace:** `channel`.
-- **Tests** · slice 1 · `tests/test_cli.py`: a failing turn does not end the loop; slash commands call `Views` and make no model call. Slice 8 · `tests/test_web.py`: the SSE stream carries the same messages as the CLI for one turn; every row of the [07](07-web.md#feature-map) feature map calls the same method from both channels.
+- **Tests** · slice 1 · `tests/test_cli.py`: a failing turn does not end the loop; slash commands call `Views` and make no model call. Slice 8 · `tests/test_web.py`: the SSE stream carries the same messages as the CLI for one turn; every row of the [07](07-web.md#feature-map) feature map calls the same method from both channels; a closed stream drops and traces, and the turn is still checkpointed.
 
 ### `Tracer`
 

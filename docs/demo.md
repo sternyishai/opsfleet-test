@@ -39,6 +39,10 @@ How to show a slice working against real Gemini and BigQuery: what to run, what 
 | 7c Profile | `manager-a` | What was Calvin Klein revenue by month in 2025? | not forced into a table; `/profile` says no saved preferences |
 | 7c Profile | `ceo` | Just this once, bullets: top 3 categories in 2025 | bullets; `/profile` still says table |
 | 7c Profile | `ceo` | Always compare with last year → `/profile` → `/profile clear 1` → `/profile clear` | the note listed as 1; then removed; then "no saved preferences" |
+| 8 web UI | (browser) | `make dev` (needs `uv sync --extra web` and pnpm), open http://localhost:5173 → pick `manager-a` → What was Calvin Klein revenue in 2025? | the header reads "manager-a · Manager · Calvin Klein, Tommy Hilfiger"; progress lines, then $46,399.46, the same text the CLI prints |
+| 8 web UI | `manager-a` (browser) | What was Nike revenue in 2025? → pick `ceo` → What was total revenue in 2025? | told which Brands they can analyze; switching to ceo clears the chat (a new Conversation), the header reads "ceo · Executive · all Brands", then $2,358,149.49 |
+| 8 web UI | `manager-a` (browser) | save a Calvin Klein report twice (as in slice 4), then delete my Calvin Klein reports → untick item 2 → Delete | the plan as checkboxes; the reply names the kept report, as `yes except 2` does in the CLI; "My reports" updates |
+| 8 web UI | `ceo` (browser) | New chat, then "and in 2024?" | a fresh Conversation: the follow-up has no earlier question to refer to |
 
 ## When something fails
 
@@ -48,4 +52,4 @@ How to show a slice working against real Gemini and BigQuery: what to run, what 
 
 ## For the PR
 
-Take a screenshot of the terminal (and of Phoenix for observability), then attach it: `gh pr create ... --attach <file.png>` or `gh pr comment <n> --attach <file.png>`.
+Take a screenshot of the terminal (the browser for slice 8, and Phoenix for observability), then attach it: `gh pr create ... --attach <file.png>` or `gh pr comment <n> --attach <file.png>`.

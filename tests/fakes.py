@@ -25,6 +25,7 @@ from agent.composition import Ports
 from agent.config import Limits
 from agent.contracts.channel import Channel, InboundMessage, OutboundMessage
 from agent.contracts.router import Action, RouterDecision, Verdict
+from agent.contracts.web import DevUser
 from agent.core.chat import ChatService
 from agent.domain.identity import UserContext, UserId
 from agent.domain.persona import Persona, PersonaPath, PersonaVersion, Tone, TonePreset
@@ -245,6 +246,12 @@ class FakeUsers:
 
     def load(self, user_id: UserId) -> UserContext | None:
         return self._users.get(user_id)
+
+    def list_dev_users(self) -> list[DevUser]:
+        return [
+            DevUser(user_id=u.user_id, role=u.role, brands=sorted(u.brands))
+            for u in self._users.values()
+        ]
 
 
 SEED_PERSONA = PersonaVersion(

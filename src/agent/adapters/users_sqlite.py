@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from agent.contracts.web import DevUser
 from agent.db import ddl
 from agent.domain.identity import Permission, Role, UserContext, UserId
 from agent.errors import MessageClass, TransientError
@@ -54,6 +55,30 @@ class SqliteUserDirectory:
             brands=frozenset(b for (b,) in brands),
             access_version=access_version,
         )
+
+    def list_dev_users(self) -> list[DevUser]:
+        """Every active User with role and Brand Assignments, for the web prototype's
+        identity picker (dev only, LLD 07 § Identity). Ordered by ``user_id``."""
+        try:
+            with self._connect() as db:
+                users = db.execute(
+                    "SELECT user_id, role FROM users WHERE active = 1 ORDER BY user_id"
+                ).fetchall()
+                brands = db.execute(
+                    "SELECT user_id, brand FROM brand_assignments ORDER BY brand"
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise TransientError(
+                type(exc).__name__, dependency="app_db", message_class=MessageClass.UNAVAILABLE
+            ) from exc
+        return [
+            DevUser(
+                user_id=user_id,
+                role=Role(role) if role else None,
+                brands=[b for (u, b) in brands if u == user_id],
+            )
+            for user_id, role in users
+        ]
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

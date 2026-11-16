@@ -36,7 +36,12 @@ web = [
 agent = "agent.cli:main"
 
 [dependency-groups]
+# The web extra is here too, so `uv run pytest` covers the web channel on a plain `uv sync`;
+# the installed package still needs `--extra web` (tests/test_web.py checks the core without).
 dev = [
+    "fastapi>=0.115",
+    "httpx>=0.28",
+    "uvicorn>=0.32",
     "pyright>=1.1.414",
     "pytest>=8.3",
     "pyyaml>=6.0.3",

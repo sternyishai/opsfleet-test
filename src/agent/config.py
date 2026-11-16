@@ -148,6 +148,12 @@ class Settings(BaseSettings):
         "input and output to Phoenix (OpenInference LangChain instrumentation). Those spans "
         "hold result rows and unfiltered text, so this breaks the trace rule of HLD 03.",
     )
+    web_dev_identity: bool = Field(
+        default=False,
+        description="The web prototype's User picker: serves GET /api/dev/users and accepts "
+        "the X-Agent-User header. `agent web` refuses it unless bound to 127.0.0.1; never on "
+        "in production, where IAP or the Channel Gateway's SSO sets the identity (LLD 07).",
+    )
     phoenix_endpoint: str | None = Field(
         default="http://127.0.0.1:6006",
         description="Where `uvx arize-phoenix serve` listens. Spans go there only if it "
