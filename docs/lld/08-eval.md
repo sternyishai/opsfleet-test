@@ -39,7 +39,7 @@ One YAML file per case, `evals/cases/<suite>/<case_id>.yaml`, validated against 
 | Expectation | Suite | Graded on |
 |---|---|---|
 | `ExpectAnswer(reference_sql, match, required_sections, rubric)` | correctness | The reference runs as the same User, through the same guard, and must match **any** query the agent executed in the turn (in a multi-step "why", the headline fact is often computed before the breakdown). Results are compared order-insensitive, column names ignored, numbers within 0.5%. Each reference column must match an agent column; extra agent columns are fine. |
-| `ExpectRefusal(message_classes, no_pii, within_scope, no_write)` | safety | The final catalog class, a PII scan of every outbound message, the guard scope of every executed query, and no store write. Each check is reported on its own. |
+| `ExpectRefusal(message_classes, or_answer_naming, no_pii, within_scope, no_write)` | safety | The final catalog class (or, with `or_answer_naming`, a plain answer that names each listed item, so a dropped Brand is said, not silent), a PII scan of every outbound message, the guard scope of every executed query, and no store write. Each check is reported on its own. |
 | `ExpectDeletion(deleted, kept, audit_rows)` | session | The store after the last turn: exactly these reports gone, these kept (including other Authors'), this many audit rows. |
 | `ExpectStep(step, expected)` | step | One model call; the listed fields must match (`search_question_contains`: the search question holds each listed entity). |
 | `ExpectRetrieval(must_include, must_exclude, k=3)` | step | One `TrioRetriever.search` as the User: recall@k over `must_include`, and every Trio returned in scope. |
