@@ -4,8 +4,8 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Current state (2026-11-16)
 
-**Phase:** 6 in progress: audit done, HLD prototype sections corrected, first `/mock-interview` rehearsal done (stopped after the Requirements round). Repo is public. Next: submit the link; the interview's doc gaps are a follow-up issue.
-**Branch:** `docs/final-check`
+**Phase:** 7 (close the remaining gaps, [work-plan.md § Phase 7](work-plan.md#phase-7-close-the-remaining-gaps-23-h-one-issue-per-session)). Every prototype requirement is met: the full `make eval --trials 3` PASSED (run `2026-11-16T19-51-19-24ad`, the Baseline). Left: #37 (HLD gaps), #42, #44, #43, then submit the link.
+**Branch:** `main` (start each issue on its own branch)
 
 | Step | Status |
 |---|---|
@@ -39,6 +39,9 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | End-of-Phase-4 retro (`docs/phase-4-retro`) | ✅ `other-managers-brand` also passes on an answer that names the Brand it left out (`or_answer_naming`, `prereg-20261116-named-refusal`; a silent drop still fails); **first PASS of `make eval`** (run `2026-11-16T10-57-16-2ab3`, now the baseline): safety 7/7, session 3/3, correctness 5/9, step 30/31, recall@3 9/10; `tests/test_layers.py` holds LLD 01's package rule; `tests/test_egress.py` plants an email in every store and calls every `Views` method (found `/trace` returning `outcome`/`action` unfiltered, fixed); CLAUDE.md: read by symbol; `evals/runs/` ignored; this file pruned |
 | Phase 6: final check (`docs/final-check`) | ✅ `/mock-interview both`. Audit: every requirement met; fixed the stale HLD (00 requirement map, the In-the-prototype sections of 02/05/07/09/11, the compose and multi-arch claims in 08/11), the author's experience in years (HLD 10, ADR 0001), the client's answer that `requirements.txt` is not required (HLD 12); ADR 0004 + decision log § Analysis loop (hand-written loop, not `create_agent`). Interview (coached, Requirements round only): 8 of 12 answers `weak`, mostly one-sentence answers; rehearse the walkthrough, Req 2/3/5/7/8 and the eval numbers. Doc gaps found (reranker growth path, drifted Trios, independent scope auditor, canary answers) filed as an issue |
 
+| Revenue definition (#38) | ✅ Revenue = `SUM(sale_price)` over items not `Cancelled` or `Returned`: in `GLOSSARY.md`, the `order_items` schema description and the analyst prompt |
+| Spec coverage (#39, PR #41) | ✅ four correctness cases (top customers by spend, Calvin Klein vs Tommy Hilfiger and why, what data there is, a two-turn follow-up) and `router-top-customers-by-id`; fixed the router refusing "top customers by spend" as `pii_request`, and `ExecutionMatch` failing `'2025-01'` month labels against `DATE_TRUNC` dates; `prereg-20261116-spec-coverage`. Full run `2026-11-16T19-51-19-24ad` (3 trials, paid key, 0 CANNOT_MEASURE): **PASS**, safety 7/7, session 3/3, correctness 10/13 on every trial, step 31/32, $0.04. Follow-ups #42, #43, #44, #40 |
+
 ## Decisions made this session, not yet written elsewhere
 
 - None. Slice 3's approved deviations (breaker per model, `QUERY_TOO_LARGE`, plain catalog wording) are in `decision-log.md` § Slice 3.
@@ -53,14 +56,14 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Read docs/work-plan.md and docs/progress.md, then fix the mock-interview doc gaps issue, then decide the revenue definition and rerun `make eval`.
+> Read docs/work-plan.md and docs/progress.md, then build #37.
 
 Notes for what comes next:
 
-- Correctness 5/9 on the baseline: `monthly-revenue-2025`, `data-date-range`, `return-rate-trend-my-brands`, `top-traffic-source-my-brands` fail execution match; earlier runs traced most misses to revenue counting Cancelled and Returned lines. Deciding where that definition lives (schema description or Persona emphasis) is open.
+- Baseline `2026-11-16T19-51-19-24ad`: correctness 10/13 on every trial. `repeat-customer-share-2025` fails every trial (#42, needs the "placed order" decision); `data-date-range`, `monthly-revenue-2025` and `return-rate-trend-my-brands` pass on some trials only, with the judge at 5/5 (#43).
 - The step cap ends a turn with the `SELF_CORRECTION_EXHAUSTED` wording ("rephrase it with a specific time period") even when every query worked. A new message class, or a last model step with no tools, is a design decision.
 - Live demos not run yet: 7b, 7c and slice 8's chat in the browser (`docs/demo.md`).
 - Rehearsal before the real interview: the debrief's top 5 (walkthrough in five beats; Req 2 layers and blast radius; Req 5's three cases; the eval and cost numbers; Req 8 and Req 3 as "the model proposes, code decides"). The later rounds (Scale, Trade-offs, Curveballs, Estimates, Prototype, Experience, Close) are not rehearsed yet: `/mock-interview interview system-design`.
 - #20 (Ollama) is deferred until Phase 6 is done.
 - Local `.env` (not in the repo): `MODEL_ANALYST=gemini-3.6-flash` with `MODEL_ANALYST_FALLBACK=gemini-3.5-flash-lite` (the preview model hit the free-tier 429 on every call); `MODEL_PRICES` set to list prices; `PHOENIX_FULL_CONTENT=true`. The container needs `BIGQUERY_PROJECT` in `.env`.
-- `make eval` takes ~10 minutes on the free tier; `evals/runs/` is local (ignored), so a fresh clone has no baseline until its first PASS.
+- The `.env` key is paid since 2026-11-16: run full evals with `LLM_REQUESTS_PER_MINUTE=300 LLM_BURST=10` (56 cases × 3 trials ≈ 1 h one at a time). On the free tier `make eval` takes ~15 minutes for one trial and often ends CANNOT_MEASURE; `evals/runs/` is local (ignored), so a fresh clone has no baseline until its first PASS.
