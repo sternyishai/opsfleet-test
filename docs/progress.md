@@ -2,10 +2,10 @@
 
 The session-to-session handoff. Updated at the end of every session (see [work-plan.md](work-plan.md#how-context-moves-between-sessions)). Newest state at the top; history kept short.
 
-## Current state (2026-11-15)
+## Current state (2026-11-16)
 
-**Phase:** 4. Slices 1 (#5), 2 (#6), 3 (#7), 4 (#8, PR #22) and 5 (#9, PR #24 open) built. Next: merge PR #24, then slice 6 (#10).
-**Branch:** `feat/9-observability`
+**Phase:** 5 done (PR open on `docs/readme`). Next: merge it, then the end-of-Phase-4 retro, then Phase 6.
+**Branch:** `docs/readme`
 
 | Step | Status |
 |---|---|
@@ -34,6 +34,7 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 | Slice 7b: Persona mechanism (#12, branch `feat/12-persona`) | ✅ `SqlitePersonaStore` (same file as the users; `persona.yaml` as v1 and the cold-start default; `active` serves the last version read when the store fails; undo walks back along what was active; `events()` audit); `PersonaQualityGate` (field limits, injection scan, 3 red-team cases through the analyst's own prompt with the candidate, 1 sample report for sections and figures; fails closed as `MODEL_BUSY`); chat branch `persona_permission` → `draft_persona` (`MODEL_PERSONA_DRAFTER`) → `persona_gate` → `publish_persona`, or → `rollback_persona`; router prompt for `change_persona`; analyst prompt now carries `report_sections` and `examples`; `/persona`, `/persona history`, `/persona edit` (changed fields only, plus one message wording), `/persona rollback` through `Views`; `/stats` Persona changes, rollbacks, gate rejections; 637 offline tests. Review fixed: `tools/` imported `core`/`graph`, `/persona edit` wrote PII-redacted text back into the next version, "figures unchanged" accepted "up 5.0%" and a bare "5", injection-scan misses and false alarms, `</persona>` not escaped, rejection reasons unfiltered in `Views`. **Live demo not run yet** (rows in `docs/demo.md`). Deviations in `decision-log.md` § Slice 7b |
 | Slice 7c: User Profile notes (#13, branch `feat/13-profile`) | ✅ `SqliteProfileStore` (same file as the users; one row per User, JSON columns); one pure merge `merged` in `domain/profile.py` shared by the store and `apply_preferences` (explicit overwrites, unknown option skipped, duplicate note kept once, oldest notes dropped past 20); graph `router` → `apply_preferences` (+ `save_preferences` in parallel when there are standing statements) → branch, `acknowledge` for `preference_only`; every extracted value re-screened by the input rules; `<user_preferences>` data block in the analyst prompt; router prompt for preferences; store failures traced on `profile_load` / `profile_save` and the turn goes on; `/profile`, `/profile clear [n]` through `Views`. **Live demo not run yet** (7c rows in `docs/demo.md`); the router prompt changed, so the next `make eval` checks it |
 | Slice 8: web UI (#14, branch `feat/14-web-ui`) | ✅ FastAPI adapter `src/agent/adapters/web/` (`agent web`, extra `agent[web]`): `POST /api/messages` → SSE through `SseChannel` (worker thread, drops traced on disconnect), every feature-map route through `Views`, `ApiError` bodies; dev identity (`WEB_DEV_IDENTITY`, `X-Agent-User`, `GET /api/dev/users` from `SqliteUserDirectory.list_dev_users`, 127.0.0.1 only); `make types` / `types-check` (`web/openapi.json` → `schema.d.ts`), CI `web` job; React app in `web/` (Users panel, who-am-I header and chat bar, chat over SSE, Deletion Plan checkboxes, My reports, preferences, the CLI's slash commands); 735 offline tests. Live: `/api/dev/users`, a manager's reports, `stats_forbidden`, one real SSE turn (Nike refused for manager-a), and slash commands in a browser. Review fixed: large plans by checkbox, an untraced lost reply on disconnect, gate `detail` reaching the browser. **Live chat demo in the browser not run yet** (slice 8 rows in `docs/demo.md`). Deviations in `decision-log.md` § Slice 8 |
+| Phase 5: ship anywhere (`docs/readme`) | ✅ README (setup native and Docker, CLI and web UI, example run, requirement table linking the HLD, screenshots in `docs/screenshots/`), `.env.example`, `Dockerfile` (Node stage builds `web/`, Python stage on `uv:0.13.6-python3.12-trixie-slim`, non-root, `data/` and `traces/` volumes, secrets at run time), `.dockerignore`, `make web` / `docker-build` / `docker-chat` / `docker-web`. Code: `agent web` serves the built UI at `/` when `WEB_UI_DIR` is set (mounted after `/api`); `WEB_DEV_IDENTITY_ANY_HOST` lets the picker bind `0.0.0.0` inside a container, set only by `make docker-web` next to `-p 127.0.0.1:…` (user's choice over host networking, which is off by default on Docker Desktop); LLD 07 updated. Verified from a fresh clone following only the README: `uv sync` + CLI turn, `make web` + a browser turn, pip install + CLI, `make docker-build` + `docker-chat` + `docker-web` + a browser turn, and a container turn reaching Phoenix on the host |
 
 ## Decisions made this session, not yet written elsewhere
 
@@ -49,9 +50,13 @@ The session-to-session handoff. Updated at the end of every session (see [work-p
 
 ## Next session prompt
 
-> Read docs/work-plan.md and do Phase 5 (branch `docs/readme`, already created with this plan change), including the web UI in the Docker image.
+> Read docs/work-plan.md and docs/progress.md, then run the end-of-Phase-4 retro (`/mattpocock-skills:retro`) over the whole build.
 
 Notes for what comes next:
+
+- Phase 5 (PR on `docs/readme`): merge it first. The HLD 00 requirement map's "Prototype" column still says Reqs 1, 4 and 8 are not in the prototype; the README's table is current. Worth fixing in Phase 6.
+- The local `.env` has no `BIGQUERY_PROJECT` (native runs take the project from gcloud config); the container needs it, so `make docker-*` need it in `.env`. `.env.example` lists it as required.
+- Live in the container, "What was Nike revenue in 2025?" as manager-a was refused in the model's own words, not the `OUT_OF_SCOPE` catalog message: the same behaviour as the slice 6 `other-managers-brand` finding.
 
 - #14 merged (PR #32, screenshots attached). #20 (Ollama) is deferred: Phase 5 first, by the user's choice on 2026-11-16. The end-of-Phase-4 retro is still open.
 

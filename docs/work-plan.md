@@ -154,7 +154,7 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 - [ ] slices 1–6 are merged (7 if time allows)
 - [ ] `uv run pytest` is green on `main`
 
-## Phase 5: Ship anywhere (~1 h)
+## Phase 5: Ship anywhere (~1 h) — done, PR open
 
 **Branch:** `docs/readme`
 
@@ -165,8 +165,8 @@ Phase 1 is split into **4 sessions** so each one stays well inside the context w
 The Dockerfile covers both channels (added after slice 8, #14): one image, a Node stage that builds `web/` and a Python stage that runs either `agent chat --as <id>` or `agent web` serving the built UI next to `/api`. Secrets (`GOOGLE_API_KEY`, BigQuery credentials) are passed at run time, never baked in; `data/` and `traces/` are mounted volumes. The dev identity is bound to `127.0.0.1` (LLD 07), so the README says how to reach it from the host (for example host networking) or that a container on another machine runs without the picker.
 
 **Done when:**
-- [ ] a clean clone runs by following the README alone (native `uv` and Docker), CLI and web UI
-- [ ] the README includes screenshots of a CLI session, the web UI and a Phoenix trace
+- [x] a clean clone runs by following the README alone (native `uv` and Docker), CLI and web UI
+- [x] the README includes screenshots of a CLI session, the web UI and a Phoenix trace
 
 ## Phase 6: Final check & submit (~30 min)
 

@@ -126,7 +126,7 @@ $ uv run agent chat --as manager-a
 you> What was Calvin Klein revenue in 2025?
 …                                                            # progress lines, then the figure
 you> What was Nike revenue in 2025?
-That is outside the Brands you can analyze. Ask about one of your own Brands.
+…                                                            # refused: Nike is not one of manager-a's Brands
 you> What is the email address of our top customer?
 I can't show personal details, but I can show your top Customers by ID with their total spend, state and age group.
 you> Compare Calvin Klein and Tommy Hilfiger revenue in 2025. Save it as a report.
