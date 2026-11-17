@@ -91,6 +91,7 @@ Each question has our proposed default, so the design proceeds while it is open.
 | Q15 | May a User send a report to someone other than themselves, by email or Slack? | No: only to the Author (A19) | [04](04-destructive-ops.md), [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md) |
 | Q16 | Which outbound capability, if any, should come first: email, Slack posting or push notifications? | None until asked; email first, as the assignment's example. Each is one `Delivery` adapter | [01](01-architecture.md#agent-graph), [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md) |
 | Q17 | Deleting a Saved Report removes it from the library. Must it also purge copies of its answer in Conversation history, interaction records and traces, or is the 90-day age-out enough? | Library removal plus the 90-day age-out (A8) | [04](04-destructive-ops.md#executing-the-deletion) |
+| Q18 | May a Trio whose figures and Brand names are stripped be shown to every Manager, or is an analyst's method across all Brands itself sensitive? | Sensitive: a Trio over all Brands reaches Executives only, so Managers rarely get one. A yes adds a "method shareable" flag the approving analyst sets | [02](02-hybrid-intelligence.md), [ADR 0005](../adr/0005-golden-trios-teach-method-not-figures.md) |
 
 ## POCs to run
 

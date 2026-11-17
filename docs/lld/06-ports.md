@@ -2,7 +2,7 @@
 
 Each port is a `Protocol` in [`src/agent/ports/`](../../src/agent/ports/), and its docstring is the full interface: invariants, error modes and the adapters planned for it. This page fills in the [README checklist](README.md#checklist-for-each-tool-or-port) per port, and holds the trace-attribute names.
 
-ADR 0006 lists ten ports. The LLD adds three: **`UserDirectory`**, the seam between the `load_context` node and the identity tables; **`ScorecardSink`**, where eval runs go ([08](08-eval.md#phoenix)); and **`Delivery`**, declared but not wired ([ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)).
+The thirteen ports below include three that only the code needs: **`UserDirectory`**, the seam between the `load_context` node and the identity tables; **`ScorecardSink`**, where eval runs go ([08](08-eval.md#phoenix)); and **`Delivery`**, declared but not wired ([ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md)). [ADR 0006](../adr/0006-ports-and-adapters.md) points here for the list.
 
 | Port | Methods | Prototype adapter | Production adapter |
 |---|---|---|---|

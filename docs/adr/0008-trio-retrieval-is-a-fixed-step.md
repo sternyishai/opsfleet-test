@@ -5,7 +5,7 @@ Req 1 says the agent **must** use the Golden Bucket. If retrieval is only a tool
 - **`retrieve_trios`** runs on every `analysis` turn, after the intent router and before the ReAct sub-agent. It searches the Golden Bucket through the `TrioRetriever` port, with the User's Brands taken from graph state, and puts the matches above the similarity threshold into the sub-agent's context as a delimited reference block.
 - **The search question comes from the router.** The same Flash-Lite call that returns the action also returns a standalone search question. For a follow-up such as "and NY?", that question carries the earlier context ("why are NY users underspending compared to CA?"). No extra model call is added.
 - **`search_golden_trios` stays a tool.** A multi-step question or a report can need several searches with different wording. The sub-agent calls the tool for those, the same way as before.
-- **A retrieval gap** is counted only on turns that run `run_sql`. Turns that only list or open reports, or ask about the schema, do not count.
+- **A retrieval gap** is a turn that ran `run_sql` with no Trio above the threshold, a signal that analysts should write a Trio for that kind of question ([02](../hld/02-hybrid-intelligence.md)). Turns that only list or open reports, or ask about the schema, do not count.
 
 This extends the rule of [ADR 0004](0004-hybrid-agent-graph.md): fixed where the system must be safe, **or where a step must happen**; flexible where the model must think. Analysis stays a ReAct loop; only its first step is fixed.
 
@@ -22,4 +22,5 @@ This extends the rule of [ADR 0004](0004-hybrid-agent-graph.md): fixed where the
 - If retrieval fails, the turn continues from the schema alone and is flagged as degraded ([06](../hld/06-resilience.md)).
 - The offline ablation becomes simpler: the correctness suite runs with the node on and off ([07](../hld/07-quality-assurance.md)).
 - The router gains one output field and its per-step eval gains a case set for standalone questions.
-- In the prototype, where Trio retrieval is a stretch goal, the node calls a `TrioRetriever` adapter that returns nothing if the slice is cut, so the graph is the same either way.
+- The prototype retrieves over SQLite with cosine similarity in Python, from the seed Trios in `seed/trios/`. With embeddings turned off, the node calls the Null `TrioRetriever`, which returns nothing, so the graph is the same either way.
+- For a Manager, all-Brand Trios are filtered out ([ADR 0005](0005-golden-trios-teach-method-not-figures.md), Q18), so the node often runs and finds nothing.

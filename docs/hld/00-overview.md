@@ -48,7 +48,7 @@ Two companion views are in [01](01-architecture.md): the [agent flow](01-archite
 | ADR | Decision | Main alternative rejected |
 |---|---|---|
 | [0001](../adr/0001-langgraph-agent-framework.md) | LangGraph is the agent framework | Google ADK (younger, more manual human-in-the-loop) |
-| [0002](../adr/0002-postgres-for-app-state.md) | One Postgres (JSONB + pgvector) holds all app state | MongoDB, or separate stores (no atomic delete-and-audit) |
+| [0002](../adr/0002-postgres-for-app-state.md) | One Postgres (JSONB + pgvector) holds all app state | MySQL (no vector search outside HeatWave), MongoDB, or separate stores (no atomic delete-and-audit) |
 | [0003](../adr/0003-layered-data-access-enforcement.md) | Data access is enforced in layers outside the model | Prompt-only filtering |
 | [0004](../adr/0004-hybrid-agent-graph.md) | Deterministic shell around a ReAct analysis core | A single ReAct agent (safety depends on the model) |
 | [0005](../adr/0005-golden-trios-teach-method-not-figures.md) | Trios are stored figure-stripped and Brand-tagged | Injecting full Trios (leaks across Brands) |
