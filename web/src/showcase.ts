@@ -4,6 +4,7 @@ import architecture from "../../docs/hld/diagrams/architecture.png";
 import agentFlow from "../../docs/hld/diagrams/agent-flow.png";
 import dataFlow from "../../docs/hld/diagrams/data-flow.png";
 import storyMap from "../../docs/hld/diagrams/story-map.png";
+import goldenTrioFlow from "../../docs/hld/diagrams/golden-trio-flow.png";
 import agentGraph from "../../docs/lld/diagrams/agent-graph.png";
 import sysflow from "../../docs/films/sysflow.mp4";
 import agentflow from "../../docs/films/agentflow.mp4";
@@ -39,6 +40,12 @@ export const DIAGRAMS: Item[] = [
     caption: "Every flow, every component, every store.",
     src: storyMap,
     source: "HLD 01 · Architecture",
+  },
+  {
+    title: "Golden Trio flow",
+    caption: "From an analyst report to a stored Trio, and how a question finds it.",
+    src: goldenTrioFlow,
+    source: "HLD 02 · ADR 0005",
   },
   {
     title: "The compiled graph",
