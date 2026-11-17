@@ -154,6 +154,7 @@ def test_ctes_are_allowed() -> None:
         "BEGIN SELECT 1; END",
         "SELECT 1 FROM orders; SELECT 2 FROM orders",
         "SELECT 1 FROM orders; DROP TABLE orders",
+        "CREATE TEMP FUNCTION f(x INT64) AS (x); SELECT f(id) FROM products",
     ],
 )
 def test_anything_but_one_select_is_rejected(sql: str) -> None:
@@ -167,6 +168,9 @@ def test_anything_but_one_select_is_rejected(sql: str) -> None:
         "SELECT SESSION_USER() AS who FROM orders",
         "SELECT @@project_id AS p FROM orders",
         "SELECT * FROM orders WHERE brand IN UNNEST(@brands)",
+        # Time travel reads rows the scoped subquery never saw; sampling is not needed.
+        "SELECT id FROM products FOR SYSTEM_TIME AS OF TIMESTAMP '2024-01-01'",
+        "SELECT id FROM products TABLESAMPLE SYSTEM (10 PERCENT)",
     ],
 )
 def test_unknown_functions_and_parameters_are_rejected(sql: str) -> None:
@@ -228,6 +232,8 @@ def test_no_role_rejects_everything() -> None:
         "SELECT * FROM thelook_ecommerce.INFORMATION_SCHEMA.TABLES",
         "SELECT * FROM `other-project.thelook_ecommerce.orders`",
         "SELECT * FROM other_dataset.orders",
+        "SELECT * FROM products_*",
+        "SELECT * FROM `bigquery-public-data.thelook_ecommerce.products_*`",
     ],
 )
 def test_tables_outside_the_allowlist_are_rejected(sql: str) -> None:
