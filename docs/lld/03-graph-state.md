@@ -60,3 +60,35 @@ The HLD's scope list asks for "this turn's preference statements": they are `rou
 | `NotAnAnswer` | the plan is cancelled (`open_plan = None`). A reply shaped like an answer that does not fit the plan (`yes except 4` to a plan of 3, a second bare `yes` to a large plan) ends with `PLAN_ANSWER_INVALID`; a button for another request with `PLAN_EXPIRED`; any other message re-enters as a new message at `load_context`, so it passes `input_guard` with fresh turn keys and a freshly loaded User |
 
 Everything a node does before `interrupt()` must be safe to run twice, because LangGraph re-runs the node from its start on resume. `plan_deletion` is a separate node for that reason: the plan is built once, and `confirm_deletion` only reads it.
+
+## The deliver branch (designed, not built)
+
+The mechanics behind [ADR 0009](../adr/0009-outbound-actions-are-a-deliver-branch.md). Nothing here is wired yet.
+
+**Entering the branch.** `deliver` becomes a fifth router action. The router returns it with a `destination` enum, either as the action ("email me last week's report") or as a `follow_up_action` after `analysis` ("create the Q1 report and email it"). The follow-up is a conditional edge after `analysis` that reads the router's decision from state; analysis itself does not choose it.
+
+**Finding the report.** Code resolves which Saved Report to send, never the model:
+
+| The User says | The report comes from |
+|---|---|
+| "create the Q1 report and email it" | `saved_report_ids[-1]` from this turn's `save_report` |
+| "send it to Slack too" | `last_delivery.report_id` |
+| "email me last week's report" | a report filter (the `DeletionFilter` shape, shared with the deletion branch) run against the Author's reports |
+
+No match, or more than one, and the branch asks the User which report; an unsaved answer gets "save it first?" rather than a silent save.
+
+```mermaid
+flowchart LR
+    R{router<br/>action: deliver<br/>destination} --> L[load_report<br/>Author injected]
+    L --> F[render<br/>template per adapter]
+    F --> I[/interrupt: preview<br/>send to you? yes · no/]
+    I -- yes --> S{{send<br/>single outbound function<br/>Delivery adapter}}
+    I -- no / anything else --> E([END])
+    S --> E
+```
+
+- **Destination.** The router returns a `destination` with the action, from the User's words ("email it" → `email`). It is an enum (`email`, `slack`, `push`) checked in code. If none is named, the User Profile's default is used, then the current channel. A registry maps the enum to an adapter.
+- **No model in the branch.** Each adapter renders the Saved Report with a template: email gets the full answer and tables, Slack gets the title, summary, main table and a link, and push gets only the title and a link. The short **summary** is written by the analysis sub-agent when it calls `save_report`, in the same turn as the figures it describes, so `save_report`'s PII filter covers it. Nothing new is written after the save.
+- **PII is checked twice, both times by existing code.** Once at save time, and again at the single exit, which filters the preview and the sent message.
+- **The interrupt, then the send.** `load_report` and `render` have no side effects, so they can run again safely when the graph resumes. `send` runs only after "yes", and it uses an idempotency key (report ID, report version, destination), so a retry after a crash never sends twice ([LangGraph: interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts#side-effects-called-before-interrupt-must-be-idempotent), [fault tolerance](https://docs.langchain.com/oss/python/langgraph/fault-tolerance#protect-side-effects-with-an-idempotency-key)).
+- **The next round.** The User's reply resumes the paused graph. "No" cancels, and any other message cancels and enters at the input guard, the same rules as a Deletion Plan ([04](../hld/04-destructive-ops.md#the-confirmation-flow)). After a send, the branch replies "Sent to …" and ends. It records `last_delivery` (report, destination, outcome) in graph state, so a later "send it to Slack too" can resolve "it". The next message starts a normal turn.
