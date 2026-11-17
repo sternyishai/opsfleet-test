@@ -1,6 +1,6 @@
 # Agent tools run in-process; MCP is a growth option, not part of the design
 
-The agent's tools (`get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports`, `get_my_report`, `plan_deletion`, `execute_deletion`, `draft_persona`, `publish_persona`, `rollback_persona`) are Python functions inside the Chat API. Each calls its dependencies through ports ([ADR 0006](0006-ports-and-adapters.md)). We do not run MCP servers.
+The agent's tools are Python functions inside the Chat API. Six are tools the analysis model may call: `get_schema`, `search_golden_trios`, `run_sql`, `save_report`, `list_my_reports` and `get_my_report`. Five are functions that only fixed graph nodes call, never the model ([ADR 0004](0004-hybrid-agent-graph.md)): `plan_deletion`, `execute_deletion`, `draft_persona`, `publish_persona` and `rollback_persona`. Each calls its dependencies through ports ([ADR 0006](0006-ports-and-adapters.md)). We do not run MCP servers.
 
 Three reasons:
 - **Swapping a data source is already cheap.** Moving from BigQuery to another warehouse is a new `QueryRunner` adapter plus the guard's SQL dialect setting, with no graph change. An MCP server would add a network hop, a service to deploy and secure, and cross-process trace propagation for the same result.
@@ -17,7 +17,7 @@ Three reasons:
 
 MCP is the named growth path, adopted only when one of these triggers occurs:
 
-1. **Extension capabilities with existing MCP servers** (web search, email, Slack posting). A read capability such as web search would be loaded as a LangGraph tool through an MCP client adapter, with a per-server tool allowlist and tracing. An outbound one such as email or Slack posting would not become a tool the model can call: the MCP server would sit behind an adapter of the `Delivery` port, reached only from the `deliver` branch ([ADR 0009](0009-outbound-actions-are-a-deliver-branch.md)).
+1. **Extension capabilities with existing MCP servers** (web search, email, Slack posting). A read capability such as web search would be loaded as a LangGraph tool through an MCP client adapter, with a per-server tool allowlist and tracing. Its results are untrusted text inside the analysis loop, which is safe for the same reason Trios and query results are: the analysis model has no destructive or outbound tool to misuse ([ADR 0004](0004-hybrid-agent-graph.md)). An outbound one such as email or Slack posting would not become a tool the model can call: the MCP server would sit behind an adapter of the `Delivery` port, reached only from the `deliver` branch ([ADR 0009](0009-outbound-actions-are-a-deliver-branch.md)).
 2. **A second consumer of governed data access** (another team's agent, or an enterprise assistant). `get_schema` and `run_sql` would move into a governed-data MCP server that enforces the query guard, Brand scope and PII rules itself, with User identity via OAuth. It would be the same code behind the same ports, hosted differently.
 
 Until then, new capabilities are added as in-process tools behind ports.
